@@ -6,21 +6,72 @@ import StatusBar from './components/StatusBar';
 import Welcome from './components/Welcome';
 import Toasts from './components/Toasts';
 import DialogRoot from './components/DialogRoot';
+import TerminalPane from './components/TerminalPane';
+import SessionOverlay from './components/SessionOverlay';
 
 export default function App(): React.JSX.Element {
   const init = useApp((s) => s.init);
   const ready = useApp((s) => s.ready);
   const tree = useApp((s) => s.tree);
+  const tabs = useApp((s) => s.tabs);
+  const activeTabId = useApp((s) => s.activeTabId);
 
   useEffect(() => {
     void init();
   }, [init]);
 
+  // События сессий из main
   useEffect(() => {
-    const unsubscribe = window.api.onNotify((message) => {
+    const offData = window.api.onSessionData(() => {
+      // данные идут напрямую в TerminalPane по sessionId
+    });
+    const offState = window.api.onSessionState((payload) => {
+      useApp.getState().applySessionState(payload.sessionId, payload.state);
+    });
+    const offNotify = window.api.onNotify((message) => {
       useApp.getState().pushToast(message);
     });
-    return unsubscribe;
+    return () => {
+      offData();
+      offState();
+      offNotify();
+    };
+  }, []);
+
+  // Горячие клавиши
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      const s = useApp.getState();
+      const target = e.target as HTMLElement;
+      const inAppInput = !!target.closest?.('.modal, .sidebar-search, .quick-connect, .host-list, .tabbar');
+      if (!e.ctrlKey && !e.metaKey) return;
+
+      if (e.key === 'Tab' && e.ctrlKey) {
+        e.preventDefault();
+        const tabsList = s.tabs;
+        if (tabsList.length > 1) {
+          const idx = tabsList.findIndex((t) => t.sessionId === s.activeTabId);
+          const next = tabsList[(idx + 1) % tabsList.length];
+          s.switchTab(next.sessionId);
+        }
+        return;
+      }
+      if (inAppInput) return;
+
+      if (e.key === 'W') {
+        e.preventDefault();
+        if (s.activeTabId) void s.closeTab(s.activeTabId);
+      } else if (e.key === 'T' && e.shiftKey) {
+        e.preventDefault();
+        s.openDialog({ type: 'new-session' });
+      } else if (e.key >= '1' && e.key <= '9' && !e.shiftKey) {
+        const idx = Number(e.key) - 1;
+        const tab = s.tabs[idx];
+        if (tab) s.switchTab(tab.sessionId);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, []);
 
   if (!ready) {
@@ -39,7 +90,29 @@ export default function App(): React.JSX.Element {
       <main className="workspace">
         <TabBar />
         <section className="content">
-          {tree.length === 0 ? <Welcome /> : <EmptyWorkspace />}
+          {tabs.length === 0 ? (
+            tree.length === 0 ? (
+              <Welcome />
+            ) : (
+              <EmptyWorkspace />
+            )
+          ) : (
+            <div className="session-area">
+              {tabs.map((tab) => (
+                <div
+                  key={tab.sessionId}
+                  className={`session-pane${tab.sessionId === activeTabId ? '' : ' session-pane--hidden'}`}
+                >
+                  {tab.kind === 'terminal' ? (
+                    <TerminalPane tab={tab} active={tab.sessionId === activeTabId} />
+                  ) : (
+                    <PlaceholderPane tab={tab} />
+                  )}
+                  <SessionOverlay tab={tab} />
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       </main>
       <StatusBar />
@@ -54,7 +127,22 @@ function EmptyWorkspace(): React.JSX.Element {
     <div className="placeholder-panel">
       <div className="placeholder-icon">▤</div>
       <p>Выберите профиль в дереве слева, чтобы открыть сессию.</p>
-      <p className="placeholder-muted">Терминалы, RDP и VNC появятся здесь.</p>
+      <p className="placeholder-muted">Двойной клик по хосту или контекстное меню → «Подключить».</p>
+    </div>
+  );
+}
+
+function PlaceholderPane({ tab }: { tab: { kind: string; protocol: string; title: string } }): React.JSX.Element {
+  const names: Record<string, string> = {
+    vnc: 'VNC появится в следующей сборке (T07)',
+    rdp: 'RDP запускается в T06',
+    sftp: 'SFTP появится в следующей сборке (T08)'
+  };
+  return (
+    <div className="placeholder-panel">
+      <div className="placeholder-icon">▤</div>
+      <p>{names[tab.kind] ?? 'Этот тип сессии ещё не реализован'}</p>
+      <p className="placeholder-muted">{tab.title}</p>
     </div>
   );
 }

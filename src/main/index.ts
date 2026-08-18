@@ -1,6 +1,7 @@
 import { app, BrowserWindow } from 'electron';
 import { join } from 'path';
 import { registerIpc } from './ipc';
+import { SessionManager } from './sessions/manager';
 import { Store } from './store';
 import { dpapiSealer } from './store/crypto';
 
@@ -37,8 +38,12 @@ function createWindow(): void {
   mainWindow.once('ready-to-show', () => mainWindow?.show());
 
   if (process.env.RH_SMOKE === '1') {
-    mainWindow.webContents.on('console-message', (_e, _level, message) => {
-      console.log('[renderer]', message);
+    mainWindow.webContents.on('console-message', (event) => {
+      const params = event as unknown as { message?: string; level?: string; stackTrace?: string[] };
+      console.log('[renderer]', params.message ?? '');
+      if (params.stackTrace?.length) {
+        console.log('[renderer-stack]', params.stackTrace.slice(0, 4).join(' | '));
+      }
     });
     mainWindow.webContents.on('render-process-gone', (_e, details) => {
       console.error('[smoke] renderer process gone:', details.reason);
@@ -68,9 +73,55 @@ function createWindow(): void {
           app.exit(1);
           return;
         }
+        const expectTabs = Number(process.env.RH_EXPECT_TABS ?? -1);
+        if (expectTabs >= 0) {
+          const tabRows = await mainWindow?.webContents.executeJavaScript(
+            'document.querySelectorAll(".tab").length'
+          );
+          console.log(`[smoke] restored tabs in DOM: ${String(tabRows)}`);
+          if (tabRows !== expectTabs) {
+            console.error(`[smoke] expected ${expectTabs} restored tabs, got ${String(tabRows)}`);
+            app.exit(1);
+            return;
+          }
+          clearTimeout(watchdog);
+          app.exit(0);
+          return;
+        }
+        // Сценарий сессии: двойной клик по первому хосту, ждём оверлей ошибки.
+        if (process.env.RH_SMOKE_SESSION === '1') {
+          await mainWindow?.webContents.executeJavaScript(`
+            (async () => {
+              const el = document.querySelector('.tree-host');
+              if (!el) return 'no-host';
+              el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+              const deadline = Date.now() + 15000;
+              while (Date.now() < deadline) {
+                if (document.querySelector('.session-overlay')) {
+                  const tabs = document.querySelectorAll('.tab').length;
+                  return 'overlay:' + tabs;
+                }
+                await new Promise((r) => setTimeout(r, 200));
+              }
+              return 'no-overlay';
+            })()
+          `).then((res) => {
+            clearTimeout(watchdog);
+            if (typeof res === 'string' && res.startsWith('overlay:')) {
+              const tabCount = res.split(':')[1];
+              console.log(`[smoke] session flow OK — error overlay shown, tabs: ${tabCount}`);
+              app.exit(0);
+            } else {
+              console.error(`[smoke] session flow failed: ${String(res)}`);
+              app.exit(1);
+            }
+          });
+          return;
+        }
+        clearTimeout(watchdog);
         app.exit(0);
       };
-      void check().then(() => clearTimeout(watchdog));
+      void check();
     });
   }
 
@@ -112,7 +163,13 @@ if (!gotLock) {
 
   app.whenReady().then(() => {
     store = new Store(app.getPath('userData'), dpapiSealer);
-    registerIpc(store);
+    const sessions = new SessionManager(dpapiSealer, (channel, payload) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send(channel, payload);
+      }
+    });
+    registerIpc(store, sessions);
+    app.on('before-quit', () => sessions.closeAll());
     createWindow();
 
     app.on('activate', () => {

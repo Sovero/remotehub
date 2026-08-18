@@ -16,6 +16,7 @@ export const IPC = {
   sessionInput: 'session:input',
   sessionResize: 'session:resize',
   sessionClose: 'session:close',
+  sessionAuth: 'session:auth',
   sessionData: 'session:data',
   sessionState: 'session:state',
   sftpList: 'sftp:list',
@@ -78,12 +79,30 @@ export interface LoadResult<T> {
 /** Session states pushed from main to renderer. */
 export type SessionState =
   | { phase: 'connecting'; detail?: string }
+  | { phase: 'auth-required'; detail?: string }
   | { phase: 'connected' }
   | { phase: 'error'; message: string }
   | { phase: 'closed'; reason?: string };
 
 export interface SessionOpenRequest {
-  profile: { id: string; name: string; protocol: string; host: string; port: number | null };
+  host: import('./types').Host;
   /** Пароль, введённый пользователем в диалоге (не сохраняется). */
   password?: string;
+  cols?: number;
+  rows?: number;
+}
+
+export interface SessionDataPayload {
+  sessionId: string;
+  data: string; // base64
+}
+
+export interface SessionStatePayload {
+  sessionId: string;
+  state: SessionState;
+}
+
+export interface SessionAuthRequest {
+  sessionId: string;
+  password: string;
 }

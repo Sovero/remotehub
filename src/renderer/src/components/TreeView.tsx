@@ -141,8 +141,8 @@ function HostRow({
   depth: number;
   onMenu: (req: MenuRequest) => void;
 }): React.JSX.Element {
-  const pushToast = useApp((s) => s.pushToast);
   const moveNode = useApp((s) => s.moveNode);
+  const openSession = useApp((s) => s.openSession);
   const { dragOver, handlers } = useDragHandlers((e) => {
     const id = e.dataTransfer.getData('text/plain');
     if (id && id !== host.id) void moveNode(id, parentId, host.id);
@@ -158,7 +158,7 @@ function HostRow({
         e.dataTransfer.effectAllowed = 'move';
       }}
       {...handlers}
-      onDoubleClick={() => pushToast('Подключение появится в следующей сборке (T03)')}
+      onDoubleClick={() => void openSession(host)}
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();

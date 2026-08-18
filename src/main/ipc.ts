@@ -2,12 +2,25 @@ import { writeFileSync } from 'fs';
 import { readFile } from 'fs/promises';
 import { BrowserWindow, dialog, ipcMain } from 'electron';
 import { app } from 'electron';
-import { IPC, type ExportResult, type ImportResult } from '../shared/ipc-contract';
+import {
+  IPC,
+  type ExportResult,
+  type ImportResult,
+  type SessionAuthRequest,
+  type SessionOpenRequest
+} from '../shared/ipc-contract';
 import type { Settings, TreeNode } from '../shared/types';
 import { buildExport, parseProfileExport } from '../shared/tree';
+import { SessionManager } from './sessions/manager';
 import type { Store } from './store';
 
-export function registerIpc(store: Store): void {
+export function registerIpc(store: Store, sessions: SessionManager): void {
+  const broadcast = (channel: string, payload: unknown): void => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send(channel, payload);
+    }
+  };
+
   // ---- profiles ----
   ipcMain.handle(IPC.profilesGet, () => {
     const { data, recovered } = store.loadProfiles();
@@ -73,6 +86,12 @@ export function registerIpc(store: Store): void {
     return { ok: true, settings: next };
   });
 
+  // ---- credentials (полный CRUD — в T04) ----
+  ipcMain.handle(IPC.credentialsList, () => {
+    const { data, recovered } = store.loadCredentials();
+    return { sets: data, recovered };
+  });
+
   // ---- app info ----
   ipcMain.handle(IPC.appInfo, () => ({
     version: app.getVersion(),
@@ -82,8 +101,39 @@ export function registerIpc(store: Store): void {
 
   // ---- уведомления из главного процесса ----
   ipcMain.on(IPC.notify, (_e, message: string) => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      win.webContents.send(IPC.notify, message);
-    }
+    broadcast(IPC.notify, message);
+  });
+
+  // ---- сессии ----
+  ipcMain.handle(IPC.sessionOpen, (_e, req: SessionOpenRequest) => {
+    const credential = req.host.credentialId
+      ? store.loadCredentials().data.find((c) => c.id === req.host.credentialId) ?? null
+      : null;
+    const sessionId = sessions.open({
+      host: req.host,
+      credential,
+      dialogPassword: req.password,
+      cols: req.cols ?? 80,
+      rows: req.rows ?? 24
+    });
+    return { sessionId };
+  });
+
+  ipcMain.on(IPC.sessionInput, (_e, payload: { sessionId: string; data: string }) => {
+    sessions.input(payload.sessionId, Buffer.from(payload.data, 'base64'));
+  });
+
+  ipcMain.on(IPC.sessionResize, (_e, payload: { sessionId: string; cols: number; rows: number }) => {
+    sessions.resize(payload.sessionId, payload.cols, payload.rows);
+  });
+
+  ipcMain.handle(IPC.sessionClose, (_e, sessionId: string) => {
+    sessions.close(sessionId);
+    return { ok: true };
+  });
+
+  ipcMain.handle(IPC.sessionAuth, (_e, req: SessionAuthRequest) => {
+    sessions.retryWithPassword(req.sessionId, req.password);
+    return { ok: true };
   });
 }

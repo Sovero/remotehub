@@ -652,6 +652,248 @@ textarea.input {
   color: #fff;
 }
 
+/* ---------- tabs ---------- */
+
+.tabbar-new {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 15px;
+  cursor: pointer;
+  padding: 0 8px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.tabbar-new:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 10px;
+  height: 26px;
+  border-radius: 5px 5px 0 0;
+  cursor: default;
+  color: var(--text-muted);
+  max-width: 200px;
+  flex-shrink: 0;
+}
+
+.tab:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.tab--active {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.tab-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+}
+
+.tab-kind {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.tab-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.tab-dot--ok {
+  background: var(--ok);
+}
+
+.tab-dot--busy {
+  background: var(--accent);
+  animation: pulse 1s infinite;
+}
+
+.tab-dot--warn {
+  background: #d29922;
+}
+
+.tab-dot--err {
+  background: var(--danger);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.tab-close {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.tab-close:hover {
+  color: var(--text);
+  background: var(--bg-active);
+}
+
+.tab-save {
+  background: transparent;
+  border: none;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 1px 3px;
+  flex-shrink: 0;
+}
+
+.quick-connect {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding-left: 8px;
+}
+
+.quick-connect-input {
+  width: 240px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+/* ---------- session panes ---------- */
+
+.session-area {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.session-pane {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.session-pane--hidden {
+  display: none;
+}
+
+.terminal-pane {
+  flex: 1;
+  min-height: 0;
+  padding: 6px 8px;
+}
+
+.terminal-pane--hidden {
+  display: none;
+}
+
+.terminal-pane .xterm {
+  height: 100%;
+}
+
+.session-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: var(--bg);
+  z-index: 5;
+  padding: 24px;
+  text-align: center;
+}
+
+.session-overlay-icon {
+  font-size: 40px;
+  opacity: 0.6;
+}
+
+.session-overlay-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.session-overlay-message {
+  color: var(--text-muted);
+  max-width: 480px;
+  line-height: 1.5;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.session-overlay-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+/* ---------- host list (new session) ---------- */
+
+.host-list {
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.host-list-empty {
+  color: var(--text-muted);
+  padding: 12px 4px;
+  text-align: center;
+}
+
+.host-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.host-list-item:hover {
+  background: var(--bg-hover);
+}
+
+.host-list-name {
+  font-weight: 500;
+}
+
+.host-list-sub {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
 /* ---------- scrollbars ---------- */
 
 ::-webkit-scrollbar {

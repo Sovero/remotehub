@@ -1,5 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { IPC, type ExportResult, type ImportResult } from '../shared/ipc-contract';
+import {
+  IPC,
+  type ExportResult,
+  type ImportResult,
+  type SessionDataPayload,
+  type SessionOpenRequest,
+  type SessionStatePayload
+} from '../shared/ipc-contract';
 import type { CredentialSet, Settings, TreeNode } from '../shared/types';
 
 const api = {
@@ -21,6 +28,26 @@ const api = {
     const listener = (_e: unknown, message: string): void => cb(message);
     ipcRenderer.on(IPC.notify, listener);
     return () => ipcRenderer.removeListener(IPC.notify, listener);
+  },
+  openSession: (req: SessionOpenRequest): Promise<{ sessionId: string }> =>
+    ipcRenderer.invoke(IPC.sessionOpen, req),
+  sessionInput: (sessionId: string, data: string): void =>
+    ipcRenderer.send(IPC.sessionInput, { sessionId, data }),
+  sessionResize: (sessionId: string, cols: number, rows: number): void =>
+    ipcRenderer.send(IPC.sessionResize, { sessionId, cols, rows }),
+  sessionClose: (sessionId: string): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IPC.sessionClose, sessionId),
+  sessionAuth: (sessionId: string, password: string): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IPC.sessionAuth, { sessionId, password }),
+  onSessionData: (cb: (payload: SessionDataPayload) => void): (() => void) => {
+    const listener = (_e: unknown, payload: SessionDataPayload): void => cb(payload);
+    ipcRenderer.on(IPC.sessionData, listener);
+    return () => ipcRenderer.removeListener(IPC.sessionData, listener);
+  },
+  onSessionState: (cb: (payload: SessionStatePayload) => void): (() => void) => {
+    const listener = (_e: unknown, payload: SessionStatePayload): void => cb(payload);
+    ipcRenderer.on(IPC.sessionState, listener);
+    return () => ipcRenderer.removeListener(IPC.sessionState, listener);
   }
 };
 

@@ -11,6 +11,7 @@ export default function Sidebar(): React.JSX.Element {
   const deleteNode = useApp((s) => s.deleteNode);
   const duplicateNode = useApp((s) => s.duplicateNode);
   const moveNode = useApp((s) => s.moveNode);
+  const openSession = useApp((s) => s.openSession);
   const pushToast = useApp((s) => s.pushToast);
   const exportTree = useApp((s) => s.exportTree);
   const settings = useApp((s) => s.settings);
@@ -64,9 +65,7 @@ export default function Sidebar(): React.JSX.Element {
       ];
     }
     const host = node as Host;
-    const items: MenuItem[] = [
-      { label: 'Подключить', action: () => pushToast('Подключение появится в следующей сборке (T03)') }
-    ];
+    const items: MenuItem[] = [{ label: 'Подключить', action: () => void openSession(host) }];
     if (host.protocol === 'ssh') {
       items.push({ label: 'SFTP', action: () => pushToast('SFTP появится в следующей сборке (T08)') });
     }

@@ -65,6 +65,15 @@ export interface WindowBounds {
   height: number;
 }
 
+export interface OpenTabMeta {
+  sessionId: string;
+  hostId: string | null;
+  title: string;
+  protocol: Protocol;
+  kind: 'terminal' | 'vnc' | 'rdp' | 'sftp';
+  adHocHost: Host | null;
+}
+
 export interface Settings {
   theme: 'dark' | 'light';
   fontSize: number;
@@ -73,6 +82,7 @@ export interface Settings {
   confirmOnDelete: boolean;
   restoreTabs: boolean;
   winBounds: WindowBounds | null;
+  openTabs: OpenTabMeta[];
 }
 
 export interface ProfilesFile {
@@ -99,7 +109,8 @@ export const DEFAULT_SETTINGS: Settings = {
   accent: '#2d95ec',
   confirmOnDelete: true,
   restoreTabs: true,
-  winBounds: null
+  winBounds: null,
+  openTabs: []
 };
 
 export const DEFAULT_SSH: SshOptions = { keepalive: 30, agent: false, timeout: 10 };
