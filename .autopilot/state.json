@@ -5,7 +5,7 @@
   "depth": "deep",
   "tier": "T3",
   "startedAt": "2026-08-18T21:25:00+03:00",
-  "updatedAt": "2026-08-19T00:10:00+03:00",
+  "updatedAt": "2026-08-19T00:35:00+03:00",
   "finishedAt": null,
   "requirements": {
     "total": 14,
@@ -223,14 +223,27 @@
         "04"
       ],
       "wave": 4,
-      "status": "pending",
-      "startedAt": null,
-      "finishedAt": null,
+      "status": "done",
+      "startedAt": "2026-08-19T00:15:00+03:00",
+      "finishedAt": "2026-08-19T00:35:00+03:00",
       "retries": 0,
-      "files": [],
-      "tests": null,
-      "commit": null,
-      "concerns": []
+      "files": [
+        "src/main/vnc/*",
+        "src/main/ipc.ts",
+        "src/main/index.ts",
+        "src/preload/index.ts",
+        "src/renderer/src/components/VncViewer.tsx",
+        "src/renderer/src/store.ts",
+        "tests/vnc-bridge.test.ts"
+      ],
+      "tests": {
+        "passed": 72,
+        "failed": 0
+      },
+      "commit": "78a11d4",
+      "concerns": [
+        "Пароль VNC передаётся в память рендерера для RFB-рукопожатия (не сохраняется)"
+      ]
     },
     {
       "id": "08",
