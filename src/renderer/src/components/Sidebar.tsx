@@ -162,6 +162,9 @@ export default function Sidebar(): React.JSX.Element {
         <button className="btn btn--sm" onClick={() => void exportTree()}>
           Экспорт
         </button>
+        <button className="btn btn--sm" title="Наборы учётных данных" onClick={() => openDialog({ type: 'credentials' })}>
+          🔑 Учётные данные
+        </button>
       </div>
 
       {menu && <ContextMenu x={menu.x} y={menu.y} items={buildMenu(menu.node)} onClose={() => setMenu(null)} />}

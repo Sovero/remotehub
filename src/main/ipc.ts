@@ -2,15 +2,24 @@ import { writeFileSync } from 'fs';
 import { readFile } from 'fs/promises';
 import { BrowserWindow, dialog, ipcMain } from 'electron';
 import { app } from 'electron';
+import { nanoid } from 'nanoid';
 import {
   IPC,
+  type CredentialSaveResult,
+  type CredentialSetInput,
   type ExportResult,
   type ImportResult,
   type SessionAuthRequest,
   type SessionOpenRequest
 } from '../shared/ipc-contract';
-import type { Settings, TreeNode } from '../shared/types';
+import type { CredentialSet, Settings, TreeNode } from '../shared/types';
 import { buildExport, parseProfileExport } from '../shared/tree';
+import {
+  applyCredentialInput,
+  detachCredential,
+  toDtoList,
+  validateCredentialInput
+} from './credentials/dto';
 import { SessionManager } from './sessions/manager';
 import type { Store } from './store';
 
@@ -86,10 +95,49 @@ export function registerIpc(store: Store, sessions: SessionManager): void {
     return { ok: true, settings: next };
   });
 
-  // ---- credentials (полный CRUD — в T04) ----
+  // ---- credentials ----
   ipcMain.handle(IPC.credentialsList, () => {
     const { data, recovered } = store.loadCredentials();
-    return { sets: data, recovered };
+    return toDtoList(data, recovered);
+  });
+
+  ipcMain.handle(IPC.credentialsSave, (_e, input: CredentialSetInput): CredentialSaveResult => {
+    const invalid = validateCredentialInput(input);
+    if (invalid) return { ok: false, error: invalid };
+    const sets = store.loadCredentials().data;
+    const existing = input.id ? (sets.find((c) => c.id === input.id) ?? null) : null;
+    const next = applyCredentialInput(existing, input, store.sealer());
+    const id = next.id || nanoid(10);
+    const saved: CredentialSet = { ...next, id };
+    const withoutOld = input.id ? sets.filter((c) => c.id !== input.id) : sets;
+    store.saveCredentials([...withoutOld, saved]);
+    return { ok: true, id };
+  });
+
+  ipcMain.handle(IPC.credentialsDelete, (_e, id: string) => {
+    const sets = store.loadCredentials().data.filter((c) => c.id !== id);
+    store.saveCredentials(sets);
+    // Убрать ссылки на удалённый набор из дерева хостов и вернуть дерево рендереру.
+    const tree = detachCredential(store.loadProfiles().data, id);
+    store.saveProfiles(tree);
+    return { ok: true, tree };
+  });
+
+  ipcMain.handle(IPC.dialogPickFile, async (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    const options: Electron.OpenDialogOptions = {
+      title: 'Выбор файла ключа',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Ключи', extensions: ['pem', 'key', 'ppk', 'openssh'] },
+        { name: 'Все файлы', extensions: ['*'] }
+      ]
+    };
+    const { canceled, filePaths } = win
+      ? await dialog.showOpenDialog(win, options)
+      : await dialog.showOpenDialog(options);
+    if (canceled || filePaths.length === 0) return { canceled: true, path: null };
+    return { canceled: false, path: filePaths[0] };
   });
 
   // ---- app info ----

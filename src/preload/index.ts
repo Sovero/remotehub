@@ -1,13 +1,16 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import {
   IPC,
+  type CredentialDto,
+  type CredentialSaveResult,
+  type CredentialSetInput,
   type ExportResult,
   type ImportResult,
   type SessionDataPayload,
   type SessionOpenRequest,
   type SessionStatePayload
 } from '../shared/ipc-contract';
-import type { CredentialSet, Settings, TreeNode } from '../shared/types';
+import type { Settings, TreeNode } from '../shared/types';
 
 const api = {
   getProfiles: (): Promise<{ tree: TreeNode[]; recovered: boolean }> =>
@@ -20,8 +23,14 @@ const api = {
     ipcRenderer.invoke(IPC.settingsGet),
   setSettings: (patch: Partial<Settings>): Promise<{ ok: boolean; settings: Settings }> =>
     ipcRenderer.invoke(IPC.settingsSet, patch),
-  getCredentials: (): Promise<{ sets: CredentialSet[]; recovered: boolean }> =>
+  getCredentials: (): Promise<{ sets: CredentialDto[]; recovered: boolean }> =>
     ipcRenderer.invoke(IPC.credentialsList),
+  saveCredential: (input: CredentialSetInput): Promise<CredentialSaveResult> =>
+    ipcRenderer.invoke(IPC.credentialsSave, input),
+  deleteCredential: (id: string): Promise<{ ok: boolean; tree?: TreeNode[] }> =>
+    ipcRenderer.invoke(IPC.credentialsDelete, id),
+  pickKeyFile: (): Promise<{ canceled: boolean; path: string | null }> =>
+    ipcRenderer.invoke(IPC.dialogPickFile),
   appInfo: (): Promise<{ version: string; electron: string; platform: string }> =>
     ipcRenderer.invoke(IPC.appInfo),
   onNotify: (cb: (message: string) => void): (() => void) => {

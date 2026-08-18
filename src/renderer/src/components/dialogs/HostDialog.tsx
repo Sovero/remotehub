@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { CredentialSet, Host, Protocol } from '@shared/types';
+import type { CredentialDto } from '@shared/ipc-contract';
+import type { Host, Protocol } from '@shared/types';
 import { defaultPort } from '@shared/types';
 import { makeHost, useApp } from '../../store';
 import Modal from './Modal';
@@ -70,7 +71,7 @@ export default function HostDialog({
   const pushToast = useApp((s) => s.pushToast);
   const [form, setForm] = useState<FormState>(() => toForm(host));
   const [error, setError] = useState<string | null>(null);
-  const [credentialSets, setCredentialSets] = useState<CredentialSet[]>([]);
+  const [credentialSets, setCredentialSets] = useState<CredentialDto[]>([]);
 
   useEffect(() => {
     void window.api.getCredentials().then((res) => setCredentialSets(res.sets));
@@ -208,10 +209,27 @@ export default function HostDialog({
               <option value="">— без учётных данных —</option>
               {credentialSets.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name} ({c.username || 'без пользователя'})
+                  {c.name}
+                  {c.username ? ` (${c.username})` : ''}
+                  {c.hasPassword ? ' 🔒' : c.keyFile ? ' 🔑' : ''}
                 </option>
               ))}
             </select>
+            {credentialSets.length > 0 && form.credentialId && (
+              <div className="form-hint">
+                {(() => {
+                  const c = credentialSets.find((s) => s.id === form.credentialId);
+                  if (!c) return null;
+                  return c.hasPassword
+                    ? 'Пароль сохранён в хранилище (DPAPI)'
+                    : c.keyFile
+                      ? `Ключ: ${c.keyFile}`
+                      : c.passwordMode === 'ask'
+                        ? 'Пароль будет запрошен при подключении'
+                        : null;
+                })()}
+              </div>
+            )}
           </div>
         </div>
 

@@ -40,6 +40,7 @@ export type DialogState =
   | { type: 'import' }
   | { type: 'password'; sessionId: string; title: string; detail: string }
   | { type: 'new-session' }
+  | { type: 'credentials' }
   | null;
 
 interface AppState {
@@ -53,6 +54,7 @@ interface AppState {
   activeTabId: string | null;
   init: () => Promise<void>;
   saveTree: (tree: TreeNode[]) => Promise<void>;
+  setTree: (tree: TreeNode[]) => void;
   patchSettings: (patch: Partial<Settings>) => Promise<void>;
   pushToast: (message: string) => void;
   dismissToast: (id: number) => void;
@@ -156,6 +158,8 @@ export const useApp = create<AppState>((set, get) => ({
     await window.api.saveProfiles(tree);
     set({ tree });
   },
+
+  setTree: (tree) => set({ tree }),
 
   patchSettings: async (patch) => {
     const res = await window.api.setSettings(patch);

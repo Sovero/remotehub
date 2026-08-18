@@ -1,5 +1,6 @@
 import { useApp } from '../store';
 import ConfirmDialog from './dialogs/ConfirmDialog';
+import CredentialsDialog from './dialogs/CredentialsDialog';
 import GroupDialog from './dialogs/GroupDialog';
 import HostDialog from './dialogs/HostDialog';
 import ImportDialog from './dialogs/ImportDialog';
@@ -31,6 +32,8 @@ export default function DialogRoot(): React.JSX.Element | null {
       return <ImportDialog onClose={closeDialog} />;
     case 'new-session':
       return <NewSessionDialog onClose={closeDialog} />;
+    case 'credentials':
+      return <CredentialsDialog onClose={closeDialog} />;
     case 'password':
       return <PasswordDialog sessionId={dialog.sessionId} title={dialog.title} detail={dialog.detail} />;
     default:

@@ -8,6 +8,7 @@ export const IPC = {
   credentialsList: 'credentials:list',
   credentialsSave: 'credentials:save',
   credentialsDelete: 'credentials:delete',
+  dialogPickFile: 'dialog:pick-file',
   settingsGet: 'settings:get',
   settingsSet: 'settings:set',
   appInfo: 'app:info',
@@ -32,7 +33,6 @@ export const IPC = {
   rdpLaunch: 'rdp:launch',
   checkPort: 'check:port',
   checkPing: 'check:ping',
-  dialogPickFile: 'dialog:pick-file',
   quickConnect: 'quick:connect'
 } as const;
 
@@ -46,9 +46,41 @@ export interface SettingsGetResult {
   recovered: boolean;
 }
 
+/** Набор учётных данных для рендерера: секреты никогда не покидают main. */
+export interface CredentialDto {
+  id: string;
+  name: string;
+  username: string;
+  passwordMode: 'stored' | 'ask';
+  hasPassword: boolean;
+  keyFile: string | null;
+  hasPassphrase: boolean;
+  useAgent: boolean;
+}
+
 export interface CredentialsListResult {
-  sets: CredentialSet[];
+  sets: CredentialDto[];
   recovered: boolean;
+}
+
+/** Вход для сохранения набора: пароль/фраза приходят открытым текстом и шифруются в main. */
+export interface CredentialSetInput {
+  id?: string;
+  name: string;
+  username: string;
+  passwordMode: 'stored' | 'ask';
+  password?: string;
+  clearPassword?: boolean;
+  keyFile?: string | null;
+  keyPassphrase?: string;
+  clearPassphrase?: boolean;
+  useAgent?: boolean;
+}
+
+export interface CredentialSaveResult {
+  ok: boolean;
+  id?: string;
+  error?: string;
 }
 
 export interface AppInfo {

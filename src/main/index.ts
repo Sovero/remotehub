@@ -73,6 +73,38 @@ function createWindow(): void {
           app.exit(1);
           return;
         }
+        if (process.env.RH_SMOKE_CRED === '1') {
+          await mainWindow?.webContents
+            .executeJavaScript(`
+              (async () => {
+                const btn = document.querySelector('[title="Наборы учётных данных"]');
+                if (!btn) return 'no-btn';
+                btn.click();
+                const deadline = Date.now() + 5000;
+                while (Date.now() < deadline) {
+                  const item = document.querySelector('.cred-item');
+                  if (item) {
+                    const text = item.textContent || '';
+                    if (text.includes('ПРОДСЕТ') && !text.includes('secret-password-123')) return 'ok';
+                    return 'bad:' + text;
+                  }
+                  await new Promise((r) => setTimeout(r, 100));
+                }
+                return 'no-item';
+              })()
+            `)
+            .then((res) => {
+              clearTimeout(watchdog);
+              if (res === 'ok') {
+                console.log('[smoke] credentials flow OK — набор виден, пароль не утёк в DOM');
+                app.exit(0);
+              } else {
+                console.error(`[smoke] credentials flow failed: ${String(res)}`);
+                app.exit(1);
+              }
+            });
+          return;
+        }
         const expectTabs = Number(process.env.RH_EXPECT_TABS ?? -1);
         if (expectTabs >= 0) {
           const tabRows = await mainWindow?.webContents.executeJavaScript(

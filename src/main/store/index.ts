@@ -44,7 +44,7 @@ export class Store {
 
   constructor(
     private readonly dir: string,
-    private readonly sealer: Sealer
+    private readonly sealerImpl: Sealer
   ) {
     this.profilesPath = join(dir, 'profiles.json');
     this.settingsPath = join(dir, 'settings.json');
@@ -95,6 +95,11 @@ export class Store {
   saveCredentials(sets: CredentialSet[]): void {
     const file: CredentialsFile = { schemaVersion: SCHEMA_VERSION, sets };
     atomicWriteJson(this.credentialsPath, file);
+  }
+
+  /** Sealer для шифрования секретов (используется IPC при сохранении наборов). */
+  sealer(): Sealer {
+    return this.sealerImpl;
   }
 
   // ---- paths (для тестов и диагностики) ----
