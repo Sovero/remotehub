@@ -5,12 +5,12 @@
   "depth": "deep",
   "tier": "T3",
   "startedAt": "2026-08-18T21:25:00+03:00",
-  "updatedAt": "2026-08-18T22:50:00+03:00",
+  "updatedAt": "2026-08-18T23:10:00+03:00",
   "finishedAt": null,
   "requirements": {
     "total": 14,
-    "done": 5,
-    "inTicket": 9,
+    "done": 9,
+    "inTicket": 5,
     "inSpec": 0,
     "placeholder": 0,
     "deferred": 0,
@@ -91,14 +91,31 @@
         "01"
       ],
       "wave": 2,
-      "status": "pending",
-      "startedAt": null,
-      "finishedAt": null,
+      "status": "done",
+      "startedAt": "2026-08-18T22:55:00+03:00",
+      "finishedAt": "2026-08-18T23:10:00+03:00",
       "retries": 0,
-      "files": [],
-      "tests": null,
-      "commit": null,
-      "concerns": []
+      "files": [
+        "src/main/sessions/*",
+        "src/shared/quick-connect.ts",
+        "src/preload/index.ts",
+        "src/renderer/src/components/TerminalPane.tsx",
+        "src/renderer/src/components/TabBar.tsx",
+        "src/renderer/src/components/SessionOverlay.tsx",
+        "src/renderer/src/components/dialogs/{Password,NewSession}Dialog.tsx",
+        "src/renderer/src/store.ts",
+        "tests/session-*.test.ts",
+        "tests/quick-connect.test.ts"
+      ],
+      "tests": {
+        "passed": 53,
+        "failed": 0
+      },
+      "commit": "aaa7170",
+      "concerns": [
+        "SSH-агент — только Windows named pipe, best-effort",
+        "Telnet-транспорт без живого сервера в тестах"
+      ]
     },
     {
       "id": "04",
