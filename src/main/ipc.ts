@@ -11,7 +11,8 @@ import {
   type ImportResult,
   type RdpLaunchRequest,
   type SessionAuthRequest,
-  type SessionOpenRequest
+  type SessionOpenRequest,
+  type VncOpenRequest
 } from '../shared/ipc-contract';
 import type { CredentialSet, Settings, TreeNode } from '../shared/types';
 import { buildExport, parseProfileExport } from '../shared/tree';
@@ -23,9 +24,10 @@ import {
 } from './credentials/dto';
 import { RdpManager } from './rdp/manager';
 import { SessionManager } from './sessions/manager';
+import { VncManager } from './vnc/manager';
 import type { Store } from './store';
 
-export function registerIpc(store: Store, sessions: SessionManager, rdp: RdpManager): void {
+export function registerIpc(store: Store, sessions: SessionManager, rdp: RdpManager, vnc: VncManager): void {
   const broadcast = (channel: string, payload: unknown): void => {
     for (const win of BrowserWindow.getAllWindows()) {
       win.webContents.send(channel, payload);
@@ -180,6 +182,7 @@ export function registerIpc(store: Store, sessions: SessionManager, rdp: RdpMana
   ipcMain.handle(IPC.sessionClose, (_e, sessionId: string) => {
     sessions.close(sessionId);
     rdp.stop(sessionId);
+    vnc.close(sessionId);
     return { ok: true };
   });
 
@@ -194,5 +197,18 @@ export function registerIpc(store: Store, sessions: SessionManager, rdp: RdpMana
       ? store.loadCredentials().data.find((c) => c.id === req.host.credentialId) ?? null
       : null;
     return rdp.launch(req.host, credential, req.sessionId);
+  });
+
+  // ---- VNC ----
+  ipcMain.handle(IPC.vncOpen, async (_e, req: VncOpenRequest) => {
+    const credential = req.host.credentialId
+      ? store.loadCredentials().data.find((c) => c.id === req.host.credentialId) ?? null
+      : null;
+    return vnc.open(req.host, credential, req.sessionId);
+  });
+
+  ipcMain.handle(IPC.vncClose, (_e, sessionId: string) => {
+    vnc.close(sessionId);
+    return { ok: true };
   });
 }

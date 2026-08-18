@@ -9,6 +9,7 @@ import Toasts from './components/Toasts';
 import DialogRoot from './components/DialogRoot';
 import TerminalPane from './components/TerminalPane';
 import SessionOverlay from './components/SessionOverlay';
+import VncViewer from './components/VncViewer';
 
 export default function App(): React.JSX.Element {
   const init = useApp((s) => s.init);
@@ -128,6 +129,8 @@ export default function App(): React.JSX.Element {
                     <TerminalPane tab={tab} active={tab.sessionId === activeTabId} />
                   ) : tab.kind === 'rdp' ? (
                     <RdpPane tab={tab} />
+                  ) : tab.kind === 'vnc' ? (
+                    <VncViewer tab={tab} />
                   ) : (
                     <PlaceholderPane tab={tab} />
                   )}
@@ -193,7 +196,6 @@ function RdpPane({
 
 function PlaceholderPane({ tab }: { tab: { kind: string; protocol: string; title: string } }): React.JSX.Element {
   const names: Record<string, string> = {
-    vnc: 'VNC появится в следующей сборке (T07)',
     sftp: 'SFTP появится в следующей сборке (T08)'
   };
   return (

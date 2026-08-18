@@ -849,6 +849,41 @@ textarea.input {
   margin-top: 6px;
 }
 
+/* ---------- vnc ---------- */
+
+.vnc-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.vnc-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.vnc-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.vnc-canvas {
+  flex: 1;
+  min-height: 0;
+  background: #000;
+  overflow: hidden;
+}
+
+.vnc-canvas canvas {
+  width: 100%;
+  height: 100%;
+}
+
 /* ---------- rdp pane ---------- */
 
 .rdp-pane {

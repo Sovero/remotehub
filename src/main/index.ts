@@ -3,6 +3,7 @@ import { join } from 'path';
 import { registerIpc } from './ipc';
 import { RdpManager } from './rdp/manager';
 import { SessionManager } from './sessions/manager';
+import { VncManager } from './vnc/manager';
 import { Store } from './store';
 import { dpapiSealer } from './store/crypto';
 
@@ -100,10 +101,22 @@ function createWindow(): void {
       app.exit(1);
     }, 20000);
     mainWindow.webContents.once('did-finish-load', () => {
+      const waitReady = async (): Promise<boolean> => {
+        const deadline = Date.now() + 15000;
+        while (Date.now() < deadline) {
+          const ready = await mainWindow?.webContents.executeJavaScript('window.__RH_READY__ === true');
+          if (ready) return true;
+          await new Promise((r) => setTimeout(r, 200));
+        }
+        return false;
+      };
       const check = async (): Promise<void> => {
-        const ready = await mainWindow?.webContents.executeJavaScript('window.__RH_READY__ === true');
+        const ready = await waitReady();
         if (!ready) {
-          console.error('[smoke] renderer loaded but React did not mount');
+          const err = await mainWindow?.webContents.executeJavaScript(`
+            JSON.stringify({ rhError: window.__RH_ERROR__ || null, href: location.href })
+          `);
+          console.error(`[smoke] renderer loaded but React did not mount; error: ${String(err)}`);
           app.exit(1);
           return;
         }
@@ -117,6 +130,37 @@ function createWindow(): void {
         if (expected !== (hostRows as number)) {
           console.error(`[smoke] expected ${expected} host rows, got ${String(hostRows)}`);
           app.exit(1);
+          return;
+        }
+        if (process.env.RH_SMOKE_VNC === '1') {
+          await mainWindow?.webContents
+            .executeJavaScript(`
+              (async () => {
+                const el = document.querySelector('.tree-host');
+                if (!el) return 'no-host';
+                el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+                const deadline = Date.now() + 8000;
+                while (Date.now() < deadline) {
+                  if (document.querySelector('.vnc-wrap')) return 'ok';
+                  if (document.querySelector('.session-overlay')) {
+                    const msg = document.querySelector('.session-overlay-message')?.textContent || '';
+                    return 'overlay:' + msg;
+                  }
+                  await new Promise((r) => setTimeout(r, 200));
+                }
+                return 'no-pane';
+              })()
+            `)
+            .then((res) => {
+              clearTimeout(watchdog);
+              if (res === 'ok') {
+                console.log('[smoke] vnc flow OK — мост поднят, вьювер смонтирован');
+                app.exit(0);
+              } else {
+                console.error(`[smoke] vnc flow failed: ${String(res)}`);
+                app.exit(1);
+              }
+            });
           return;
         }
         if (process.env.RH_SMOKE_RDP === '1') {
@@ -310,10 +354,12 @@ if (!gotLock) {
     };
     const sessions = new SessionManager(dpapiSealer, broadcast as (c: 'session:data' | 'session:state', p: unknown) => void);
     const rdp = new RdpManager(dpapiSealer, broadcast as (c: 'rdp:exited', p: unknown) => void);
-    registerIpc(store, sessions, rdp);
+    const vnc = new VncManager(dpapiSealer);
+    registerIpc(store, sessions, rdp, vnc);
     app.on('before-quit', () => {
       sessions.closeAll();
       rdp.closeAll();
+      vnc.closeAll();
     });
     createWindow();
 

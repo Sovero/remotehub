@@ -21,6 +21,8 @@ export const IPC = {
   sessionAuth: 'session:auth',
   sessionData: 'session:data',
   sessionState: 'session:state',
+  vncOpen: 'vnc:open',
+  vncClose: 'vnc:close',
   sftpList: 'sftp:list',
   sftpRead: 'sftp:read',
   sftpWrite: 'sftp:write',
@@ -149,5 +151,17 @@ export interface RdpLaunchRequest {
 export interface RdpExitedPayload {
   sessionId: string;
   code: number | null;
+  error?: string;
+}
+
+export interface VncOpenRequest {
+  sessionId: string;
+  host: import('./types').Host;
+}
+
+export interface VncOpenResult {
+  ok: boolean;
+  port?: number;
+  password?: string;
   error?: string;
 }

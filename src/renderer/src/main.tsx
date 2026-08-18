@@ -12,3 +12,10 @@ root.render(
 
 // Маркер для smoke-теста: React смонтировался без исключений.
 (window as unknown as Record<string, unknown>).__RH_READY__ = true;
+
+window.addEventListener('error', (e) => {
+  (window as unknown as Record<string, unknown>).__RH_ERROR__ = e.message;
+});
+window.addEventListener('unhandledrejection', (e) => {
+  (window as unknown as Record<string, unknown>).__RH_ERROR__ = String(e.reason);
+});

@@ -55,6 +55,12 @@ const api = {
     ipcRenderer.invoke(IPC.sessionAuth, { sessionId, password }),
   rdpLaunch: (req: { sessionId: string; host: import('../shared/types').Host }): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke(IPC.rdpLaunch, req),
+  vncOpen: (req: {
+    sessionId: string;
+    host: import('../shared/types').Host;
+  }): Promise<{ ok: boolean; port?: number; password?: string; error?: string }> =>
+    ipcRenderer.invoke(IPC.vncOpen, req),
+  vncClose: (sessionId: string): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.vncClose, sessionId),
   onRdpExited: (cb: (payload: { sessionId: string; code: number | null; error?: string }) => void): (() => void) => {
     const listener = (_e: unknown, payload: { sessionId: string; code: number | null; error?: string }): void =>
       cb(payload);

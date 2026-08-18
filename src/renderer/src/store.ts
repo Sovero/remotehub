@@ -31,6 +31,8 @@ export interface SessionTab {
   state: SessionState;
   adHocHost: Host | null;
   startedAt: number | null;
+  /** Транзитная информация VNC-сессии (порт моста и пароль — только в памяти). */
+  vnc?: { port: number; password: string | undefined } | null;
 }
 
 export type DialogState =
@@ -76,6 +78,7 @@ interface AppState {
   openAdHoc: (host: Host) => Promise<void>;
   openRdp: (host: Host) => Promise<void>;
   applyRdpOutcome: (sessionId: string, outcome: { ok: boolean; error?: string }) => void;
+  openVnc: (host: Host) => Promise<void>;
   reconnectTab: (sessionId: string) => Promise<void>;
   closeTab: (sessionId: string, force?: boolean) => Promise<void>;
   switchTab: (sessionId: string) => void;
@@ -271,7 +274,7 @@ export const useApp = create<AppState>((set, get) => ({
       return;
     }
     if (host.protocol === 'vnc') {
-      get().pushToast('VNC появится в следующей сборке (T07)');
+      await get().openVnc(host);
       return;
     }
     const sessionId = nanoid(10);
@@ -324,6 +327,43 @@ export const useApp = create<AppState>((set, get) => ({
     get().persistTabs();
   },
 
+  openVnc: async (host) => {
+    const sessionId = nanoid(10);
+    set((s) => ({
+      tabs: [
+        ...s.tabs,
+        {
+          sessionId,
+          hostId: host.id,
+          title: host.name,
+          protocol: 'vnc',
+          kind: 'vnc',
+          state: { phase: 'connecting' },
+          adHocHost: null,
+          startedAt: null,
+          vnc: null
+        }
+      ],
+      activeTabId: sessionId
+    }));
+    const res = await window.api.vncOpen({ sessionId, host });
+    set((s) => ({
+      tabs: s.tabs.map((t) =>
+        t.sessionId === sessionId
+          ? res.ok
+            ? {
+                ...t,
+                state: { phase: 'connected' },
+                startedAt: Date.now(),
+                vnc: { port: res.port ?? 0, password: res.password }
+              }
+            : { ...t, state: { phase: 'error', message: res.error ?? 'Не удалось открыть VNC' } }
+          : t
+      )
+    }));
+    get().persistTabs();
+  },
+
   applyRdpOutcome: (sessionId, outcome: { ok: boolean; error?: string }) => {
     set((s) => ({
       tabs: s.tabs.map((t) =>
@@ -356,6 +396,29 @@ export const useApp = create<AppState>((set, get) => ({
       }));
       const res = await window.api.rdpLaunch({ sessionId, host });
       get().applyRdpOutcome(sessionId, res);
+      return;
+    }
+    if (tab.kind === 'vnc') {
+      set((s) => ({
+        tabs: s.tabs.map((t) =>
+          t.sessionId === sessionId ? { ...t, state: { phase: 'connecting' }, vnc: null } : t
+        )
+      }));
+      const res = await window.api.vncOpen({ sessionId, host });
+      set((s) => ({
+        tabs: s.tabs.map((t) =>
+          t.sessionId === sessionId
+            ? res.ok
+              ? {
+                  ...t,
+                  state: { phase: 'connected' },
+                  startedAt: Date.now(),
+                  vnc: { port: res.port ?? 0, password: res.password }
+                }
+              : { ...t, state: { phase: 'error', message: res.error ?? 'Не удалось открыть VNC' } }
+            : t
+        )
+      }));
       return;
     }
     const newId = nanoid(10);
