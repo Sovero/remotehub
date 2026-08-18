@@ -5,12 +5,12 @@
   "depth": "deep",
   "tier": "T3",
   "startedAt": "2026-08-18T21:25:00+03:00",
-  "updatedAt": "2026-08-18T23:10:00+03:00",
+  "updatedAt": "2026-08-18T23:35:00+03:00",
   "finishedAt": null,
   "requirements": {
     "total": 14,
-    "done": 9,
-    "inTicket": 5,
+    "done": 10,
+    "inTicket": 4,
     "inSpec": 0,
     "placeholder": 0,
     "deferred": 0,
@@ -128,13 +128,24 @@
         "03"
       ],
       "wave": 3,
-      "status": "pending",
-      "startedAt": null,
-      "finishedAt": null,
+      "status": "done",
+      "startedAt": "2026-08-18T23:15:00+03:00",
+      "finishedAt": "2026-08-18T23:35:00+03:00",
       "retries": 0,
-      "files": [],
-      "tests": null,
-      "commit": null,
+      "files": [
+        "src/main/credentials/dto.ts",
+        "src/main/ipc.ts",
+        "src/preload/index.ts",
+        "src/renderer/src/components/dialogs/CredentialsDialog.tsx",
+        "src/renderer/src/components/dialogs/HostDialog.tsx",
+        "src/renderer/src/components/Sidebar.tsx",
+        "tests/credentials.test.ts"
+      ],
+      "tests": {
+        "passed": 63,
+        "failed": 0
+      },
+      "commit": "ae57095",
       "concerns": []
     },
     {
