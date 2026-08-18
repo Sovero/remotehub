@@ -5,7 +5,7 @@
   "depth": "deep",
   "tier": "T3",
   "startedAt": "2026-08-18T21:25:00+03:00",
-  "updatedAt": "2026-08-18T23:35:00+03:00",
+  "updatedAt": "2026-08-18T23:55:00+03:00",
   "finishedAt": null,
   "requirements": {
     "total": 14,
@@ -159,13 +159,23 @@
         "03"
       ],
       "wave": 3,
-      "status": "pending",
-      "startedAt": null,
-      "finishedAt": null,
+      "status": "done",
+      "startedAt": "2026-08-18T23:40:00+03:00",
+      "finishedAt": "2026-08-18T23:55:00+03:00",
       "retries": 0,
-      "files": [],
-      "tests": null,
-      "commit": null,
+      "files": [
+        "src/renderer/src/components/TerminalPane.tsx",
+        "src/renderer/src/components/TabBar.tsx",
+        "src/renderer/src/components/dialogs/{Settings,Snippets,Hotkeys}Dialog.tsx",
+        "src/renderer/src/lib/termRegistry.ts",
+        "src/main/index.ts",
+        "src/shared/types.ts"
+      ],
+      "tests": {
+        "passed": 63,
+        "failed": 0
+      },
+      "commit": "fe4fd59",
       "concerns": []
     },
     {
