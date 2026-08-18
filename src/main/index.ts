@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, Menu } from 'electron';
 import { join } from 'path';
 import { registerIpc } from './ipc';
+import { RdpManager } from './rdp/manager';
 import { SessionManager } from './sessions/manager';
 import { Store } from './store';
 import { dpapiSealer } from './store/crypto';
@@ -116,6 +117,35 @@ function createWindow(): void {
         if (expected !== (hostRows as number)) {
           console.error(`[smoke] expected ${expected} host rows, got ${String(hostRows)}`);
           app.exit(1);
+          return;
+        }
+        if (process.env.RH_SMOKE_RDP === '1') {
+          await mainWindow?.webContents
+            .executeJavaScript(`
+              (async () => {
+                const el = document.querySelector('.tree-host');
+                if (!el) return 'no-host';
+                el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+                const deadline = Date.now() + 8000;
+                let sawPane = false;
+                while (Date.now() < deadline) {
+                  if (document.querySelector('.rdp-pane')) sawPane = true;
+                  if (sawPane && document.querySelector('.session-overlay')) return 'ok';
+                  await new Promise((r) => setTimeout(r, 200));
+                }
+                return sawPane ? 'no-closed-state' : 'no-pane';
+              })()
+            `)
+            .then((res) => {
+              clearTimeout(watchdog);
+              if (res === 'ok') {
+                console.log('[smoke] rdp flow OK — вкладка прошла connected → closed');
+                app.exit(0);
+              } else {
+                console.error(`[smoke] rdp flow failed: ${String(res)}`);
+                app.exit(1);
+              }
+            });
           return;
         }
         if (process.env.RH_SMOKE_CRED === '1') {
@@ -273,13 +303,18 @@ if (!gotLock) {
   app.whenReady().then(() => {
     installMenu();
     store = new Store(app.getPath('userData'), dpapiSealer);
-    const sessions = new SessionManager(dpapiSealer, (channel, payload) => {
+    const broadcast = (channel: string, payload: unknown): void => {
       for (const win of BrowserWindow.getAllWindows()) {
         win.webContents.send(channel, payload);
       }
+    };
+    const sessions = new SessionManager(dpapiSealer, broadcast as (c: 'session:data' | 'session:state', p: unknown) => void);
+    const rdp = new RdpManager(dpapiSealer, broadcast as (c: 'rdp:exited', p: unknown) => void);
+    registerIpc(store, sessions, rdp);
+    app.on('before-quit', () => {
+      sessions.closeAll();
+      rdp.closeAll();
     });
-    registerIpc(store, sessions);
-    app.on('before-quit', () => sessions.closeAll());
     createWindow();
 
     app.on('activate', () => {

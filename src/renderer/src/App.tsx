@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import type { SessionState } from '@shared/ipc-contract';
 import { useApp } from './store';
 import Sidebar from './components/Sidebar';
 import TabBar from './components/TabBar';
@@ -28,6 +29,12 @@ export default function App(): React.JSX.Element {
     const offState = window.api.onSessionState((payload) => {
       useApp.getState().applySessionState(payload.sessionId, payload.state);
     });
+    const offRdp = window.api.onRdpExited((payload) => {
+      const state: SessionState = payload.error
+        ? { phase: 'error', message: payload.error }
+        : { phase: 'closed', reason: `Сессия RDP завершена (код ${payload.code ?? '?'})` };
+      useApp.getState().applySessionState(payload.sessionId, state);
+    });
     const offNotify = window.api.onNotify((message) => {
       useApp.getState().pushToast(message);
     });
@@ -40,6 +47,7 @@ export default function App(): React.JSX.Element {
     return () => {
       offData();
       offState();
+      offRdp();
       offNotify();
       offMenu();
     };
@@ -118,6 +126,8 @@ export default function App(): React.JSX.Element {
                 >
                   {tab.kind === 'terminal' ? (
                     <TerminalPane tab={tab} active={tab.sessionId === activeTabId} />
+                  ) : tab.kind === 'rdp' ? (
+                    <RdpPane tab={tab} />
                   ) : (
                     <PlaceholderPane tab={tab} />
                   )}
@@ -145,10 +155,45 @@ function EmptyWorkspace(): React.JSX.Element {
   );
 }
 
+function RdpPane({
+  tab
+}: {
+  tab: { sessionId: string; state: { phase: string }; title: string };
+}): React.JSX.Element {
+  const reconnectTab = useApp((s) => s.reconnectTab);
+  const closeTab = useApp((s) => s.closeTab);
+  if (tab.state.phase !== 'connected') {
+    return (
+      <div className="placeholder-panel">
+        <div className="placeholder-icon">▤</div>
+        <p>Запуск Remote Desktop…</p>
+        <p className="placeholder-muted">{tab.title}</p>
+      </div>
+    );
+  }
+  return (
+    <div className="rdp-pane">
+      <div className="rdp-icon">🖥</div>
+      <div className="rdp-title">Remote Desktop запущен</div>
+      <div className="rdp-text">
+        Сессия открыта в отдельном окне {`mstsc`}. Вкладка останется до закрытия окна Remote Desktop — закрытие
+        приложения её не прервёт.
+      </div>
+      <div className="rdp-actions">
+        <button className="btn btn--primary" onClick={() => void reconnectTab(tab.sessionId)}>
+          Запустить заново
+        </button>
+        <button className="btn" onClick={() => void closeTab(tab.sessionId, true)}>
+          Закрыть вкладку
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function PlaceholderPane({ tab }: { tab: { kind: string; protocol: string; title: string } }): React.JSX.Element {
   const names: Record<string, string> = {
     vnc: 'VNC появится в следующей сборке (T07)',
-    rdp: 'RDP запускается в T06',
     sftp: 'SFTP появится в следующей сборке (T08)'
   };
   return (

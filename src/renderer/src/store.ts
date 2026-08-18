@@ -74,6 +74,8 @@ interface AppState {
   // сессии
   openSession: (host: Host, opts?: { password?: string; adHoc?: boolean }) => Promise<void>;
   openAdHoc: (host: Host) => Promise<void>;
+  openRdp: (host: Host) => Promise<void>;
+  applyRdpOutcome: (sessionId: string, outcome: { ok: boolean; error?: string }) => void;
   reconnectTab: (sessionId: string) => Promise<void>;
   closeTab: (sessionId: string, force?: boolean) => Promise<void>;
   switchTab: (sessionId: string) => void;
@@ -264,6 +266,14 @@ export const useApp = create<AppState>((set, get) => ({
   // ---- сессии ----
 
   openSession: async (host, opts) => {
+    if (host.protocol === 'rdp') {
+      await get().openRdp(host);
+      return;
+    }
+    if (host.protocol === 'vnc') {
+      get().pushToast('VNC появится в следующей сборке (T07)');
+      return;
+    }
     const sessionId = nanoid(10);
     const tab: SessionTab = {
       sessionId,
@@ -291,6 +301,41 @@ export const useApp = create<AppState>((set, get) => ({
     await get().openSession(host, { adHoc: true });
   },
 
+  openRdp: async (host) => {
+    const sessionId = nanoid(10);
+    set((s) => ({
+      tabs: [
+        ...s.tabs,
+        {
+          sessionId,
+          hostId: host.id,
+          title: host.name,
+          protocol: 'rdp',
+          kind: 'rdp',
+          state: { phase: 'connecting' },
+          adHocHost: null,
+          startedAt: null
+        }
+      ],
+      activeTabId: sessionId
+    }));
+    const res = await window.api.rdpLaunch({ sessionId, host });
+    get().applyRdpOutcome(sessionId, res);
+    get().persistTabs();
+  },
+
+  applyRdpOutcome: (sessionId, outcome: { ok: boolean; error?: string }) => {
+    set((s) => ({
+      tabs: s.tabs.map((t) =>
+        t.sessionId === sessionId
+          ? outcome.ok
+            ? { ...t, state: { phase: 'connected' }, startedAt: Date.now() }
+            : { ...t, state: { phase: 'error', message: outcome.error ?? 'Не удалось запустить RDP' } }
+          : t
+      )
+    }));
+  },
+
   reconnectTab: async (sessionId) => {
     const { tabs } = get();
     const tab = tabs.find((t) => t.sessionId === sessionId);
@@ -303,6 +348,14 @@ export const useApp = create<AppState>((set, get) => ({
     }
     if (!host) {
       get().pushToast('Профиль хоста не найден — удалите вкладку');
+      return;
+    }
+    if (tab.kind === 'rdp') {
+      set((s) => ({
+        tabs: s.tabs.map((t) => (t.sessionId === sessionId ? { ...t, state: { phase: 'connecting' } } : t))
+      }));
+      const res = await window.api.rdpLaunch({ sessionId, host });
+      get().applyRdpOutcome(sessionId, res);
       return;
     }
     const newId = nanoid(10);

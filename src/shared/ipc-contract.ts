@@ -32,6 +32,7 @@ export const IPC = {
   tunnelsStop: 'tunnels:stop',
   tunnelsList: 'tunnels:list',
   rdpLaunch: 'rdp:launch',
+  rdpExited: 'rdp:exited',
   checkPort: 'check:port',
   checkPing: 'check:ping',
   quickConnect: 'quick:connect'
@@ -138,4 +139,15 @@ export interface SessionStatePayload {
 export interface SessionAuthRequest {
   sessionId: string;
   password: string;
+}
+
+export interface RdpLaunchRequest {
+  sessionId: string;
+  host: import('./types').Host;
+}
+
+export interface RdpExitedPayload {
+  sessionId: string;
+  code: number | null;
+  error?: string;
 }

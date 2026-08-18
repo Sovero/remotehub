@@ -849,6 +849,40 @@ textarea.input {
   margin-top: 6px;
 }
 
+/* ---------- rdp pane ---------- */
+
+.rdp-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px;
+  text-align: center;
+}
+
+.rdp-icon {
+  font-size: 52px;
+}
+
+.rdp-title {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.rdp-text {
+  color: var(--text-muted);
+  max-width: 460px;
+  line-height: 1.5;
+}
+
+.rdp-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
 /* ---------- host list (new session) ---------- */
 
 .host-list {

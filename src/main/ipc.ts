@@ -9,6 +9,7 @@ import {
   type CredentialSetInput,
   type ExportResult,
   type ImportResult,
+  type RdpLaunchRequest,
   type SessionAuthRequest,
   type SessionOpenRequest
 } from '../shared/ipc-contract';
@@ -20,10 +21,11 @@ import {
   toDtoList,
   validateCredentialInput
 } from './credentials/dto';
+import { RdpManager } from './rdp/manager';
 import { SessionManager } from './sessions/manager';
 import type { Store } from './store';
 
-export function registerIpc(store: Store, sessions: SessionManager): void {
+export function registerIpc(store: Store, sessions: SessionManager, rdp: RdpManager): void {
   const broadcast = (channel: string, payload: unknown): void => {
     for (const win of BrowserWindow.getAllWindows()) {
       win.webContents.send(channel, payload);
@@ -177,11 +179,20 @@ export function registerIpc(store: Store, sessions: SessionManager): void {
 
   ipcMain.handle(IPC.sessionClose, (_e, sessionId: string) => {
     sessions.close(sessionId);
+    rdp.stop(sessionId);
     return { ok: true };
   });
 
   ipcMain.handle(IPC.sessionAuth, (_e, req: SessionAuthRequest) => {
     sessions.retryWithPassword(req.sessionId, req.password);
     return { ok: true };
+  });
+
+  // ---- RDP ----
+  ipcMain.handle(IPC.rdpLaunch, (_e, req: RdpLaunchRequest) => {
+    const credential = req.host.credentialId
+      ? store.loadCredentials().data.find((c) => c.id === req.host.credentialId) ?? null
+      : null;
+    return rdp.launch(req.host, credential, req.sessionId);
   });
 }
