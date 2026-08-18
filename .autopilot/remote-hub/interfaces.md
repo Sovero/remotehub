@@ -21,3 +21,12 @@
 - Рендерер: zustand-стор `useApp` (`src/renderer/src/store.ts`): `tree, settings, appInfo, ready, toasts`, методы `init/saveTree/patchSettings/pushToast/dismissToast`. Тосты — `pushToast(msg)`.
 - Окно: `src/main/index.ts` — `createWindow()` в `app.whenReady`, single-instance, сохранение bounds в settings при resize/move (debounce 300ms).
 - Уже реализованные IPC: `profiles:get/save`, `settings:get/set`, `credentials:list`, `app:info`, `app:notify` (рассылка тоста во все окна).
+
+## Из тикета 02 — дерево профилей
+
+- Чистые операции над деревом — `src/shared/tree.ts` (юнит-тесты в `tests/tree.test.ts`): `findNode`, `findParent`, `replaceNode`, `insertNode(tree, node, parentId|null)`, `removeNode`, `moveNode(tree, id, targetParentId, afterId?)` (с защитой от циклов), `filterTree`, `matchesHostQuery`, `collectTags`, `countHosts`, `duplicateHost`, `flattenHosts`, `buildExport`/`parseProfileExport`/`applyImport(current, incoming, 'merge'|'replace')`.
+- IPC: `profiles:export` → `{ok, path?, canceled?, error?}`, `profiles:import` → `{ok, tree?, canceled?, error?}`. Диалоги файлов — в main (`dialog.showSaveDialog/OpenDialog`). Preload: `window.api.exportProfiles()/importProfiles()`.
+- Рендерер: стор `useApp` получил диалоги (`dialog` + `openDialog/closeDialog`) и действия `upsertHost(host, parentId)`, `upsertGroup`, `deleteNode`, `toggleGroup`, `moveNode(id, targetParentId, afterId?)`, `duplicateNode`, `exportTree`, `importTree(mode)`.
+- Компоненты: `TreeView` (строки `.tree-host`/`.tree-group`, drag&drop, `onMenu({x,y,node})`), `ContextMenu` (`items: MenuItem[]`), `DialogRoot` (рендерит активный диалог из стора), диалоги в `components/dialogs/` (`HostDialog` — поля всех протоколов, `GroupDialog`, `ConfirmDialog`, `ImportDialog`), `ProtocolIcon`.
+- Валидация хоста: имя, адрес, порт 1–65535; для RDP-окна — разрешение ≥320×200. Ошибки — в `form-error`.
+- Smoke-режим: `RH_SMOKE=1 npx electron .` — проверяет `window.__RH_READY__` и число `.tree-host` в DOM (`RH_EXPECT_HOSTS`), выходит с кодом 0/1. `RH_USER_DATA=<dir>` — свой userData для теста. Секретный путь: профили не содержат секретов; экспорт — тоже.

@@ -5,22 +5,222 @@
   "depth": "deep",
   "tier": "T3",
   "startedAt": "2026-08-18T21:25:00+03:00",
-  "updatedAt": "2026-08-18T22:20:00+03:00",
+  "updatedAt": "2026-08-18T22:50:00+03:00",
   "finishedAt": null,
   "requirements": {
-    "total": 14, "done": 2, "inTicket": 12, "inSpec": 0,
-    "placeholder": 0, "deferred": 0, "dropped": 0
+    "total": 14,
+    "done": 5,
+    "inTicket": 9,
+    "inSpec": 0,
+    "placeholder": 0,
+    "deferred": 0,
+    "dropped": 0
   },
   "tickets": [
-    {"id": "01", "title": "Каркас, оболочка окна, хранилище и крипта", "requirements": ["R01", "R07i"], "blockedBy": [], "wave": 1, "status": "done", "startedAt": "2026-08-18T21:30:00+03:00", "finishedAt": "2026-08-18T22:20:00+03:00", "retries": 0, "files": ["src/main/index.ts", "src/main/ipc.ts", "src/main/store/*", "src/shared/types.ts", "src/shared/ipc-contract.ts", "src/preload/*", "src/renderer/**", "tests/store.test.ts", "tests/crypto.test.ts"], "tests": {"passed": 18, "failed": 0}, "commit": "a1bf6ff", "concerns": []},
-    {"id": "02", "title": "Дерево профилей", "requirements": ["R05", "A02", "A04"], "blockedBy": ["01"], "wave": 2, "status": "pending", "startedAt": null, "finishedAt": null, "retries": 0, "files": [], "tests": null, "commit": null, "concerns": []},
-    {"id": "03", "title": "Ядро сессий: SSH и Telnet терминалы, вкладки", "requirements": ["R03", "R08i", "A03", "A05"], "blockedBy": ["01"], "wave": 2, "status": "pending", "startedAt": null, "finishedAt": null, "retries": 0, "files": [], "tests": null, "commit": null, "concerns": []},
-    {"id": "04", "title": "Учётные данные", "requirements": ["R09i"], "blockedBy": ["01", "03"], "wave": 3, "status": "pending", "startedAt": null, "finishedAt": null, "retries": 0, "files": [], "tests": null, "commit": null, "concerns": []},
-    {"id": "05", "title": "Полировка терминала и интерфейса", "requirements": ["R03", "R06"], "blockedBy": ["03"], "wave": 3, "status": "pending", "startedAt": null, "finishedAt": null, "retries": 0, "files": [], "tests": null, "commit": null, "concerns": []},
-    {"id": "06", "title": "RDP", "requirements": ["R02"], "blockedBy": ["01", "04"], "wave": 4, "status": "pending", "startedAt": null, "finishedAt": null, "retries": 0, "files": [], "tests": null, "commit": null, "concerns": []},
-    {"id": "07", "title": "VNC", "requirements": ["R04"], "blockedBy": ["01", "04"], "wave": 4, "status": "pending", "startedAt": null, "finishedAt": null, "retries": 0, "files": [], "tests": null, "commit": null, "concerns": []},
-    {"id": "08", "title": "SFTP и туннели", "requirements": ["R04", "R03.11"], "blockedBy": ["03", "04"], "wave": 4, "status": "pending", "startedAt": null, "finishedAt": null, "retries": 0, "files": [], "tests": null, "commit": null, "concerns": []},
-    {"id": "09", "title": "Проверка доступности, упаковка, финальный QA", "requirements": ["A01"], "blockedBy": ["01", "02"], "wave": 5, "status": "pending", "startedAt": null, "finishedAt": null, "retries": 0, "files": [], "tests": null, "commit": null, "concerns": []}
+    {
+      "id": "01",
+      "title": "Каркас, оболочка окна, хранилище и крипта",
+      "requirements": [
+        "R01",
+        "R07i"
+      ],
+      "blockedBy": [],
+      "wave": 1,
+      "status": "done",
+      "startedAt": "2026-08-18T21:30:00+03:00",
+      "finishedAt": "2026-08-18T22:20:00+03:00",
+      "retries": 0,
+      "files": [
+        "src/main/index.ts",
+        "src/main/ipc.ts",
+        "src/main/store/*",
+        "src/shared/types.ts",
+        "src/shared/ipc-contract.ts",
+        "src/preload/*",
+        "src/renderer/**",
+        "tests/store.test.ts",
+        "tests/crypto.test.ts"
+      ],
+      "tests": {
+        "passed": 18,
+        "failed": 0
+      },
+      "commit": "a1bf6ff",
+      "concerns": []
+    },
+    {
+      "id": "02",
+      "title": "Дерево профилей",
+      "requirements": [
+        "R05",
+        "A02",
+        "A04"
+      ],
+      "blockedBy": [
+        "01"
+      ],
+      "wave": 2,
+      "status": "done",
+      "startedAt": "2026-08-18T22:25:00+03:00",
+      "finishedAt": "2026-08-18T22:50:00+03:00",
+      "retries": 0,
+      "files": [
+        "src/shared/tree.ts",
+        "src/main/ipc.ts",
+        "src/preload/index.ts",
+        "src/renderer/src/components/*",
+        "tests/tree.test.ts"
+      ],
+      "tests": {
+        "passed": 36,
+        "failed": 0
+      },
+      "commit": "3ea7f7c",
+      "concerns": []
+    },
+    {
+      "id": "03",
+      "title": "Ядро сессий: SSH и Telnet терминалы, вкладки",
+      "requirements": [
+        "R03",
+        "R08i",
+        "A03",
+        "A05"
+      ],
+      "blockedBy": [
+        "01"
+      ],
+      "wave": 2,
+      "status": "pending",
+      "startedAt": null,
+      "finishedAt": null,
+      "retries": 0,
+      "files": [],
+      "tests": null,
+      "commit": null,
+      "concerns": []
+    },
+    {
+      "id": "04",
+      "title": "Учётные данные",
+      "requirements": [
+        "R09i"
+      ],
+      "blockedBy": [
+        "01",
+        "03"
+      ],
+      "wave": 3,
+      "status": "pending",
+      "startedAt": null,
+      "finishedAt": null,
+      "retries": 0,
+      "files": [],
+      "tests": null,
+      "commit": null,
+      "concerns": []
+    },
+    {
+      "id": "05",
+      "title": "Полировка терминала и интерфейса",
+      "requirements": [
+        "R03",
+        "R06"
+      ],
+      "blockedBy": [
+        "03"
+      ],
+      "wave": 3,
+      "status": "pending",
+      "startedAt": null,
+      "finishedAt": null,
+      "retries": 0,
+      "files": [],
+      "tests": null,
+      "commit": null,
+      "concerns": []
+    },
+    {
+      "id": "06",
+      "title": "RDP",
+      "requirements": [
+        "R02"
+      ],
+      "blockedBy": [
+        "01",
+        "04"
+      ],
+      "wave": 4,
+      "status": "pending",
+      "startedAt": null,
+      "finishedAt": null,
+      "retries": 0,
+      "files": [],
+      "tests": null,
+      "commit": null,
+      "concerns": []
+    },
+    {
+      "id": "07",
+      "title": "VNC",
+      "requirements": [
+        "R04"
+      ],
+      "blockedBy": [
+        "01",
+        "04"
+      ],
+      "wave": 4,
+      "status": "pending",
+      "startedAt": null,
+      "finishedAt": null,
+      "retries": 0,
+      "files": [],
+      "tests": null,
+      "commit": null,
+      "concerns": []
+    },
+    {
+      "id": "08",
+      "title": "SFTP и туннели",
+      "requirements": [
+        "R04",
+        "R03.11"
+      ],
+      "blockedBy": [
+        "03",
+        "04"
+      ],
+      "wave": 4,
+      "status": "pending",
+      "startedAt": null,
+      "finishedAt": null,
+      "retries": 0,
+      "files": [],
+      "tests": null,
+      "commit": null,
+      "concerns": []
+    },
+    {
+      "id": "09",
+      "title": "Проверка доступности, упаковка, финальный QA",
+      "requirements": [
+        "A01"
+      ],
+      "blockedBy": [
+        "01",
+        "02"
+      ],
+      "wave": 5,
+      "status": "pending",
+      "startedAt": null,
+      "finishedAt": null,
+      "retries": 0,
+      "files": [],
+      "tests": null,
+      "commit": null,
+      "concerns": []
+    }
   ],
   "debt": {
     "placeholders": [],
@@ -33,6 +233,12 @@
     ],
     "emptyEnv": []
   },
-  "additions": ["A01 проверка доступности", "A02 экспорт/импорт", "A03 быстрое подключение", "A04 теги", "A05 восстановление вкладок"],
+  "additions": [
+    "A01 проверка доступности",
+    "A02 экспорт/импорт",
+    "A03 быстрое подключение",
+    "A04 теги",
+    "A05 восстановление вкладок"
+  ],
   "blind": null
 }
