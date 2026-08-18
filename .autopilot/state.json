@@ -5,12 +5,12 @@
   "depth": "deep",
   "tier": "T3",
   "startedAt": "2026-08-18T21:25:00+03:00",
-  "updatedAt": "2026-08-18T23:55:00+03:00",
+  "updatedAt": "2026-08-19T00:10:00+03:00",
   "finishedAt": null,
   "requirements": {
     "total": 14,
-    "done": 10,
-    "inTicket": 4,
+    "done": 11,
+    "inTicket": 3,
     "inSpec": 0,
     "placeholder": 0,
     "deferred": 0,
@@ -189,14 +189,28 @@
         "04"
       ],
       "wave": 4,
-      "status": "pending",
-      "startedAt": null,
-      "finishedAt": null,
+      "status": "done",
+      "startedAt": "2026-08-18T23:58:00+03:00",
+      "finishedAt": "2026-08-19T00:10:00+03:00",
       "retries": 0,
-      "files": [],
-      "tests": null,
-      "commit": null,
-      "concerns": []
+      "files": [
+        "src/main/rdp/*",
+        "src/main/ipc.ts",
+        "src/main/index.ts",
+        "src/preload/index.ts",
+        "src/renderer/src/App.tsx",
+        "src/renderer/src/store.ts",
+        "tests/rdp.test.ts"
+      ],
+      "tests": {
+        "passed": 70,
+        "failed": 0
+      },
+      "commit": "9d36a68",
+      "concerns": [
+        "cmdkey с паролем, содержащим спецсимволы, — best-effort",
+        "Реальный запуск mstsc проверяется вручную (нужен GUI-сеанс)"
+      ]
     },
     {
       "id": "07",
