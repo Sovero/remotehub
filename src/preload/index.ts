@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { IPC } from '../shared/ipc-contract';
+import { IPC, type ExportResult, type ImportResult } from '../shared/ipc-contract';
 import type { CredentialSet, Settings, TreeNode } from '../shared/types';
 
 const api = {
@@ -7,6 +7,8 @@ const api = {
     ipcRenderer.invoke(IPC.profilesGet),
   saveProfiles: (tree: TreeNode[]): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke(IPC.profilesSave, tree),
+  exportProfiles: (): Promise<ExportResult> => ipcRenderer.invoke(IPC.profilesExport),
+  importProfiles: (): Promise<ImportResult> => ipcRenderer.invoke(IPC.profilesImport),
   getSettings: (): Promise<{ settings: Settings; recovered: boolean }> =>
     ipcRenderer.invoke(IPC.settingsGet),
   setSettings: (patch: Partial<Settings>): Promise<{ ok: boolean; settings: Settings }> =>

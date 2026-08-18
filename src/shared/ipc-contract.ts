@@ -56,6 +56,20 @@ export interface AppInfo {
   platform: string;
 }
 
+export interface ExportResult {
+  ok: boolean;
+  path?: string;
+  canceled?: boolean;
+  error?: string;
+}
+
+export interface ImportResult {
+  ok: boolean;
+  tree?: TreeNode[];
+  canceled?: boolean;
+  error?: string;
+}
+
 export interface LoadResult<T> {
   data: T;
   recovered: boolean;

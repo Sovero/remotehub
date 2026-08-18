@@ -1,7 +1,7 @@
 import { useApp } from '../store';
 
 export default function Welcome(): React.JSX.Element {
-  const pushToast = useApp((s) => s.pushToast);
+  const openDialog = useApp((s) => s.openDialog);
 
   return (
     <div className="welcome">
@@ -12,10 +12,10 @@ export default function Welcome(): React.JSX.Element {
         всё в дереве профилей, как в Termius.
       </p>
       <div className="welcome-actions">
-        <button className="btn btn--primary" onClick={() => pushToast('Добавление группы появится в следующей сборке')}>
+        <button className="btn btn--primary" onClick={() => openDialog({ type: 'group', group: null, parentId: null })}>
           Добавить группу
         </button>
-        <button className="btn btn--primary" onClick={() => pushToast('Добавление хоста появится в следующей сборке')}>
+        <button className="btn btn--primary" onClick={() => openDialog({ type: 'host', host: null, parentId: null })}>
           Добавить хост
         </button>
       </div>

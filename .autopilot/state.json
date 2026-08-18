@@ -5,14 +5,14 @@
   "depth": "deep",
   "tier": "T3",
   "startedAt": "2026-08-18T21:25:00+03:00",
-  "updatedAt": "2026-08-18T22:05:00+03:00",
+  "updatedAt": "2026-08-18T22:20:00+03:00",
   "finishedAt": null,
   "requirements": {
-    "total": 14, "done": 0, "inTicket": 14, "inSpec": 0,
+    "total": 14, "done": 2, "inTicket": 12, "inSpec": 0,
     "placeholder": 0, "deferred": 0, "dropped": 0
   },
   "tickets": [
-    {"id": "01", "title": "Каркас, оболочка окна, хранилище и крипта", "requirements": ["R01", "R07i"], "blockedBy": [], "wave": 1, "status": "pending", "startedAt": null, "finishedAt": null, "retries": 0, "files": [], "tests": null, "commit": null, "concerns": []},
+    {"id": "01", "title": "Каркас, оболочка окна, хранилище и крипта", "requirements": ["R01", "R07i"], "blockedBy": [], "wave": 1, "status": "done", "startedAt": "2026-08-18T21:30:00+03:00", "finishedAt": "2026-08-18T22:20:00+03:00", "retries": 0, "files": ["src/main/index.ts", "src/main/ipc.ts", "src/main/store/*", "src/shared/types.ts", "src/shared/ipc-contract.ts", "src/preload/*", "src/renderer/**", "tests/store.test.ts", "tests/crypto.test.ts"], "tests": {"passed": 18, "failed": 0}, "commit": "a1bf6ff", "concerns": []},
     {"id": "02", "title": "Дерево профилей", "requirements": ["R05", "A02", "A04"], "blockedBy": ["01"], "wave": 2, "status": "pending", "startedAt": null, "finishedAt": null, "retries": 0, "files": [], "tests": null, "commit": null, "concerns": []},
     {"id": "03", "title": "Ядро сессий: SSH и Telnet терминалы, вкладки", "requirements": ["R03", "R08i", "A03", "A05"], "blockedBy": ["01"], "wave": 2, "status": "pending", "startedAt": null, "finishedAt": null, "retries": 0, "files": [], "tests": null, "commit": null, "concerns": []},
     {"id": "04", "title": "Учётные данные", "requirements": ["R09i"], "blockedBy": ["01", "03"], "wave": 3, "status": "pending", "startedAt": null, "finishedAt": null, "retries": 0, "files": [], "tests": null, "commit": null, "concerns": []},

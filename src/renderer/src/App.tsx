@@ -5,6 +5,7 @@ import TabBar from './components/TabBar';
 import StatusBar from './components/StatusBar';
 import Welcome from './components/Welcome';
 import Toasts from './components/Toasts';
+import DialogRoot from './components/DialogRoot';
 
 export default function App(): React.JSX.Element {
   const init = useApp((s) => s.init);
@@ -43,6 +44,7 @@ export default function App(): React.JSX.Element {
       </main>
       <StatusBar />
       <Toasts />
+      <DialogRoot />
     </div>
   );
 }
