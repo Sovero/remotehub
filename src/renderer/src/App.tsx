@@ -31,10 +31,17 @@ export default function App(): React.JSX.Element {
     const offNotify = window.api.onNotify((message) => {
       useApp.getState().pushToast(message);
     });
+    const offMenu = window.api.onMenuCommand((command) => {
+      const s = useApp.getState();
+      if (command === 'hotkeys') s.openDialog({ type: 'hotkeys' });
+      else if (command === 'settings') s.openDialog({ type: 'settings' });
+      else if (command === 'new-session') s.openDialog({ type: 'new-session' });
+    });
     return () => {
       offData();
       offState();
       offNotify();
+      offMenu();
     };
   }, []);
 
@@ -64,6 +71,12 @@ export default function App(): React.JSX.Element {
       } else if (e.key === 'T' && e.shiftKey) {
         e.preventDefault();
         s.openDialog({ type: 'new-session' });
+      } else if (e.key === '=' || e.key === '+') {
+        e.preventDefault();
+        void s.patchSettings({ fontSize: Math.min(24, s.settings.fontSize + 1) });
+      } else if (e.key === '-') {
+        e.preventDefault();
+        void s.patchSettings({ fontSize: Math.max(8, s.settings.fontSize - 1) });
       } else if (e.key >= '1' && e.key <= '9' && !e.shiftKey) {
         const idx = Number(e.key) - 1;
         const tab = s.tabs[idx];

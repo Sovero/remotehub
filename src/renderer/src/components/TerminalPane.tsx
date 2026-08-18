@@ -1,8 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
+import { SearchAddon } from '@xterm/addon-search';
 import 'xterm/css/xterm.css';
+import { registerTermPaste } from '../lib/termRegistry';
 import { useApp, type SessionTab } from '../store';
 
 const DARK_THEME = {
@@ -61,9 +63,12 @@ export default function TerminalPane({
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
+  const searchRef = useRef<SearchAddon | null>(null);
   const theme = useApp((s) => s.settings.theme);
   const fontSize = useApp((s) => s.settings.fontSize);
   const fontFamily = useApp((s) => s.settings.fontFamily);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Создание терминала
   useEffect(() => {
@@ -79,10 +84,13 @@ export default function TerminalPane({
       allowProposedApi: true
     });
     const fit = new FitAddon();
+    const search = new SearchAddon();
     term.loadAddon(fit);
+    term.loadAddon(search);
     term.loadAddon(new WebLinksAddon());
     termRef.current = term;
     fitRef.current = fit;
+    searchRef.current = search;
     term.open(container);
     try {
       fit.fit();
@@ -96,19 +104,64 @@ export default function TerminalPane({
       }
     });
 
-    const dispose = term.onData((data) => {
+    const disposeInput = term.onData((data) => {
       window.api.sessionInput(tab.sessionId, btoaUnicode(data));
     });
 
+    const unregisterPaste = registerTermPaste(tab.sessionId, (text) => term.paste(text));
+
     return () => {
-      dispose.dispose();
+      disposeInput.dispose();
+      unregisterPaste();
       unsubscribeData();
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
+      searchRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab.sessionId]);
+
+  // Живое применение шрифта и темы
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term) return;
+    term.options.fontSize = fontSize;
+    term.options.fontFamily = fontFamily;
+    term.options.theme = theme === 'dark' ? DARK_THEME : LIGHT_THEME;
+  }, [fontSize, fontFamily, theme]);
+
+  // Копирование/вставка
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const onKeyDown = (e: KeyboardEvent): void => {
+      const term = termRef.current;
+      if (!term) return;
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'c') {
+        const sel = term.getSelection();
+        if (sel) {
+          void navigator.clipboard.writeText(sel);
+          term.clearSelection();
+        }
+        e.preventDefault();
+      } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'v') {
+        void navigator.clipboard.readText().then((text) => term.paste(text));
+        e.preventDefault();
+      }
+    };
+    const onContextMenu = (e: MouseEvent): void => {
+      e.preventDefault();
+      void navigator.clipboard.readText().then((text) => termRef.current?.paste(text));
+    };
+    container.addEventListener('keydown', onKeyDown);
+    container.addEventListener('contextmenu', onContextMenu);
+    return () => {
+      container.removeEventListener('keydown', onKeyDown);
+      container.removeEventListener('contextmenu', onContextMenu);
+    };
+  }, []);
 
   // Адаптация размера при активации вкладки и изменении размера окна
   useEffect(() => {
@@ -151,8 +204,57 @@ export default function TerminalPane({
     return () => window.clearInterval(id);
   }, [active, tab.sessionId]);
 
+  // Ctrl+F — поиск по активной вкладке
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [active]);
+
+  const runSearch = useCallback(
+    (dir: 1 | -1): void => {
+      const search = searchRef.current;
+      if (!search || !searchQuery) return;
+      if (dir === 1) search.findNext(searchQuery);
+      else search.findPrevious(searchQuery);
+    },
+    [searchQuery]
+  );
+
   return (
-    <div className={`terminal-pane${active ? '' : ' terminal-pane--hidden'}`} ref={containerRef} />
+    <div className="terminal-wrap">
+      <div className={`terminal-pane${active ? '' : ' terminal-pane--hidden'}`} ref={containerRef} />
+      {searchOpen && active && (
+        <div className="term-search">
+          <input
+            className="input term-search-input"
+            placeholder="Поиск в выводе…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') runSearch(1);
+              if (e.key === 'Escape') setSearchOpen(false);
+            }}
+            autoFocus
+          />
+          <button className="btn btn--sm" onClick={() => runSearch(-1)} title="Назад (Shift+Enter)">
+            ↑
+          </button>
+          <button className="btn btn--sm" onClick={() => runSearch(1)} title="Далее (Enter)">
+            ↓
+          </button>
+          <button className="btn btn--sm" onClick={() => setSearchOpen(false)} title="Закрыть (Esc)">
+            ✕
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

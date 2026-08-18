@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { nanoid } from 'nanoid';
-import type { Group, Host, Settings, TreeNode } from '@shared/types';
+import type { Group, Host, Settings, Snippet, TreeNode } from '@shared/types';
 import { createGroup, createHost } from '@shared/types';
 import type { SessionState } from '@shared/ipc-contract';
 import {
@@ -41,6 +41,9 @@ export type DialogState =
   | { type: 'password'; sessionId: string; title: string; detail: string }
   | { type: 'new-session' }
   | { type: 'credentials' }
+  | { type: 'settings' }
+  | { type: 'snippets' }
+  | { type: 'hotkeys' }
   | null;
 
 interface AppState {
@@ -78,6 +81,8 @@ interface AppState {
   applySessionState: (sessionId: string, state: SessionState) => void;
   saveAdHocAsProfile: (sessionId: string) => Promise<void>;
   persistTabs: () => void;
+  saveSnippet: (snippet: Snippet) => Promise<void>;
+  deleteSnippet: (id: string) => Promise<void>;
 }
 
 export const useApp = create<AppState>((set, get) => ({
@@ -90,7 +95,8 @@ export const useApp = create<AppState>((set, get) => ({
     confirmOnDelete: true,
     restoreTabs: true,
     winBounds: null,
-    openTabs: []
+    openTabs: [],
+    snippets: []
   },
   appInfo: null,
   ready: false,
@@ -410,6 +416,20 @@ export const useApp = create<AppState>((set, get) => ({
         adHocHost: t.adHocHost
       }))
     });
+  },
+
+  saveSnippet: async (snippet) => {
+    const { settings } = get();
+    const exists = settings.snippets.some((s) => s.id === snippet.id);
+    const snippets = exists
+      ? settings.snippets.map((s) => (s.id === snippet.id ? snippet : s))
+      : [...settings.snippets, snippet];
+    await get().patchSettings({ snippets });
+  },
+
+  deleteSnippet: async (id) => {
+    const { settings } = get();
+    await get().patchSettings({ snippets: settings.snippets.filter((s) => s.id !== id) });
   }
 }));
 

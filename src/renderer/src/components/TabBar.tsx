@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { SessionState } from '@shared/ipc-contract';
 import { parseQuickConnect } from '@shared/quick-connect';
+import { pasteToTerminal } from '../lib/termRegistry';
 import { useApp, type SessionTab } from '../store';
 import ProtocolIcon from './ProtocolIcon';
 
@@ -28,6 +29,17 @@ export default function TabBar(): React.JSX.Element {
   const openAdHoc = useApp((s) => s.openAdHoc);
   const pushToast = useApp((s) => s.pushToast);
   const [quick, setQuick] = useState('');
+  const [snipsOpen, setSnipsOpen] = useState(false);
+  const snipsRef = useRef<HTMLDivElement>(null);
+  const snippets = useApp((s) => s.settings.snippets);
+
+  useEffect(() => {
+    const close = (e: MouseEvent): void => {
+      if (snipsRef.current && !snipsRef.current.contains(e.target as Node)) setSnipsOpen(false);
+    };
+    window.addEventListener('mousedown', close);
+    return () => window.removeEventListener('mousedown', close);
+  }, []);
 
   const quickConnect = (): void => {
     const parsed = parseQuickConnect(quick);
@@ -37,6 +49,16 @@ export default function TabBar(): React.JSX.Element {
     }
     setQuick('');
     void openAdHoc(parsed.host);
+  };
+
+  const insertSnippet = (command: string): void => {
+    if (activeTabId) {
+      const ok = pasteToTerminal(activeTabId, command);
+      if (!ok) pushToast('В активной вкладке нет терминала');
+    } else {
+      pushToast('Нет активного терминала');
+    }
+    setSnipsOpen(false);
   };
 
   return (
@@ -86,6 +108,47 @@ export default function TabBar(): React.JSX.Element {
         );
       })}
       {tabs.length === 0 && <span className="tabbar-hint">Нет открытых сессий</span>}
+      <div className="tabbar-tools">
+        <div className="snips" ref={snipsRef}>
+          <button
+            className="tabbar-new"
+            title="Сниппеты"
+            onClick={() => setSnipsOpen((v) => !v)}
+          >
+            Σ
+          </button>
+          {snipsOpen && (
+            <div className="snips-pop">
+              {snippets.length === 0 ? (
+                <div className="snips-empty">Сниппетов пока нет</div>
+              ) : (
+                snippets.map((s) => (
+                  <button key={s.id} className="snips-item" onClick={() => insertSnippet(s.command)}>
+                    <span className="snips-name">{s.name}</span>
+                    <span className="snips-cmd">{s.command}</span>
+                  </button>
+                ))
+              )}
+              <button
+                className="snips-manage"
+                onClick={() => {
+                  setSnipsOpen(false);
+                  openDialog({ type: 'snippets' });
+                }}
+              >
+                Управление сниппетами…
+              </button>
+            </div>
+          )}
+        </div>
+        <button
+          className="tabbar-new"
+          title="Настройки"
+          onClick={() => openDialog({ type: 'settings' })}
+        >
+          ⚙
+        </button>
+      </div>
       <div className="quick-connect">
         <input
           className="input quick-connect-input"

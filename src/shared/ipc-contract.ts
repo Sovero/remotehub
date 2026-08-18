@@ -13,6 +13,7 @@ export const IPC = {
   settingsSet: 'settings:set',
   appInfo: 'app:info',
   notify: 'app:notify',
+  menuCommand: 'menu:command',
   sessionOpen: 'session:open',
   sessionInput: 'session:input',
   sessionResize: 'session:resize',

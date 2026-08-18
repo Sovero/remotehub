@@ -38,6 +38,11 @@ const api = {
     ipcRenderer.on(IPC.notify, listener);
     return () => ipcRenderer.removeListener(IPC.notify, listener);
   },
+  onMenuCommand: (cb: (command: string) => void): (() => void) => {
+    const listener = (_e: unknown, command: string): void => cb(command);
+    ipcRenderer.on(IPC.menuCommand, listener);
+    return () => ipcRenderer.removeListener(IPC.menuCommand, listener);
+  },
   openSession: (req: SessionOpenRequest): Promise<{ sessionId: string }> =>
     ipcRenderer.invoke(IPC.sessionOpen, req),
   sessionInput: (sessionId: string, data: string): void =>

@@ -65,6 +65,12 @@ export interface WindowBounds {
   height: number;
 }
 
+export interface Snippet {
+  id: string;
+  name: string;
+  command: string;
+}
+
 export interface OpenTabMeta {
   sessionId: string;
   hostId: string | null;
@@ -83,6 +89,7 @@ export interface Settings {
   restoreTabs: boolean;
   winBounds: WindowBounds | null;
   openTabs: OpenTabMeta[];
+  snippets: Snippet[];
 }
 
 export interface ProfilesFile {
@@ -110,7 +117,8 @@ export const DEFAULT_SETTINGS: Settings = {
   confirmOnDelete: true,
   restoreTabs: true,
   winBounds: null,
-  openTabs: []
+  openTabs: [],
+  snippets: []
 };
 
 export const DEFAULT_SSH: SshOptions = { keepalive: 30, agent: false, timeout: 10 };

@@ -3,9 +3,12 @@ import ConfirmDialog from './dialogs/ConfirmDialog';
 import CredentialsDialog from './dialogs/CredentialsDialog';
 import GroupDialog from './dialogs/GroupDialog';
 import HostDialog from './dialogs/HostDialog';
+import HotkeysDialog from './dialogs/HotkeysDialog';
 import ImportDialog from './dialogs/ImportDialog';
 import NewSessionDialog from './dialogs/NewSessionDialog';
 import PasswordDialog from './dialogs/PasswordDialog';
+import SettingsDialog from './dialogs/SettingsDialog';
+import SnippetsDialog from './dialogs/SnippetsDialog';
 
 export default function DialogRoot(): React.JSX.Element | null {
   const dialog = useApp((s) => s.dialog);
@@ -34,6 +37,12 @@ export default function DialogRoot(): React.JSX.Element | null {
       return <NewSessionDialog onClose={closeDialog} />;
     case 'credentials':
       return <CredentialsDialog onClose={closeDialog} />;
+    case 'settings':
+      return <SettingsDialog onClose={closeDialog} />;
+    case 'snippets':
+      return <SnippetsDialog onClose={closeDialog} />;
+    case 'hotkeys':
+      return <HotkeysDialog onClose={closeDialog} />;
     case 'password':
       return <PasswordDialog sessionId={dialog.sessionId} title={dialog.title} detail={dialog.detail} />;
     default:

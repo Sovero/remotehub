@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, dialog, Menu } from 'electron';
 import { join } from 'path';
 import { registerIpc } from './ipc';
 import { SessionManager } from './sessions/manager';
@@ -10,6 +10,51 @@ let store: Store;
 
 const MIN_WIDTH = 900;
 const MIN_HEIGHT = 600;
+
+function installMenu(): void {
+  const sendMenu = (command: string): void => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('menu:command', command);
+    }
+  };
+  const menu = Menu.buildFromTemplate([
+    {
+      label: 'Файл',
+      submenu: [
+        { label: 'Новая сессия', accelerator: 'Ctrl+Shift+T', click: () => sendMenu('new-session') },
+        { type: 'separator' },
+        { role: 'quit', label: 'Выход' }
+      ]
+    },
+    {
+      label: 'Вид',
+      submenu: [
+        { role: 'reload', label: 'Перезагрузить' },
+        { role: 'toggleDevTools', label: 'Инструменты разработчика' }
+      ]
+    },
+    {
+      label: 'Помощь',
+      submenu: [
+        { label: 'Горячие клавиши', accelerator: 'F1', click: () => sendMenu('hotkeys') },
+        { label: 'Настройки', click: () => sendMenu('settings') },
+        { type: 'separator' },
+        {
+          label: 'О программе',
+          click: () => {
+            void dialog.showMessageBox({
+              type: 'info',
+              title: 'Remote Hub',
+              message: 'Remote Hub',
+              detail: `Версия ${app.getVersion()}\nElectron ${process.versions.electron ?? ''}\nРабочий стол для SSH, Telnet, RDP, VNC и SFTP.`
+            });
+          }
+        }
+      ]
+    }
+  ]);
+  Menu.setApplicationMenu(menu);
+}
 
 function createWindow(): void {
   const settings = store.loadSettings().data;
@@ -105,6 +150,38 @@ function createWindow(): void {
             });
           return;
         }
+        if (process.env.RH_SMOKE_SNIPS === '1') {
+          await mainWindow?.webContents
+            .executeJavaScript(`
+              (async () => {
+                const btns = document.querySelectorAll('.tabbar-new');
+                const snipBtn = [...btns].find((b) => b.textContent === 'Σ');
+                if (!snipBtn) return 'no-btn';
+                snipBtn.click();
+                const deadline = Date.now() + 5000;
+                while (Date.now() < deadline) {
+                  const item = document.querySelector('.snips-item');
+                  if (item) {
+                    const text = item.textContent || '';
+                    return text.includes('Обновить систему') && text.includes('apt update') ? 'ok' : 'bad:' + text;
+                  }
+                  await new Promise((r) => setTimeout(r, 100));
+                }
+                return 'no-item';
+              })()
+            `)
+            .then((res) => {
+              clearTimeout(watchdog);
+              if (res === 'ok') {
+                console.log('[smoke] snippets flow OK — поповер со сниппетом открывается');
+                app.exit(0);
+              } else {
+                console.error(`[smoke] snippets flow failed: ${String(res)}`);
+                app.exit(1);
+              }
+            });
+          return;
+        }
         const expectTabs = Number(process.env.RH_EXPECT_TABS ?? -1);
         if (expectTabs >= 0) {
           const tabRows = await mainWindow?.webContents.executeJavaScript(
@@ -194,6 +271,7 @@ if (!gotLock) {
   });
 
   app.whenReady().then(() => {
+    installMenu();
     store = new Store(app.getPath('userData'), dpapiSealer);
     const sessions = new SessionManager(dpapiSealer, (channel, payload) => {
       for (const win of BrowserWindow.getAllWindows()) {
