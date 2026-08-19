@@ -5,12 +5,12 @@
   "depth": "deep",
   "tier": "T3",
   "startedAt": "2026-08-18T21:25:00+03:00",
-  "updatedAt": "2026-08-19T00:35:00+03:00",
+  "updatedAt": "2026-08-19T09:05:00+03:00",
   "finishedAt": null,
   "requirements": {
     "total": 14,
-    "done": 11,
-    "inTicket": 3,
+    "done": 12,
+    "inTicket": 2,
     "inSpec": 0,
     "placeholder": 0,
     "deferred": 0,
@@ -257,14 +257,31 @@
         "04"
       ],
       "wave": 4,
-      "status": "pending",
-      "startedAt": null,
-      "finishedAt": null,
+      "status": "done",
+      "startedAt": "2026-08-19T08:50:00+03:00",
+      "finishedAt": "2026-08-19T09:05:00+03:00",
       "retries": 0,
-      "files": [],
-      "tests": null,
-      "commit": null,
-      "concerns": []
+      "files": [
+        "src/main/sftp/*",
+        "src/main/tunnels/*",
+        "src/main/ipc.ts",
+        "src/main/index.ts",
+        "src/preload/index.ts",
+        "src/renderer/src/components/SftpPane.tsx",
+        "src/renderer/src/components/dialogs/TunnelsDialog.tsx",
+        "src/renderer/src/components/{TabBar,Sidebar,DialogRoot,App}.tsx",
+        "src/renderer/src/store.ts",
+        "src/shared/ipc-contract.ts",
+        "tests/sftp-tunnels.test.ts"
+      ],
+      "tests": {
+        "passed": 77,
+        "failed": 0
+      },
+      "commit": "1dd540a",
+      "concerns": [
+        "Смоук SFTP/туннелей проверяет путь ошибки (мёртвый порт); живой сценарий покрыт интеграционными тестами"
+      ]
     },
     {
       "id": "09",

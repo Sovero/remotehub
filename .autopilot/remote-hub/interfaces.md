@@ -43,3 +43,14 @@
 - Тесты: `tests/session-config.test.ts` (шов 6), `tests/quick-connect.test.ts` (шов 5), `tests/session-integration.test.ts` — настоящий ssh2-сервер (мок, pty + shell) против `SshSession`: данные, ввод, ошибка аутентификации.
 - Smoke-сценарии: `RH_SMOKE_SESSION=1` — двойной клик по хосту и ожидание `.session-overlay`; `RH_EXPECT_TABS=N` — проверка восстановленных вкладок.
 - Оговорки: SSH-агент — только Windows named pipe (best-effort); Telnet-транспорт юнит-покрыт конфигом, живого сервера нет.
+- Важно: `session:open` принимает `sessionId` рендерера — main использует его как id сессии. Не генерируй свой id: смена key вкладки перемонтирует `TerminalPane` и роняет xterm (`Viewport.syncScrollArea` после dispose).
+
+## Из тикета 08 — SFTP и туннели
+
+- `SftpManager` (`src/main/sftp/manager.ts`): `open(host, credential, sessionId)`, `list/mkdir/rename/remove`, `download/upload(sessionId, …, onProgress, opId)` с `TransferProgress {sessionId, opId, direction, name, transferred, total, done, error?}`, `localList(path)` (синхронно), `close(sessionId)`, `closeAll()`. Отдельное SSH-соединение на SFTP-вкладку. Локальные файловые операции для левой панели — отдельные IPC `fs:*` (`localFsList/Delete/Rename/Mkdir`), т.к. рендерер в песочнице.
+- `TunnelManager` (`src/main/tunnels/manager.ts`): `add(sessionId, host, credential, localPort, targetHost, targetPort) → {ok, tunnel?, error?}`, `list`, `stop(sessionId, tunnelId)`, `stopAll(sessionId)` (закрывает туннели и SSH-соединение сеанса), `closeAll()`. Одно SSH-соединение на сеанс; на соединение — `client.forwardOut`.
+- IPC: `sftp:open/list/mkdir/rename/delete/download/upload/close`, `tunnels:add/list/stop/stopAll`, `fs:*`; событие `sftp:progress`. Preload — `window.api.sftp*`, `tunnels*`, `localFs*`, `onSftpProgress`.
+- Рендерер: `SftpPane` (две панели `.sftp-pane`, строки `.sftp-row`, передачи `.sftp-op` с прогресс-баром; ошибка с пометкой «файл неполный (N из M)»), `TunnelsDialog` (`.modal`, порт → хост:порт, список активных туннелей с остановкой), кнопка ⧉ в таббаре для активной SSH-вкладки, пункт «SFTP» в контекстном меню SSH-хоста. Вход в SFTP — только из контекстного меню.
+- Тесты: `tests/sftp-tunnels.test.ts` — SftpManager и TunnelManager против реального ssh2-сервера (мини-FS-SFTP-бэкенд в тесте: `installSftpHandlers`), эхо-сервер как цель туннеля. Round-trip туннеля ждёт полный payload, а не `end` (туннель держит соединение открытым).
+- Smoke: `RH_SMOKE_SFTP_TUNNELS=1` — SSH-вкладка → диалог туннелей → SFTP-панель через контекстное меню; проверка пути ошибки (мёртвый порт).
+- Оговорка: RDP/VNC/SFTP-потоки без живой проверки против реальных серверов в смоуке — покрыты интеграционными тестами (SFTP/SSH) или фейк-режимом (RDP).
