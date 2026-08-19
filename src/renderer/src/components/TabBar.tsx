@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SessionState } from '@shared/ipc-contract';
 import { parseQuickConnect } from '@shared/quick-connect';
+import { findNode } from '@shared/tree';
 import { pasteToTerminal } from '../lib/termRegistry';
 import { useApp, type SessionTab } from '../store';
 import ProtocolIcon from './ProtocolIcon';
@@ -32,6 +33,18 @@ export default function TabBar(): React.JSX.Element {
   const [snipsOpen, setSnipsOpen] = useState(false);
   const snipsRef = useRef<HTMLDivElement>(null);
   const snippets = useApp((s) => s.settings.snippets);
+  const tree = useApp((s) => s.tree);
+
+  const activeTab = tabs.find((t) => t.sessionId === activeTabId) ?? null;
+  const activeSshHost = useMemo(() => {
+    if (!activeTab || activeTab.kind !== 'terminal' || activeTab.protocol !== 'ssh') return null;
+    if (activeTab.adHocHost) return activeTab.adHocHost;
+    if (activeTab.hostId) {
+      const node = findNode(tree, activeTab.hostId);
+      if (node && node.kind === 'host') return node;
+    }
+    return null;
+  }, [activeTab, tree]);
 
   useEffect(() => {
     const close = (e: MouseEvent): void => {
@@ -109,6 +122,22 @@ export default function TabBar(): React.JSX.Element {
       })}
       {tabs.length === 0 && <span className="tabbar-hint">Нет открытых сессий</span>}
       <div className="tabbar-tools">
+        {activeSshHost && (
+          <button
+            className="tabbar-new"
+            title="Туннели (порт-форвардинг)"
+            onClick={() =>
+              openDialog({
+                type: 'tunnels',
+                sessionId: activeTab?.sessionId ?? '',
+                title: activeTab?.title ?? '',
+                host: activeSshHost
+              })
+            }
+          >
+            ⧉
+          </button>
+        )}
         <div className="snips" ref={snipsRef}>
           <button
             className="tabbar-new"

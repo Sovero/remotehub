@@ -23,13 +23,19 @@ export const IPC = {
   sessionState: 'session:state',
   vncOpen: 'vnc:open',
   vncClose: 'vnc:close',
+  sftpOpen: 'sftp:open',
+  sftpClose: 'sftp:close',
   sftpList: 'sftp:list',
-  sftpRead: 'sftp:read',
-  sftpWrite: 'sftp:write',
+  sftpLocalList: 'sftp:local-list',
+  sftpDownload: 'sftp:download',
+  sftpUpload: 'sftp:upload',
   sftpMkdir: 'sftp:mkdir',
   sftpRename: 'sftp:rename',
   sftpDelete: 'sftp:delete',
-  sftpLocalList: 'sftp:local-list',
+  sftpProgress: 'sftp:progress',
+  localFsMkdir: 'fs:mkdir',
+  localFsRename: 'fs:rename',
+  localFsDelete: 'fs:delete',
   tunnelsAdd: 'tunnels:add',
   tunnelsStop: 'tunnels:stop',
   tunnelsList: 'tunnels:list',
@@ -121,6 +127,8 @@ export type SessionState =
   | { phase: 'closed'; reason?: string };
 
 export interface SessionOpenRequest {
+  /** Id, сгенерированный рендерером; main использует его, чтобы не менять key вкладки. */
+  sessionId?: string;
   host: import('./types').Host;
   /** Пароль, введённый пользователем в диалоге (не сохраняется). */
   password?: string;
@@ -163,5 +171,64 @@ export interface VncOpenResult {
   ok: boolean;
   port?: number;
   password?: string;
+  error?: string;
+}
+
+export interface SftpEntry {
+  name: string;
+  isDirectory: boolean;
+  size: number;
+  mtime: number;
+}
+
+export interface LocalEntry {
+  name: string;
+  isDirectory: boolean;
+  size: number;
+  mtime: number;
+}
+
+export interface SftpOpenRequest {
+  sessionId: string;
+  host: import('./types').Host;
+}
+
+export interface SftpOpenResult {
+  ok: boolean;
+  home?: string;
+  error?: string;
+}
+
+export interface TransferProgress {
+  sessionId: string;
+  opId: string;
+  direction: 'download' | 'upload';
+  name: string;
+  transferred: number;
+  total: number;
+  done: boolean;
+  error?: string;
+}
+
+export interface TunnelInfo {
+  id: string;
+  localPort: number;
+  targetHost: string;
+  targetPort: number;
+  active: boolean;
+  error?: string;
+}
+
+export interface TunnelAddRequest {
+  sessionId: string;
+  host: import('./types').Host;
+  localPort: number;
+  targetHost: string;
+  targetPort: number;
+}
+
+export interface TunnelAddResult {
+  ok: boolean;
+  tunnel?: TunnelInfo;
   error?: string;
 }

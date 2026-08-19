@@ -9,6 +9,7 @@ import NewSessionDialog from './dialogs/NewSessionDialog';
 import PasswordDialog from './dialogs/PasswordDialog';
 import SettingsDialog from './dialogs/SettingsDialog';
 import SnippetsDialog from './dialogs/SnippetsDialog';
+import TunnelsDialog from './dialogs/TunnelsDialog';
 
 export default function DialogRoot(): React.JSX.Element | null {
   const dialog = useApp((s) => s.dialog);
@@ -45,6 +46,8 @@ export default function DialogRoot(): React.JSX.Element | null {
       return <HotkeysDialog onClose={closeDialog} />;
     case 'password':
       return <PasswordDialog sessionId={dialog.sessionId} title={dialog.title} detail={dialog.detail} />;
+    case 'tunnels':
+      return <TunnelsDialog sessionId={dialog.sessionId} title={dialog.title} host={dialog.host} onClose={closeDialog} />;
     default:
       return null;
   }

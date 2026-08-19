@@ -9,6 +9,7 @@ import Toasts from './components/Toasts';
 import DialogRoot from './components/DialogRoot';
 import TerminalPane from './components/TerminalPane';
 import SessionOverlay from './components/SessionOverlay';
+import SftpPane from './components/SftpPane';
 import VncViewer from './components/VncViewer';
 
 export default function App(): React.JSX.Element {
@@ -131,6 +132,8 @@ export default function App(): React.JSX.Element {
                     <RdpPane tab={tab} />
                   ) : tab.kind === 'vnc' ? (
                     <VncViewer tab={tab} />
+                  ) : tab.kind === 'sftp' ? (
+                    <SftpPane tab={tab} />
                   ) : (
                     <PlaceholderPane tab={tab} />
                   )}
@@ -195,9 +198,7 @@ function RdpPane({
 }
 
 function PlaceholderPane({ tab }: { tab: { kind: string; protocol: string; title: string } }): React.JSX.Element {
-  const names: Record<string, string> = {
-    sftp: 'SFTP появится в следующей сборке (T08)'
-  };
+  const names: Record<string, string> = {};
   return (
     <div className="placeholder-panel">
       <div className="placeholder-icon">▤</div>

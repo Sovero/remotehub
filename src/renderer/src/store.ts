@@ -33,6 +33,8 @@ export interface SessionTab {
   startedAt: number | null;
   /** Транзитная информация VNC-сессии (порт моста и пароль — только в памяти). */
   vnc?: { port: number; password: string | undefined } | null;
+  /** Домашний каталог для SFTP (только в памяти). */
+  sftpHome?: string | null;
 }
 
 export type DialogState =
@@ -46,6 +48,7 @@ export type DialogState =
   | { type: 'settings' }
   | { type: 'snippets' }
   | { type: 'hotkeys' }
+  | { type: 'tunnels'; sessionId: string; title: string; host: Host }
   | null;
 
 interface AppState {
@@ -79,6 +82,7 @@ interface AppState {
   openRdp: (host: Host) => Promise<void>;
   applyRdpOutcome: (sessionId: string, outcome: { ok: boolean; error?: string }) => void;
   openVnc: (host: Host) => Promise<void>;
+  openSftp: (host: Host) => Promise<void>;
   reconnectTab: (sessionId: string) => Promise<void>;
   closeTab: (sessionId: string, force?: boolean) => Promise<void>;
   switchTab: (sessionId: string) => void;
@@ -289,7 +293,7 @@ export const useApp = create<AppState>((set, get) => ({
       startedAt: null
     };
     set((s) => ({ tabs: [...s.tabs, tab], activeTabId: sessionId }));
-    const res = await window.api.openSession({ host, password: opts?.password });
+    const res = await window.api.openSession({ sessionId, host, password: opts?.password });
     // sessionId из main может отличаться (для ad-hoc), синхронизируем
     if (res.sessionId && res.sessionId !== sessionId) {
       set((s) => ({
@@ -358,6 +362,43 @@ export const useApp = create<AppState>((set, get) => ({
                 vnc: { port: res.port ?? 0, password: res.password }
               }
             : { ...t, state: { phase: 'error', message: res.error ?? 'Не удалось открыть VNC' } }
+          : t
+      )
+    }));
+    get().persistTabs();
+  },
+
+  openSftp: async (host) => {
+    const sessionId = nanoid(10);
+    set((s) => ({
+      tabs: [
+        ...s.tabs,
+        {
+          sessionId,
+          hostId: host.id,
+          title: host.name,
+          protocol: host.protocol,
+          kind: 'sftp',
+          state: { phase: 'connecting' },
+          adHocHost: null,
+          startedAt: null,
+          sftpHome: null
+        }
+      ],
+      activeTabId: sessionId
+    }));
+    const res = await window.api.sftpOpen({ sessionId, host });
+    set((s) => ({
+      tabs: s.tabs.map((t) =>
+        t.sessionId === sessionId
+          ? res.ok
+            ? {
+                ...t,
+                state: { phase: 'connected' },
+                startedAt: Date.now(),
+                sftpHome: res.home ?? null
+              }
+            : { ...t, state: { phase: 'error', message: res.error ?? 'Не удалось открыть SFTP' } }
           : t
       )
     }));

@@ -3,6 +3,8 @@ import { join } from 'path';
 import { registerIpc } from './ipc';
 import { RdpManager } from './rdp/manager';
 import { SessionManager } from './sessions/manager';
+import { SftpManager } from './sftp/manager';
+import { TunnelManager } from './tunnels/manager';
 import { VncManager } from './vnc/manager';
 import { Store } from './store';
 import { dpapiSealer } from './store/crypto';
@@ -86,7 +88,7 @@ function createWindow(): void {
 
   if (process.env.RH_SMOKE === '1') {
     mainWindow.webContents.on('console-message', (event) => {
-      const params = event as unknown as { message?: string; level?: string; stackTrace?: string[] };
+      const params = event as unknown as { message?: string; level?: string; stackTrace?: string[]; frame?: unknown };
       console.log('[renderer]', params.message ?? '');
       if (params.stackTrace?.length) {
         console.log('[renderer-stack]', params.stackTrace.slice(0, 4).join(' | '));
@@ -301,6 +303,72 @@ function createWindow(): void {
           });
           return;
         }
+        // Сценарий SFTP/туннелей: SSH-вкладка → диалог туннелей → SFTP-панель
+        // через контекстное меню (порт мёртвый, проверяем путь до ошибки UI).
+        if (process.env.RH_SMOKE_SFTP_TUNNELS === '1') {
+          await mainWindow?.webContents.executeJavaScript(`
+            (async () => {
+              const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+              const deadline = Date.now() + 12000;
+              const until = async (pred) => {
+                while (Date.now() < deadline) {
+                  const v = pred();
+                  if (v) return v;
+                  await wait(100);
+                }
+                return null;
+              };
+              // 1. SSH-хост → терминальная вкладка (подключение упадёт на мёртвом порту).
+              const host = document.querySelector('.tree-host');
+              if (!host) return 'no-host';
+              host.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+              const tab = await until(() => (document.querySelectorAll('.tab').length >= 1 ? true : null));
+              if (!tab) return 'no-tab';
+              // 2. Кнопка туннелей в таббаре → модал открывается.
+              const tunBtn = document.querySelector('[title="Туннели (порт-форвардинг)"]');
+              if (!tunBtn) return 'no-tunnels-btn';
+              tunBtn.click();
+              const modal = await until(() => {
+                const m = document.querySelector('.modal');
+                return m && (m.textContent || '').includes('Туннели') ? m : null;
+              });
+              if (!modal) return 'no-tunnels-modal';
+              const closeBtn = document.querySelector('.modal-close');
+              if (closeBtn) closeBtn.click();
+              await wait(200);
+              if (document.querySelector('.modal')) return 'modal-still-open';
+              // 3. SFTP через контекстное меню хоста → панель с ошибкой (порт мёртвый).
+              const host2 = document.querySelector('.tree-host');
+              if (!host2) return 'no-host-2';
+              host2.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+              const sftpItem = await until(() => {
+                const item = [...document.querySelectorAll('.ctxmenu-item')].find((b) => b.textContent === 'SFTP');
+                return item || null;
+              });
+              if (!sftpItem) return 'no-sftp-menu-item';
+              sftpItem.click();
+              const pane = await until(() => {
+                const p = document.querySelector('.sftp-pane');
+                return p || null;
+              });
+              if (!pane) return 'no-sftp-pane';
+              const text = pane.textContent || '';
+              return text.includes('Не удалось открыть SFTP')
+                ? 'ok:' + document.querySelectorAll('.tab').length
+                : 'pane:' + text.slice(0, 120);
+            })()
+          `).then((res) => {
+            clearTimeout(watchdog);
+            if (typeof res === 'string' && res.startsWith('ok:')) {
+              console.log(`[smoke] sftp/tunnels flow OK — диалог туннелей и SFTP-панель открылись, tabs: ${res.split(':')[1]}`);
+              app.exit(0);
+            } else {
+              console.error(`[smoke] sftp/tunnels flow failed: ${String(res)}`);
+              app.exit(1);
+            }
+          });
+          return;
+        }
         clearTimeout(watchdog);
         app.exit(0);
       };
@@ -355,11 +423,15 @@ if (!gotLock) {
     const sessions = new SessionManager(dpapiSealer, broadcast as (c: 'session:data' | 'session:state', p: unknown) => void);
     const rdp = new RdpManager(dpapiSealer, broadcast as (c: 'rdp:exited', p: unknown) => void);
     const vnc = new VncManager(dpapiSealer);
-    registerIpc(store, sessions, rdp, vnc);
+    const sftp = new SftpManager(dpapiSealer);
+    const tunnels = new TunnelManager(dpapiSealer);
+    registerIpc(store, sessions, rdp, vnc, sftp, tunnels);
     app.on('before-quit', () => {
       sessions.closeAll();
       rdp.closeAll();
       vnc.closeAll();
+      sftp.closeAll();
+      tunnels.closeAll();
     });
     createWindow();
 

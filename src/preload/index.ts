@@ -6,9 +6,17 @@ import {
   type CredentialSetInput,
   type ExportResult,
   type ImportResult,
+  type LocalEntry,
   type SessionDataPayload,
   type SessionOpenRequest,
-  type SessionStatePayload
+  type SessionStatePayload,
+  type SftpEntry,
+  type SftpOpenRequest,
+  type SftpOpenResult,
+  type TransferProgress,
+  type TunnelAddRequest,
+  type TunnelAddResult,
+  type TunnelInfo
 } from '../shared/ipc-contract';
 import type { Settings, TreeNode } from '../shared/types';
 
@@ -61,6 +69,38 @@ const api = {
   }): Promise<{ ok: boolean; port?: number; password?: string; error?: string }> =>
     ipcRenderer.invoke(IPC.vncOpen, req),
   vncClose: (sessionId: string): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.vncClose, sessionId),
+  sftpOpen: (req: SftpOpenRequest): Promise<SftpOpenResult> => ipcRenderer.invoke(IPC.sftpOpen, req),
+  sftpClose: (sessionId: string): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.sftpClose, sessionId),
+  sftpList: (sessionId: string, path: string): Promise<{ ok: boolean; entries?: SftpEntry[]; error?: string }> =>
+    ipcRenderer.invoke(IPC.sftpList, { sessionId, path }),
+  sftpLocalList: (path: string): Promise<{ ok: boolean; entries?: LocalEntry[]; error?: string }> =>
+    ipcRenderer.invoke(IPC.sftpLocalList, path),
+  sftpDownload: (sessionId: string, remotePath: string): Promise<{ ok: boolean; canceled?: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.sftpDownload, { sessionId, remotePath }),
+  sftpUpload: (sessionId: string, remoteDir: string): Promise<{ ok: boolean; canceled?: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.sftpUpload, { sessionId, remoteDir }),
+  sftpMkdir: (sessionId: string, path: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.sftpMkdir, { sessionId, path }),
+  sftpRename: (sessionId: string, from: string, to: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.sftpRename, { sessionId, from, to }),
+  sftpDelete: (sessionId: string, path: string, isDir: boolean): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.sftpDelete, { sessionId, path, isDir }),
+  localFsMkdir: (path: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.localFsMkdir, path),
+  localFsRename: (from: string, to: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.localFsRename, { from, to }),
+  localFsDelete: (path: string, isDir: boolean): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.localFsDelete, { path, isDir }),
+  tunnelsAdd: (req: TunnelAddRequest): Promise<TunnelAddResult> => ipcRenderer.invoke(IPC.tunnelsAdd, req),
+  tunnelsStop: (sessionId: string, tunnelId: string): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IPC.tunnelsStop, { sessionId, tunnelId }),
+  tunnelsList: (sessionId: string): Promise<{ ok: boolean; tunnels: TunnelInfo[] }> =>
+    ipcRenderer.invoke(IPC.tunnelsList, sessionId),
+  onSftpProgress: (cb: (p: TransferProgress) => void): (() => void) => {
+    const listener = (_e: unknown, p: TransferProgress): void => cb(p);
+    ipcRenderer.on(IPC.sftpProgress, listener);
+    return () => ipcRenderer.removeListener(IPC.sftpProgress, listener);
+  },
   onRdpExited: (cb: (payload: { sessionId: string; code: number | null; error?: string }) => void): (() => void) => {
     const listener = (_e: unknown, payload: { sessionId: string; code: number | null; error?: string }): void =>
       cb(payload);

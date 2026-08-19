@@ -1193,3 +1193,344 @@ textarea.input {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* ---------- sftp ---------- */
+
+.sftp-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  gap: 8px;
+}
+
+.sftp-pane--empty {
+  justify-content: center;
+  align-items: center;
+}
+
+.sftp-error-panel {
+  text-align: center;
+  color: var(--text-muted);
+  max-width: 480px;
+}
+
+.sftp-error-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--danger);
+  margin-bottom: 6px;
+}
+
+.sftp-error-msg {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.sftp-columns {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.sftp-pane-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+
+.sftp-pane-col--remote {
+  border-color: rgba(45, 149, 236, 0.35);
+}
+
+.sftp-col-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.sftp-col-title {
+  font-weight: 600;
+  margin-right: auto;
+}
+
+.sftp-col-path {
+  padding: 5px 10px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.sftp-col-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.sftp-col-empty {
+  padding: 18px;
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 12.5px;
+}
+
+.sftp-col-error {
+  padding: 14px;
+  color: var(--danger);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.sftp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-bottom: 1px solid rgba(46, 47, 54, 0.5);
+  cursor: default;
+}
+
+.sftp-row:hover {
+  background: var(--bg-hover);
+}
+
+.sftp-row--sel {
+  background: rgba(45, 149, 236, 0.14);
+}
+
+.sftp-row-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.sftp-ico {
+  color: var(--text-muted);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.sftp-ico--dir {
+  color: #d29922;
+}
+
+.sftp-row-size {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  width: 70px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.sftp-row-time {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  width: 120px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.sftp-row-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.sftp-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+}
+
+.sftp-inline-label {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  flex-shrink: 0;
+}
+
+.sftp-inline .input {
+  flex: 1;
+}
+
+.sftp-transfers {
+  max-height: 120px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+
+.sftp-op {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  padding: 2px 4px;
+}
+
+.sftp-op-name {
+  width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+}
+
+.sftp-op-meta {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.sftp-op-bar {
+  flex: 1;
+  height: 5px;
+  background: var(--bg-active);
+  border-radius: 3px;
+  overflow: hidden;
+  min-width: 60px;
+}
+
+.sftp-op-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.15s ease;
+}
+
+.sftp-op--done .sftp-op-meta {
+  color: var(--ok);
+}
+
+.sftp-op--err .sftp-op-name,
+.sftp-op--err .sftp-op-meta {
+  color: var(--danger);
+}
+
+/* ---------- tunnels ---------- */
+
+.tunnels-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.tunnels-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.tunnels-port {
+  width: 80px;
+  flex-shrink: 0;
+}
+
+.tunnels-host {
+  flex: 1;
+}
+
+.tunnels-arrow {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.tunnels-error {
+  color: var(--danger);
+  font-size: 12.5px;
+  margin-bottom: 8px;
+}
+
+.tunnels-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.tunnels-empty {
+  color: var(--text-muted);
+  padding: 12px;
+  text-align: center;
+  font-size: 12.5px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+.tunnels-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.tunnels-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tunnels-dot--on {
+  background: var(--ok);
+}
+
+.tunnels-dot--off {
+  background: var(--danger);
+}
+
+.tunnels-route {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tunnels-status {
+  color: var(--ok);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.tunnels-status--err {
+  color: var(--danger);
+}

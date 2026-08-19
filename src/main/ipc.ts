@@ -1,5 +1,6 @@
-import { writeFileSync } from 'fs';
+import { mkdirSync, renameSync, rmdirSync, unlinkSync, writeFileSync } from 'fs';
 import { readFile } from 'fs/promises';
+import { basename, posix } from 'path';
 import { BrowserWindow, dialog, ipcMain } from 'electron';
 import { app } from 'electron';
 import { nanoid } from 'nanoid';
@@ -12,6 +13,8 @@ import {
   type RdpLaunchRequest,
   type SessionAuthRequest,
   type SessionOpenRequest,
+  type SftpOpenRequest,
+  type TunnelAddRequest,
   type VncOpenRequest
 } from '../shared/ipc-contract';
 import type { CredentialSet, Settings, TreeNode } from '../shared/types';
@@ -24,10 +27,21 @@ import {
 } from './credentials/dto';
 import { RdpManager } from './rdp/manager';
 import { SessionManager } from './sessions/manager';
+import { SftpManager } from './sftp/manager';
+import { TunnelManager } from './tunnels/manager';
 import { VncManager } from './vnc/manager';
 import type { Store } from './store';
 
-export function registerIpc(store: Store, sessions: SessionManager, rdp: RdpManager, vnc: VncManager): void {
+export function registerIpc(
+  store: Store,
+  sessions: SessionManager,
+  rdp: RdpManager,
+  vnc: VncManager,
+  sftp: SftpManager,
+  tunnels: TunnelManager
+): void {
+  const resolveCredential = (host: { credentialId?: string | null }): CredentialSet | null =>
+    host.credentialId ? store.loadCredentials().data.find((c) => c.id === host.credentialId) ?? null : null;
   const broadcast = (channel: string, payload: unknown): void => {
     for (const win of BrowserWindow.getAllWindows()) {
       win.webContents.send(channel, payload);
@@ -162,6 +176,7 @@ export function registerIpc(store: Store, sessions: SessionManager, rdp: RdpMana
       ? store.loadCredentials().data.find((c) => c.id === req.host.credentialId) ?? null
       : null;
     const sessionId = sessions.open({
+      id: req.sessionId,
       host: req.host,
       credential,
       dialogPassword: req.password,
@@ -183,6 +198,8 @@ export function registerIpc(store: Store, sessions: SessionManager, rdp: RdpMana
     sessions.close(sessionId);
     rdp.stop(sessionId);
     vnc.close(sessionId);
+    sftp.close(sessionId);
+    tunnels.stopAll(sessionId);
     return { ok: true };
   });
 
@@ -210,5 +227,151 @@ export function registerIpc(store: Store, sessions: SessionManager, rdp: RdpMana
   ipcMain.handle(IPC.vncClose, (_e, sessionId: string) => {
     vnc.close(sessionId);
     return { ok: true };
+  });
+
+  // ---- SFTP ----
+  ipcMain.handle(IPC.sftpOpen, async (_e, req: SftpOpenRequest) => {
+    const credential = resolveCredential(req.host);
+    const res = await sftp.open(req.host, credential, req.sessionId);
+    if (!res.ok) return res;
+    return { ok: true, home: app.getPath('home') };
+  });
+
+  ipcMain.handle(IPC.sftpClose, (_e, sessionId: string) => {
+    sftp.close(sessionId);
+    return { ok: true };
+  });
+
+  ipcMain.handle(IPC.sftpList, async (_e, req: { sessionId: string; path: string }) => {
+    try {
+      const entries = await sftp.list(req.sessionId, req.path);
+      return { ok: true, entries };
+    } catch (err) {
+      return { ok: false, error: (err as Error).message };
+    }
+  });
+
+  ipcMain.handle(IPC.sftpMkdir, async (_e, req: { sessionId: string; path: string }) => {
+    try {
+      await sftp.mkdir(req.sessionId, req.path);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: (err as Error).message };
+    }
+  });
+
+  ipcMain.handle(IPC.sftpRename, async (_e, req: { sessionId: string; from: string; to: string }) => {
+    try {
+      await sftp.rename(req.sessionId, req.from, req.to);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: (err as Error).message };
+    }
+  });
+
+  ipcMain.handle(IPC.sftpDelete, async (_e, req: { sessionId: string; path: string; isDir: boolean }) => {
+    try {
+      await sftp.remove(req.sessionId, req.path, req.isDir);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: (err as Error).message };
+    }
+  });
+
+  ipcMain.handle(IPC.sftpDownload, async (e, req: { sessionId: string; remotePath: string }) => {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    const options: Electron.SaveDialogOptions = {
+      title: 'Сохранить как',
+      defaultPath: basename(req.remotePath),
+      filters: [{ name: 'Все файлы', extensions: ['*'] }]
+    };
+    const { canceled, filePath } = win
+      ? await dialog.showSaveDialog(win, options)
+      : await dialog.showSaveDialog(options);
+    if (canceled || !filePath) return { ok: false, canceled: true };
+    const opId = nanoid(8);
+    try {
+      await sftp.download(req.sessionId, req.remotePath, filePath, (p) => broadcast(IPC.sftpProgress, p), opId);
+      return { ok: true };
+    } catch (err) {
+      return {
+        ok: false,
+        error: `Скачивание прервано: ${(err as Error).message} — частичный файл не является целым`
+      };
+    }
+  });
+
+  ipcMain.handle(IPC.sftpUpload, async (e, req: { sessionId: string; remoteDir: string }) => {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    const options: Electron.OpenDialogOptions = {
+      title: 'Файл для загрузки',
+      properties: ['openFile']
+    };
+    const { canceled, filePaths } = win
+      ? await dialog.showOpenDialog(win, options)
+      : await dialog.showOpenDialog(options);
+    if (canceled || filePaths.length === 0) return { ok: false, canceled: true };
+    const localPath = filePaths[0];
+    const remotePath = posix.join(req.remoteDir.replace(/\\/g, '/'), basename(localPath));
+    const opId = nanoid(8);
+    try {
+      await sftp.upload(req.sessionId, localPath, remotePath, (p) => broadcast(IPC.sftpProgress, p), opId);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: `Загрузка прервана: ${(err as Error).message}` };
+    }
+  });
+
+  // ---- локальная файловая система (для панели SFTP) ----
+  ipcMain.handle(IPC.sftpLocalList, (_e, req: { path: string }) => {
+    const path = req.path || app.getPath('home');
+    try {
+      return { ok: true, entries: sftp.localList(path) };
+    } catch (err) {
+      return { ok: false, error: (err as Error).message };
+    }
+  });
+
+  ipcMain.handle(IPC.localFsMkdir, (_e, path: string) => {
+    try {
+      mkdirSync(path);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: (err as Error).message };
+    }
+  });
+
+  ipcMain.handle(IPC.localFsRename, (_e, req: { from: string; to: string }) => {
+    try {
+      renameSync(req.from, req.to);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: (err as Error).message };
+    }
+  });
+
+  ipcMain.handle(IPC.localFsDelete, (_e, req: { path: string; isDir: boolean }) => {
+    try {
+      if (req.isDir) rmdirSync(req.path);
+      else unlinkSync(req.path);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: (err as Error).message };
+    }
+  });
+
+  // ---- туннели ----
+  ipcMain.handle(IPC.tunnelsAdd, async (_e, req: TunnelAddRequest) => {
+    const credential = resolveCredential(req.host);
+    return tunnels.add(req.sessionId, req.host, credential, req.localPort, req.targetHost, req.targetPort);
+  });
+
+  ipcMain.handle(IPC.tunnelsStop, (_e, req: { sessionId: string; tunnelId: string }) => {
+    tunnels.stop(req.sessionId, req.tunnelId);
+    return { ok: true };
+  });
+
+  ipcMain.handle(IPC.tunnelsList, (_e, sessionId: string) => {
+    return { ok: true, tunnels: tunnels.list(sessionId) };
   });
 }
