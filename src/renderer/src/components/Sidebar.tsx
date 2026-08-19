@@ -4,6 +4,7 @@ import { defaultPort, type Host, type TreeNode } from '@shared/types';
 import { collectTags, countHosts, filterTree, findParent, matchesHostQuery } from '@shared/tree';
 import { useApp } from '../store';
 import ContextMenu, { type MenuItem } from './ContextMenu';
+import SettingsForm from './SettingsForm';
 import TreeView, { type MenuRequest } from './TreeView';
 
 export default function Sidebar(): React.JSX.Element {
@@ -21,6 +22,8 @@ export default function Sidebar(): React.JSX.Element {
   const [tag, setTag] = useState<string | null>(null);
   const [menu, setMenu] = useState<MenuRequest | null>(null);
   const [rootDrop, setRootDrop] = useState(false);
+  const view = useApp((s) => s.sidebarView);
+  const setView = useApp((s) => s.setSidebarView);
 
   interface AvailState {
     host: Host;
@@ -198,6 +201,18 @@ export default function Sidebar(): React.JSX.Element {
         )}
       </div>
 
+      {view === 'settings' && (
+        <div className="sidebar-settings-sheet">
+          <div className="sidebar-settings-sheet__head">
+            <span>Настройки</span>
+            <button className="btn btn--ghost btn--sm" onClick={() => setView('tree')} title="Закрыть настройки">
+              ✕
+            </button>
+          </div>
+          <SettingsForm />
+        </div>
+      )}
+
       <div className="sidebar-footer">
         <button className="btn btn--sm" onClick={() => openDialog({ type: 'group', group: null, parentId: null })}>
           ＋ Группа
@@ -214,7 +229,11 @@ export default function Sidebar(): React.JSX.Element {
         <button className="btn btn--sm" title="Наборы учётных данных" onClick={() => openDialog({ type: 'credentials' })}>
           🔑 Учётные данные
         </button>
-        <button className="btn btn--sm" title="Настройки" onClick={() => openDialog({ type: 'settings' })}>
+        <button
+          className={`btn btn--sm${view === 'settings' ? ' btn--active' : ''}`}
+          title="Настройки"
+          onClick={() => setView(view === 'settings' ? 'tree' : 'settings')}
+        >
           ⚙ Настройки
         </button>
       </div>

@@ -18,6 +18,17 @@ export default function App(): React.JSX.Element {
   const tree = useApp((s) => s.tree);
   const tabs = useApp((s) => s.tabs);
   const activeTabId = useApp((s) => s.activeTabId);
+  const theme = useApp((s) => s.settings.theme);
+  const accent = useApp((s) => s.settings.accent);
+
+  // Тема и акцентный цвет: data-theme на <html> + CSS-переменные.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.theme = theme;
+    root.style.setProperty('--accent', accent);
+    root.style.setProperty('--accent-hover', mixWithWhite(accent, 0.18));
+  }, [theme, accent]);
+
 
   useEffect(() => {
     void init();
@@ -43,7 +54,7 @@ export default function App(): React.JSX.Element {
     const offMenu = window.api.onMenuCommand((command) => {
       const s = useApp.getState();
       if (command === 'hotkeys') s.openDialog({ type: 'hotkeys' });
-      else if (command === 'settings') s.openDialog({ type: 'settings' });
+      else if (command === 'settings') s.setSidebarView('settings');
       else if (command === 'new-session') s.openDialog({ type: 'new-session' });
     });
     return () => {
@@ -195,6 +206,18 @@ function RdpPane({
       </div>
     </div>
   );
+}
+
+/** Смешивает hex-цвет с белым (для hover-варианта акцента). */
+function mixWithWhite(hex: string, ratio: number): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  const mix = (c: number): number => Math.round(c + (255 - c) * ratio);
+  return `#${((mix(r) << 16) | (mix(g) << 8) | mix(b)).toString(16).padStart(6, '0')}`;
 }
 
 function PlaceholderPane({ tab }: { tab: { kind: string; protocol: string; title: string } }): React.JSX.Element {

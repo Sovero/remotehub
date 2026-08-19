@@ -146,13 +146,14 @@ function createWindow(): void {
                   btn.click();
                   const deadline = Date.now() + 6000;
                   while (Date.now() < deadline) {
-                    if (document.querySelector('.modal')) return 'ok';
+                    const panel = document.querySelector('.sidebar-settings-sheet');
+                    if (panel && (panel.textContent || '').includes('Акцентный цвет')) return 'ok';
                     await wait(100);
                   }
-                  return 'no-modal';
+                  return 'no-settings-panel';
                 })()
               `)
-              .then((r) => console.log('[smoke] screenshot: open settings →', String(r)));
+              .then((r) => console.log('[smoke] screenshot: open settings panel →', String(r)));
           }
           if (process.env.RH_SHOT_HOST === '1') {
             await mainWindow?.webContents
@@ -428,35 +429,70 @@ function createWindow(): void {
                   }
                   return null;
                 };
-                // 1. Настройки — кнопка в левой панели.
+                // 1. Настройки — кнопка в подвале левой панели.
                 const btn = document.querySelector('.sidebar-footer [title="Настройки"]');
                 if (!btn) return 'no-settings-btn';
                 btn.click();
-                const modal = await until(() => {
-                  const m = document.querySelector('.modal');
-                  return m && (m.textContent || '').includes('Акцентный цвет') ? m : null;
+                const panel = await until(() => {
+                  const p = document.querySelector('.sidebar-settings-sheet');
+                  return p && (p.textContent || '').includes('Акцентный цвет') ? p : null;
                 });
-                if (!modal) return 'no-settings-modal';
+                if (!panel) return 'no-settings-panel';
+                if (!document.querySelector('.sidebar .sidebar-settings-sheet')) return 'panel-not-in-sidebar';
                 // 2. Светлая тема.
-                const lightBtn = [...modal.querySelectorAll('.seg-btn')].find((b) => b.textContent === 'Светлая');
+                const lightBtn = [...panel.querySelectorAll('.seg-btn')].find((b) => b.textContent === 'Светлая');
                 if (!lightBtn) return 'no-light-btn';
                 lightBtn.click();
                 await wait(150);
                 if (document.documentElement.dataset.theme !== 'light') return 'theme-not-light';
                 const bodyBg = getComputedStyle(document.body).backgroundColor;
                 // 3. Акцентный цвет (зелёный из палитры).
-                const swatch = [...modal.querySelectorAll('.accent-swatch')].find((s) => s.style.background === 'rgb(87, 171, 90)');
+                const swatch = [...panel.querySelectorAll('.accent-swatch')].find((s) => s.style.background === 'rgb(87, 171, 90)');
                 if (!swatch) return 'no-swatch';
                 swatch.click();
                 await wait(150);
                 const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
-                return accent.toLowerCase() === '#57ab5a' && bodyBg !== 'rgb(23, 24, 28)' ? 'ok' : 'bad:' + accent + ' bg:' + bodyBg;
+                const css = (sel) => {
+                  const el = document.querySelector(sel);
+                  return el ? getComputedStyle(el).backgroundColor : 'none';
+                };
+                const probe = JSON.stringify({
+                  theme: document.documentElement.dataset.theme,
+                  accent,
+                  body: css('body'),
+                  app: css('.app'),
+                  sidebar: css('.sidebar'),
+                  settingsPanel: css('.sidebar-body--settings'),
+                  tabbar: css('.tabbar'),
+                  main: css('main'),
+                  modal: css('.modal')
+                });
+                const ok = accent.toLowerCase() === '#57ab5a' && bodyBg !== 'rgb(23, 24, 28)';
+                // 4. Возврат к дереву: крестик в шапке панели (или повторный клик по ⚙).
+                const closeBtn = [...panel.querySelectorAll('.sidebar-settings-sheet__head button')].find((b) => (b.textContent || '').includes('✕'));
+                if (!closeBtn) return 'no-close-btn';
+                closeBtn.click();
+                await wait(150);
+                if (!document.querySelector('.sidebar-settings-sheet') && document.querySelector('.tree-host, .sidebar-empty')) {
+                  return 'ok' + ' probe:' + probe;
+                }
+                return 'back-failed' + ' probe:' + probe;
               })()
             `)
-            .then((res) => {
+            .then(async (res) => {
               clearTimeout(watchdog);
-              if (res === 'ok') {
+              if (typeof res === 'string' && res.startsWith('ok')) {
                 console.log('[smoke] theme flow OK — светлая тема и акцент применяются');
+                const shotPath = process.env.RH_SHOT_PATH;
+                if (shotPath) {
+                  await new Promise((r) => setTimeout(r, 400));
+                  const image = await mainWindow?.webContents.capturePage();
+                  if (image) {
+                    mkdirSync(dirname(shotPath), { recursive: true });
+                    writeFileSync(shotPath, image.toPNG());
+                    console.log(`[smoke] theme screenshot saved: ${shotPath}`);
+                  }
+                }
                 app.exit(0);
               } else {
                 console.error(`[smoke] theme flow failed: ${String(res)}`);

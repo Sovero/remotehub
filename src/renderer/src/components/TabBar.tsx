@@ -170,13 +170,6 @@ export default function TabBar(): React.JSX.Element {
             </div>
           )}
         </div>
-        <button
-          className="tabbar-new"
-          title="Настройки"
-          onClick={() => openDialog({ type: 'settings' })}
-        >
-          ⚙
-        </button>
       </div>
       <div className="quick-connect">
         <input

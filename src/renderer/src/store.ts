@@ -45,7 +45,6 @@ export type DialogState =
   | { type: 'password'; sessionId: string; title: string; detail: string }
   | { type: 'new-session' }
   | { type: 'credentials' }
-  | { type: 'settings' }
   | { type: 'snippets' }
   | { type: 'hotkeys' }
   | { type: 'tunnels'; sessionId: string; title: string; host: Host }
@@ -68,6 +67,9 @@ interface AppState {
   dismissToast: (id: number) => void;
   openDialog: (d: Exclude<DialogState, null>) => void;
   closeDialog: () => void;
+  /** Текущий вид левой панели: дерево профилей или встроенные настройки. */
+  sidebarView: 'tree' | 'settings';
+  setSidebarView: (v: 'tree' | 'settings') => void;
   upsertHost: (host: Host, parentId: string | null) => Promise<void>;
   upsertGroup: (group: Group, parentId: string | null) => Promise<void>;
   deleteNode: (id: string) => Promise<void>;
@@ -193,6 +195,8 @@ export const useApp = create<AppState>((set, get) => ({
 
   openDialog: (d) => set({ dialog: d }),
   closeDialog: () => set({ dialog: null }),
+  sidebarView: 'tree',
+  setSidebarView: (sidebarView) => set({ sidebarView }),
 
   upsertHost: async (host, parentId) => {
     const { tree } = get();

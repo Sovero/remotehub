@@ -7,7 +7,6 @@ import HotkeysDialog from './dialogs/HotkeysDialog';
 import ImportDialog from './dialogs/ImportDialog';
 import NewSessionDialog from './dialogs/NewSessionDialog';
 import PasswordDialog from './dialogs/PasswordDialog';
-import SettingsDialog from './dialogs/SettingsDialog';
 import SnippetsDialog from './dialogs/SnippetsDialog';
 import TunnelsDialog from './dialogs/TunnelsDialog';
 
@@ -38,8 +37,6 @@ export default function DialogRoot(): React.JSX.Element | null {
       return <NewSessionDialog onClose={closeDialog} />;
     case 'credentials':
       return <CredentialsDialog onClose={closeDialog} />;
-    case 'settings':
-      return <SettingsDialog onClose={closeDialog} />;
     case 'snippets':
       return <SnippetsDialog onClose={closeDialog} />;
     case 'hotkeys':
