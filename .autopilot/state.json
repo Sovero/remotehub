@@ -5,12 +5,12 @@
   "depth": "deep",
   "tier": "T3",
   "startedAt": "2026-08-18T21:25:00+03:00",
-  "updatedAt": "2026-08-19T09:05:00+03:00",
+  "updatedAt": "2026-08-19T16:21:18.645Z",
   "finishedAt": null,
   "requirements": {
     "total": 14,
-    "done": 13,
-    "inTicket": 1,
+    "done": 14,
+    "inTicket": 0,
     "inSpec": 0,
     "placeholder": 0,
     "deferred": 0,
@@ -294,13 +294,25 @@
         "02"
       ],
       "wave": 5,
-      "status": "pending",
-      "startedAt": null,
-      "finishedAt": null,
+      "status": "done",
+      "startedAt": "2026-08-19T19:12:00+03:00",
+      "finishedAt": "2026-08-19T19:22:00+03:00",
       "retries": 0,
-      "files": [],
-      "tests": null,
-      "commit": null,
+      "files": [
+        "src/main/availability.ts",
+        "src/main/ipc.ts",
+        "src/preload/index.ts",
+        "src/shared/ipc-contract.ts",
+        "src/renderer/src/components/{Sidebar,TreeView}.tsx",
+        "src/renderer/src/styles/global.css",
+        "src/main/index.ts",
+        "tests/availability.test.ts"
+      ],
+      "tests": {
+        "passed": 86,
+        "failed": 0
+      },
+      "commit": "1efe397",
       "concerns": []
     }
   ],

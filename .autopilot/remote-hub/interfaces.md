@@ -54,3 +54,11 @@
 - Тесты: `tests/sftp-tunnels.test.ts` — SftpManager и TunnelManager против реального ssh2-сервера (мини-FS-SFTP-бэкенд в тесте: `installSftpHandlers`), эхо-сервер как цель туннеля. Round-trip туннеля ждёт полный payload, а не `end` (туннель держит соединение открытым).
 - Smoke: `RH_SMOKE_SFTP_TUNNELS=1` — SSH-вкладка → диалог туннелей → SFTP-панель через контекстное меню; проверка пути ошибки (мёртвый порт).
 - Оговорка: RDP/VNC/SFTP-потоки без живой проверки против реальных серверов в смоуке — покрыты интеграционными тестами (SFTP/SSH) или фейк-режимом (RDP).
+
+## Из тикета 09 — проверка доступности
+
+- `src/main/availability.ts` — `checkPort(host, port, timeoutMs?) → Promise<CheckResult>`, `pingHost(host, timeoutMs?) → Promise<CheckResult>` (ICMP через системный `ping`, без зависимостей), парсеры `parsePingMs(output)`/`parsePingError(output)` (pure). `CheckResult = { ok, ms?, error? }`, `CHECK_TIMEOUT_MS = 2500`.
+- IPC: `check:port` (`{host, port}` → `CheckResult`), `check:ping` (`host` → `CheckResult`). Preload: `window.api.checkPort({host, port})` / `window.api.checkPing(host)`.
+- Рендерер: в контекстном меню хоста пункт «Проверить доступность» — обе проверки параллельно, результат в тултипе `.avail-tip` (fixed-позиционирование у строки хоста, закрытие по ✕/Escape/клику вне). Строки `.tree-host` имеют `data-host-id={host.id}`.
+- Тесты: `tests/availability.test.ts` — живой TCP-шов (слушающий/закрытый порт), таймаут на TEST-NET-3, реальный ping 127.0.0.1, парсеры.
+- Smoke: `RH_SMOKE_AVAIL=1` — контекстное меню → «Проверить доступность» → тултип со строкой результата; `RH_SHOT_AVAIL=1` — тот же путь для скриншота.
