@@ -5,11 +5,11 @@
   "depth": "deep",
   "tier": "T3",
   "startedAt": "2026-08-18T21:25:00+03:00",
-  "updatedAt": "2026-08-19T16:22:38.090Z",
-  "finishedAt": "2026-08-19T16:22:38.090Z",
+  "updatedAt": "2026-08-19T18:57:10.580Z",
+  "finishedAt": null,
   "requirements": {
-    "total": 14,
-    "done": 14,
+    "total": 16,
+    "done": 16,
     "inTicket": 0,
     "inSpec": 0,
     "placeholder": 0,
@@ -313,6 +313,36 @@
         "failed": 0
       },
       "commit": "1efe397",
+      "concerns": []
+    },
+    {
+      "id": "10",
+      "title": "Настройки в левой панели + финальный проход",
+      "requirements": [
+        "R10",
+        "R11"
+      ],
+      "blockedBy": [],
+      "wave": 6,
+      "status": "done",
+      "startedAt": "2026-08-19T17:57:10.580Z",
+      "finishedAt": "2026-08-19T18:57:10.580Z",
+      "retries": 0,
+      "files": [
+        "src/renderer/src/components/SettingsForm.tsx",
+        "src/renderer/src/components/Sidebar.tsx",
+        "src/renderer/src/components/DialogRoot.tsx",
+        "src/renderer/src/components/dialogs/SettingsDialog.tsx",
+        "src/renderer/src/store.ts",
+        "src/renderer/src/App.tsx",
+        "src/renderer/src/components/TabBar.tsx",
+        "src/renderer/src/styles/global.css",
+        "src/main/index.ts"
+      ],
+      "tests": {
+        "passed": 86,
+        "failed": 0
+      },
       "concerns": []
     }
   ],
