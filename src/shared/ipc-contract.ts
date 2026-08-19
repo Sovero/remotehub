@@ -232,3 +232,16 @@ export interface TunnelAddResult {
   tunnel?: TunnelInfo;
   error?: string;
 }
+
+/** Результат проверки доступности (check:port / check:ping). */
+export interface CheckResult {
+  ok: boolean;
+  /** Время ответа в миллисекундах. */
+  ms?: number;
+  error?: string;
+}
+
+export interface CheckPortRequest {
+  host: string;
+  port: number;
+}

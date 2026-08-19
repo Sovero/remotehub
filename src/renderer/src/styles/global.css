@@ -10,10 +10,28 @@
   --accent-hover: #4aa6f0;
   --danger: #e5534b;
   --ok: #57ab5a;
+  --warn: #d29922;
   --term-bg: #101014;
+  --scroll-thumb: #3a3b42;
   --font-ui: 'Segoe UI', system-ui, -apple-system, sans-serif;
   --font-mono: 'Cascadia Mono', Consolas, 'Courier New', monospace;
   --radius: 6px;
+}
+
+/* Светлая тема: палитра переопределяется через data-theme на <html>. */
+:root[data-theme='light'] {
+  --bg: #f4f4f6;
+  --bg-raised: #ffffff;
+  --bg-hover: #ececf0;
+  --bg-active: #e3e3e9;
+  --border: #d8d8de;
+  --text: #1d1d20;
+  --text-muted: #67676e;
+  --danger: #c0392b;
+  --ok: #27ae60;
+  --warn: #a8690a;
+  --term-bg: #ffffff;
+  --scroll-thumb: #c4c4cc;
 }
 
 * {
@@ -360,7 +378,7 @@ textarea.input {
 .tree-row--drop {
   outline: 1.5px dashed var(--accent);
   outline-offset: -2px;
-  background: rgba(45, 149, 236, 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .tree-group {
@@ -379,10 +397,8 @@ textarea.input {
 
 .chevron--closed {
   transform: rotate(-90deg);
-}
-
-.tree-folder {
-  color: #d29922;
+} .tree-folder {
+  color: var(--warn);
   font-size: 13px;
   flex-shrink: 0;
 }
@@ -428,7 +444,7 @@ textarea.input {
 .tree-tag {
   font-size: 10px;
   color: var(--accent);
-  background: rgba(45, 149, 236, 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   border-radius: 4px;
   padding: 1px 5px;
 }
@@ -494,6 +510,74 @@ textarea.input {
 .ctxmenu-item--danger:hover:not(:disabled) {
   background: var(--danger);
   color: #fff;
+}
+
+/* ---------- подсказка «Проверить доступность» ---------- */
+.avail-tip {
+  position: fixed;
+  z-index: 950;
+  min-width: 240px;
+  max-width: 300px;
+  background: var(--bg-active);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  font-size: 12px;
+}
+
+.avail-tip__close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.avail-tip__close:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.avail-tip__host {
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 8px;
+  padding-right: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.avail-tip__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 0;
+  color: var(--text);
+}
+
+.avail-tip__row span:first-child {
+  color: var(--text-muted);
+}
+
+.avail-tip__row.ok {
+  color: var(--ok);
+}
+
+.avail-tip__row.bad {
+  color: var(--danger);
+}
+
+.avail-tip__pending {
+  color: var(--text-muted);
 }
 
 /* ---------- modal ---------- */
@@ -721,10 +805,8 @@ textarea.input {
 .tab-dot--busy {
   background: var(--accent);
   animation: pulse 1s infinite;
-}
-
-.tab-dot--warn {
-  background: #d29922;
+} .tab-dot--warn {
+  background: var(--warn);
 }
 
 .tab-dot--err {
@@ -1181,10 +1263,8 @@ textarea.input {
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #3a3b42;
+} ::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
   border-radius: 5px;
   border: 2px solid transparent;
   background-clip: content-box;
@@ -1246,10 +1326,8 @@ textarea.input {
   border-radius: var(--radius);
   background: var(--bg-raised);
   overflow: hidden;
-}
-
-.sftp-pane-col--remote {
-  border-color: rgba(45, 149, 236, 0.35);
+} .sftp-pane-col--remote {
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
 .sftp-col-head {
@@ -1311,10 +1389,8 @@ textarea.input {
 
 .sftp-row:hover {
   background: var(--bg-hover);
-}
-
-.sftp-row--sel {
-  background: rgba(45, 149, 236, 0.14);
+} .sftp-row--sel {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 .sftp-row-name {
@@ -1332,10 +1408,8 @@ textarea.input {
   color: var(--text-muted);
   font-size: 11px;
   flex-shrink: 0;
-}
-
-.sftp-ico--dir {
-  color: #d29922;
+} .sftp-ico--dir {
+  color: var(--warn);
 }
 
 .sftp-row-size {

@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, Menu } from 'electron';
-import { join } from 'path';
+import { writeFileSync, mkdirSync } from 'fs';
+import { dirname, join } from 'path';
 import { registerIpc } from './ipc';
 import { RdpManager } from './rdp/manager';
 import { SessionManager } from './sessions/manager';
@@ -73,7 +74,7 @@ function createWindow(): void {
     minWidth: MIN_WIDTH,
     minHeight: MIN_HEIGHT,
     show: false,
-    backgroundColor: '#17181c',
+    backgroundColor: settings.theme === 'light' ? '#f4f4f6' : '#17181c',
     title: 'Remote Hub',
     autoHideMenuBar: false,
     webPreferences: {
@@ -132,6 +133,110 @@ function createWindow(): void {
         if (expected !== (hostRows as number)) {
           console.error(`[smoke] expected ${expected} host rows, got ${String(hostRows)}`);
           app.exit(1);
+          return;
+        }
+        if (process.env.RH_SMOKE_SCREENSHOT === '1') {
+          if (process.env.RH_SHOT_SETTINGS === '1') {
+            await mainWindow?.webContents
+              .executeJavaScript(`
+                (async () => {
+                  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+                  const btn = document.querySelector('.sidebar-footer [title="Настройки"]');
+                  if (!btn) return 'no-settings-btn';
+                  btn.click();
+                  const deadline = Date.now() + 6000;
+                  while (Date.now() < deadline) {
+                    if (document.querySelector('.modal')) return 'ok';
+                    await wait(100);
+                  }
+                  return 'no-modal';
+                })()
+              `)
+              .then((r) => console.log('[smoke] screenshot: open settings →', String(r)));
+          }
+          if (process.env.RH_SHOT_HOST === '1') {
+            await mainWindow?.webContents
+              .executeJavaScript(`
+                (async () => {
+                  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+                  const btns = [...document.querySelectorAll('.sidebar-footer .btn--sm')];
+                  const addHost = btns.find((b) => (b.textContent || '').includes('Хост'));
+                  if (!addHost) return 'no-add-host';
+                  addHost.click();
+                  const deadline = Date.now() + 6000;
+                  while (Date.now() < deadline) {
+                    const m = document.querySelector('.modal');
+                    if (m && (m.textContent || '').includes('Протокол')) return 'ok';
+                    await wait(100);
+                  }
+                  return 'no-modal';
+                })()
+              `)
+              .then((r) => console.log('[smoke] screenshot: open host dialog →', String(r)));
+          }
+          if (process.env.RH_SHOT_SESSION === '1') {
+            await mainWindow?.webContents
+              .executeJavaScript(`
+                (async () => {
+                  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+                  const host = document.querySelector('.tree-host');
+                  if (!host) return 'no-host';
+                  host.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+                  const deadline = Date.now() + 12000;
+                  while (Date.now() < deadline) {
+                    if (document.querySelector('.session-overlay')) return 'ok';
+                    await wait(200);
+                  }
+                  return 'no-overlay';
+                })()
+              `)
+              .then((r) => console.log('[smoke] screenshot: open session →', String(r)));
+          }
+          if (process.env.RH_SHOT_AVAIL === '1') {
+            await mainWindow?.webContents
+              .executeJavaScript(`
+                (async () => {
+                  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+                  const host = document.querySelector('.tree-host');
+                  if (!host) return 'no-host';
+                  host.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 40, clientY: 60 }));
+                  await wait(150);
+                  const item = [...document.querySelectorAll('.ctxmenu-item')].find((b) =>
+                    (b.textContent || '').includes('Проверить доступность')
+                  );
+                  if (!item) return 'no-item';
+                  item.click();
+                  const deadline = Date.now() + 8000;
+                  while (Date.now() < deadline) {
+                    const tip = document.querySelector('.avail-tip');
+                    if (
+                      tip &&
+                      [...tip.querySelectorAll('.avail-tip__row')].some((r) =>
+                        r.classList.contains('ok') || r.classList.contains('bad')
+                      )
+                    ) {
+                      return 'ok';
+                    }
+                    await wait(150);
+                  }
+                  return 'no-result';
+                })()
+              `)
+              .then((r) => console.log('[smoke] screenshot: availability tip →', String(r)));
+          }
+          // ждём, пока отрисуются анимации появления и дерево
+          await new Promise((r) => setTimeout(r, 1600));
+          const image = await mainWindow?.webContents.capturePage();
+          const outPath = process.env.RH_SHOT_PATH ?? join(app.getPath('userData'), 'screenshot.png');
+          if (!image) {
+            console.error('[smoke] screenshot: capturePage вернул null');
+            app.exit(1);
+            return;
+          }
+          mkdirSync(dirname(outPath), { recursive: true });
+          writeFileSync(outPath, image.toPNG());
+          console.log(`[smoke] screenshot saved: ${outPath} (${image.getSize().width}x${image.getSize().height})`);
+          app.exit(0);
           return;
         }
         if (process.env.RH_SMOKE_VNC === '1') {
@@ -253,6 +358,108 @@ function createWindow(): void {
                 app.exit(0);
               } else {
                 console.error(`[smoke] snippets flow failed: ${String(res)}`);
+                app.exit(1);
+              }
+            });
+          return;
+        }
+        // Сценарий «Проверить доступность»: контекстное меню хоста → тултип с результатом.
+        if (process.env.RH_SMOKE_AVAIL === '1') {
+          await mainWindow?.webContents
+            .executeJavaScript(`
+              (async () => {
+                const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+                const deadline = Date.now() + 15000;
+                const host = document.querySelector('.tree-host');
+                if (!host) return 'no-host';
+                host.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 40, clientY: 60 }));
+                const menu = await (async () => {
+                  while (Date.now() < deadline) {
+                    const m = document.querySelector('.ctxmenu');
+                    if (m) return m;
+                    await wait(100);
+                  }
+                  return null;
+                })();
+                if (!menu) return 'no-ctxmenu';
+                const item = [...menu.querySelectorAll('.ctxmenu-item')].find((b) =>
+                  (b.textContent || '').includes('Проверить доступность')
+                );
+                if (!item) return 'no-item';
+                item.click();
+                // ждём завершения проверки: строка результата (не «Проверяю…»)
+                while (Date.now() < deadline) {
+                  const tip = document.querySelector('.avail-tip');
+                  if (tip) {
+                    const rows = [...tip.querySelectorAll('.avail-tip__row')];
+                    if (rows.some((r) => r.classList.contains('ok') || r.classList.contains('bad'))) {
+                      return 'ok:' + (tip.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+                    }
+                  }
+                  await wait(150);
+                }
+                return 'no-result';
+              })()
+            `)
+            .then((res) => {
+              clearTimeout(watchdog);
+              if (typeof res === 'string' && res.startsWith('ok:')) {
+                console.log(`[smoke] availability flow OK — ${String(res).slice(3)}`);
+                app.exit(0);
+              } else {
+                console.error(`[smoke] availability flow failed: ${String(res)}`);
+                app.exit(1);
+              }
+            });
+          return;
+        }
+        // Сценарий темы/акцента: настройки из сайдбара → светлая тема → акцент.
+        if (process.env.RH_SMOKE_THEME === '1') {
+          await mainWindow?.webContents
+            .executeJavaScript(`
+              (async () => {
+                const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+                const deadline = Date.now() + 10000;
+                const until = async (pred) => {
+                  while (Date.now() < deadline) {
+                    const v = pred();
+                    if (v) return v;
+                    await wait(100);
+                  }
+                  return null;
+                };
+                // 1. Настройки — кнопка в левой панели.
+                const btn = document.querySelector('.sidebar-footer [title="Настройки"]');
+                if (!btn) return 'no-settings-btn';
+                btn.click();
+                const modal = await until(() => {
+                  const m = document.querySelector('.modal');
+                  return m && (m.textContent || '').includes('Акцентный цвет') ? m : null;
+                });
+                if (!modal) return 'no-settings-modal';
+                // 2. Светлая тема.
+                const lightBtn = [...modal.querySelectorAll('.seg-btn')].find((b) => b.textContent === 'Светлая');
+                if (!lightBtn) return 'no-light-btn';
+                lightBtn.click();
+                await wait(150);
+                if (document.documentElement.dataset.theme !== 'light') return 'theme-not-light';
+                const bodyBg = getComputedStyle(document.body).backgroundColor;
+                // 3. Акцентный цвет (зелёный из палитры).
+                const swatch = [...modal.querySelectorAll('.accent-swatch')].find((s) => s.style.background === 'rgb(87, 171, 90)');
+                if (!swatch) return 'no-swatch';
+                swatch.click();
+                await wait(150);
+                const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+                return accent.toLowerCase() === '#57ab5a' && bodyBg !== 'rgb(23, 24, 28)' ? 'ok' : 'bad:' + accent + ' bg:' + bodyBg;
+              })()
+            `)
+            .then((res) => {
+              clearTimeout(watchdog);
+              if (res === 'ok') {
+                console.log('[smoke] theme flow OK — светлая тема и акцент применяются');
+                app.exit(0);
+              } else {
+                console.error(`[smoke] theme flow failed: ${String(res)}`);
                 app.exit(1);
               }
             });

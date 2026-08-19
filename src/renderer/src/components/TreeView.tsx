@@ -151,6 +151,7 @@ function HostRow({
   return (
     <div
       className={`tree-row tree-host${dragOver ? ' tree-row--drop' : ''}`}
+      data-host-id={host.id}
       style={{ paddingLeft: 6 + depth * 14 }}
       draggable
       onDragStart={(e) => {

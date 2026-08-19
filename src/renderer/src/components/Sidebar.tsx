@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
-import type { Host, TreeNode } from '@shared/types';
+import { useEffect, useMemo, useState } from 'react';
+import type { CheckResult } from '@shared/ipc-contract';
+import { defaultPort, type Host, type TreeNode } from '@shared/types';
 import { collectTags, countHosts, filterTree, findParent, matchesHostQuery } from '@shared/tree';
 import { useApp } from '../store';
 import ContextMenu, { type MenuItem } from './ContextMenu';
@@ -13,7 +14,6 @@ export default function Sidebar(): React.JSX.Element {
   const moveNode = useApp((s) => s.moveNode);
   const openSession = useApp((s) => s.openSession);
   const openSftp = useApp((s) => s.openSftp);
-  const pushToast = useApp((s) => s.pushToast);
   const exportTree = useApp((s) => s.exportTree);
   const settings = useApp((s) => s.settings);
 
@@ -21,6 +21,17 @@ export default function Sidebar(): React.JSX.Element {
   const [tag, setTag] = useState<string | null>(null);
   const [menu, setMenu] = useState<MenuRequest | null>(null);
   const [rootDrop, setRootDrop] = useState(false);
+
+  interface AvailState {
+    host: Host;
+    portNum: number;
+    left: number;
+    top: number;
+    status: 'checking' | 'done';
+    port?: CheckResult;
+    ping?: CheckResult;
+  }
+  const [avail, setAvail] = useState<AvailState | null>(null);
 
   const tags = useMemo(() => collectTags(tree), [tree]);
 
@@ -53,6 +64,43 @@ export default function Sidebar(): React.JSX.Element {
     });
   };
 
+  const checkAvailability = (host: Host): void => {
+    const row = document.querySelector<HTMLElement>(`.tree-host[data-host-id="${host.id}"]`);
+    const rect = row?.getBoundingClientRect();
+    const left = rect ? Math.min(rect.right + 10, window.innerWidth - 300) : Math.max(12, window.innerWidth - 300);
+    const top = rect ? Math.min(rect.top, Math.max(12, window.innerHeight - 140)) : 60;
+    const portNum = host.port ?? defaultPort(host.protocol);
+    setAvail({ host, portNum, left, top, status: 'checking' });
+    void Promise.all([window.api.checkPort({ host: host.host, port: portNum }), window.api.checkPing(host.host)]).then(
+      ([port, ping]) => {
+        setAvail((a) => (a && a.host.id === host.id ? { ...a, status: 'done', port, ping } : a));
+      }
+    );
+  };
+
+  useEffect(() => {
+    if (!avail) return;
+    const close = (e: MouseEvent): void => {
+      const tip = document.querySelector('.avail-tip');
+      if (tip && !tip.contains(e.target as Node)) setAvail(null);
+    };
+    const esc = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setAvail(null);
+    };
+    window.addEventListener('mousedown', close);
+    window.addEventListener('keydown', esc);
+    return () => {
+      window.removeEventListener('mousedown', close);
+      window.removeEventListener('keydown', esc);
+    };
+  }, [avail]);
+
+  const fmtResult = (res: CheckResult | undefined, okLabel: string): string => {
+    if (!res) return '…';
+    if (res.ok) return res.ms != null ? `${okLabel} · ${res.ms} мс` : okLabel;
+    return `недоступен${res.error ? ` · ${res.error}` : ''}`;
+  };
+
   const buildMenu = (node: TreeNode): MenuItem[] => {
     if (node.kind === 'group') {
       return [
@@ -71,7 +119,7 @@ export default function Sidebar(): React.JSX.Element {
       items.push({ label: 'SFTP', action: () => void openSftp(host) });
     }
     items.push(
-      { label: 'Проверить доступность', action: () => pushToast('Проверка доступности появится в следующей сборке (T09)') },
+      { label: 'Проверить доступность', action: () => checkAvailability(host) },
       {
         label: 'Изменить…',
         action: () => openDialog({ type: 'host', host, parentId: findParent(tree, host.id)?.id ?? null })
@@ -166,9 +214,37 @@ export default function Sidebar(): React.JSX.Element {
         <button className="btn btn--sm" title="Наборы учётных данных" onClick={() => openDialog({ type: 'credentials' })}>
           🔑 Учётные данные
         </button>
+        <button className="btn btn--sm" title="Настройки" onClick={() => openDialog({ type: 'settings' })}>
+          ⚙ Настройки
+        </button>
       </div>
 
       {menu && <ContextMenu x={menu.x} y={menu.y} items={buildMenu(menu.node)} onClose={() => setMenu(null)} />}
+
+      {avail && (
+        <div className="avail-tip" style={{ left: avail.left, top: avail.top }} role="status">
+          <button className="avail-tip__close" aria-label="Закрыть" onClick={() => setAvail(null)}>
+            ✕
+          </button>
+          <div className="avail-tip__host">
+            {avail.host.name} · {avail.host.host}:{avail.portNum}
+          </div>
+          {avail.status === 'checking' ? (
+            <div className="avail-tip__row avail-tip__pending">Проверяю…</div>
+          ) : (
+            <>
+              <div className={`avail-tip__row${avail.port?.ok ? ' ok' : ' bad'}`}>
+                <span>TCP {avail.portNum}</span>
+                <span>{fmtResult(avail.port, 'открыт')}</span>
+              </div>
+              <div className={`avail-tip__row${avail.ping?.ok ? ' ok' : ' bad'}`}>
+                <span>ICMP ping</span>
+                <span>{fmtResult(avail.ping, 'отвечает')}</span>
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

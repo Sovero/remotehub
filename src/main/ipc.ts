@@ -19,6 +19,7 @@ import {
 } from '../shared/ipc-contract';
 import type { CredentialSet, Settings, TreeNode } from '../shared/types';
 import { buildExport, parseProfileExport } from '../shared/tree';
+import { checkPort, pingHost } from './availability';
 import {
   applyCredentialInput,
   detachCredential,
@@ -373,5 +374,14 @@ export function registerIpc(
 
   ipcMain.handle(IPC.tunnelsList, (_e, sessionId: string) => {
     return { ok: true, tunnels: tunnels.list(sessionId) };
+  });
+
+  // ---- проверка доступности ----
+  ipcMain.handle(IPC.checkPort, async (_e, req: { host: string; port: number }) => {
+    return checkPort(req.host, req.port);
+  });
+
+  ipcMain.handle(IPC.checkPing, async (_e, host: string) => {
+    return pingHost(host);
   });
 }
