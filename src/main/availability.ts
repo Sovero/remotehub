@@ -14,19 +14,26 @@ export function checkPort(host: string, port: number, timeoutMs = CHECK_TIMEOUT_
     const started = Date.now();
     const socket = new net.Socket();
     let settled = false;
+    let timer: NodeJS.Timeout | undefined;
     const done = (res: CheckResult): void => {
       if (settled) return;
       settled = true;
+      if (timer) clearTimeout(timer);
       socket.destroy();
       resolve(res);
     };
-    socket.setTimeout(timeoutMs);
+    // Реальный дедлайн: ограничивает и саму попытку установки соединения,
+    // а не только бездействие после подключения.
+    timer = setTimeout(() => done({ ok: false, error: `таймаут: нет ответа за ${timeoutMs} мс` }), timeoutMs);
     socket.once('connect', () => done({ ok: true, ms: Date.now() - started }));
-    socket.once('timeout', () => done({ ok: false, error: `таймаут: нет ответа за ${timeoutMs} мс` }));
     socket.once('error', (err: NodeJS.ErrnoException) => {
       done({ ok: false, error: err.code === 'ECONNREFUSED' ? 'соединение отклонено' : (err.code ?? err.message) });
     });
-    socket.connect(port, host);
+    try {
+      socket.connect(port, host);
+    } catch (err) {
+      done({ ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
   });
 }
 

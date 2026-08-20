@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import net from 'net';
 import { checkPort, parsePingError, parsePingMs, pingHost } from '../src/main/availability';
 
@@ -40,11 +40,24 @@ describe('checkPort', () => {
     expect(res.error).toBeTruthy();
   });
 
-  it('отвечает ошибкой по таймауту для недоступного адреса', async () => {
-    // 203.0.113.1 — TEST-NET-3, гарантированно не маршрутизируется: соединение зависает → таймаут
-    const res = await checkPort('203.0.113.1', 81, 300);
-    expect(res.ok).toBe(false);
-    expect(res.error).toContain('таймаут');
+  it('отвечает ошибкой по таймауту, если соединение не устанавливается', async () => {
+    // Детерминированно: фейковый сокет не эмитит ни connect, ни error,
+    // поэтому проверку завершает только дедлайн-таймер checkPort.
+    const socket = {
+      once: vi.fn(),
+      connect: vi.fn(),
+      destroy: vi.fn()
+    };
+    const spy = vi.spyOn(net, 'Socket').mockImplementation(function () {
+      return socket;
+    } as unknown as typeof net.Socket);
+    try {
+      const res = await checkPort('10.255.255.1', 81, 50);
+      expect(res.ok).toBe(false);
+      expect(res.error).toContain('таймаут');
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 
