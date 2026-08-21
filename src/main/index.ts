@@ -76,6 +76,7 @@ function createWindow(): void {
     show: false,
     backgroundColor: settings.theme === 'light' ? '#f4f4f6' : '#17181c',
     title: 'Remote Hub',
+    icon: join(__dirname, '../../build/icon.ico'),
     autoHideMenuBar: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
