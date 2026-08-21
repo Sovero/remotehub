@@ -43,6 +43,7 @@ export const IPC = {
   rdpExited: 'rdp:exited',
   checkPort: 'check:port',
   checkPing: 'check:ping',
+  checkCancel: 'check:cancel',
   quickConnect: 'quick:connect'
 } as const;
 
@@ -239,9 +240,22 @@ export interface CheckResult {
   /** Время ответа в миллисекундах. */
   ms?: number;
   error?: string;
+  /** Проверка была отменена до завершения. */
+  canceled?: boolean;
 }
 
 export interface CheckPortRequest {
   host: string;
   port: number;
+  /** Идентификатор проверки — по нему рендерер может отменить проверку. */
+  requestId?: string;
+}
+
+export interface CheckPingRequest {
+  host: string;
+  requestId?: string;
+}
+
+export interface CheckCancelRequest {
+  requestIds: string[];
 }

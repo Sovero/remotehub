@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CheckResult } from '@shared/ipc-contract';
 import { defaultPort, type Host, type TreeNode } from '@shared/types';
-import { collectTags, countHosts, filterTree, findParent, matchesHostQuery } from '@shared/tree';
+import { collectTags, countHosts, filterTree, findParent, flattenHosts, matchesHostQuery } from '@shared/tree';
 import { useApp } from '../store';
 import ContextMenu, { type MenuItem } from './ContextMenu';
 import SettingsForm from './SettingsForm';
-import TreeView, { type MenuRequest } from './TreeView';
+import TreeView, { type HostStatusMap, type MenuRequest } from './TreeView';
 
 export default function Sidebar(): React.JSX.Element {
   const tree = useApp((s) => s.tree);
@@ -26,15 +26,24 @@ export default function Sidebar(): React.JSX.Element {
   const setView = useApp((s) => s.setSidebarView);
 
   interface AvailState {
+    seq: number;
     host: Host;
     portNum: number;
     left: number;
     top: number;
-    status: 'checking' | 'done';
-    port?: CheckResult;
-    ping?: CheckResult;
+    port: CheckResult | null;
+    ping: CheckResult | null;
+    startedAt: number;
+    elapsed: number;
   }
   const [avail, setAvail] = useState<AvailState | null>(null);
+  const availSeq = useRef(0);
+  const activeCheck = useRef<{ port: string; ping: string } | null>(null);
+
+  const [hostStatus, setHostStatus] = useState<HostStatusMap>({});
+  const bulkSeq = useRef(0);
+  const bulkReqs = useRef<Set<string>>(new Set());
+  const bulkChecking = Object.values(hostStatus).some((s) => s.status === 'checking');
 
   const tags = useMemo(() => collectTags(tree), [tree]);
 
@@ -67,28 +76,99 @@ export default function Sidebar(): React.JSX.Element {
     });
   };
 
+  const cancelCheck = (): void => {
+    const req = activeCheck.current;
+    if (req) {
+      void window.api.checkCancel([req.port, req.ping]);
+      activeCheck.current = null;
+    }
+  };
+
+  const closeAvail = (): void => {
+    cancelCheck();
+    setAvail(null);
+  };
+
   const checkAvailability = (host: Host): void => {
+    cancelCheck();
     const row = document.querySelector<HTMLElement>(`.tree-host[data-host-id="${host.id}"]`);
     const rect = row?.getBoundingClientRect();
     const left = rect ? Math.min(rect.right + 10, window.innerWidth - 300) : Math.max(12, window.innerWidth - 300);
     const top = rect ? Math.min(rect.top, Math.max(12, window.innerHeight - 140)) : 60;
     const portNum = host.port ?? defaultPort(host.protocol);
-    setAvail({ host, portNum, left, top, status: 'checking' });
-    void Promise.all([window.api.checkPort({ host: host.host, port: portNum }), window.api.checkPing(host.host)]).then(
-      ([port, ping]) => {
-        setAvail((a) => (a && a.host.id === host.id ? { ...a, status: 'done', port, ping } : a));
+    const seq = ++availSeq.current;
+    const portId = `avail-port-${seq}`;
+    const pingId = `avail-ping-${seq}`;
+    activeCheck.current = { port: portId, ping: pingId };
+    setAvail({ seq, host, portNum, left, top, port: null, ping: null, startedAt: Date.now(), elapsed: 0 });
+
+    // Каждый зонд обновляет свою строку независимо, по мере завершения.
+    void window.api.checkPort({ host: host.host, port: portNum, requestId: portId }).then((port) => {
+      setAvail((a) => (a && a.seq === seq ? { ...a, port } : a));
+    });
+    void window.api.checkPing({ host: host.host, requestId: pingId }).then((ping) => {
+      setAvail((a) => (a && a.seq === seq ? { ...a, ping } : a));
+    });
+  };
+
+  const cancelBulk = (): void => {
+    if (bulkReqs.current.size > 0) {
+      void window.api.checkCancel([...bulkReqs.current]);
+      bulkReqs.current.clear();
+    }
+  };
+
+  const stopBulk = (): void => {
+    bulkSeq.current += 1;
+    cancelBulk();
+    setHostStatus({});
+  };
+
+  const checkAllHosts = async (): Promise<void> => {
+    const hosts = flattenHosts(tree);
+    if (hosts.length === 0) return;
+    cancelBulk();
+    const seq = ++bulkSeq.current;
+    const initial: HostStatusMap = {};
+    for (const h of hosts) initial[h.id] = { status: 'checking' };
+    setHostStatus(initial);
+
+    // Небольшой пул воркеров, чтобы не устраивать «шторм» из N×(TCP+ping) одновременно.
+    const queue = [...hosts];
+    const worker = async (): Promise<void> => {
+      while (queue.length > 0) {
+        const host = queue.shift();
+        if (!host || bulkSeq.current !== seq) return;
+        const portNum = host.port ?? defaultPort(host.protocol);
+        const portId = `bulk-${seq}-port-${host.id}`;
+        const pingId = `bulk-${seq}-ping-${host.id}`;
+        bulkReqs.current.add(portId);
+        bulkReqs.current.add(pingId);
+        const [port, ping] = await Promise.all([
+          window.api.checkPort({ host: host.host, port: portNum, requestId: portId }),
+          window.api.checkPing({ host: host.host, requestId: pingId })
+        ]);
+        bulkReqs.current.delete(portId);
+        bulkReqs.current.delete(pingId);
+        if (bulkSeq.current !== seq) return;
+        const ok = port.ok || ping.ok;
+        setHostStatus((m) => ({
+          ...m,
+          [host.id]: { status: ok ? 'ok' : 'fail', ms: ok ? (port.ms ?? ping.ms) : undefined }
+        }));
       }
-    );
+    };
+    await Promise.all(Array.from({ length: Math.min(4, hosts.length) }, () => worker()));
   };
 
   useEffect(() => {
     if (!avail) return;
     const close = (e: MouseEvent): void => {
       const tip = document.querySelector('.avail-tip');
-      if (tip && !tip.contains(e.target as Node)) setAvail(null);
+      if (tip && !tip.contains(e.target as Node)) closeAvail();
     };
     const esc = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') setAvail(null);
+      if (e.key === 'Escape') closeAvail();
     };
     window.addEventListener('mousedown', close);
     window.addEventListener('keydown', esc);
@@ -98,11 +178,42 @@ export default function Sidebar(): React.JSX.Element {
     };
   }, [avail]);
 
+  // Отмена незавершённых проверок при размонтировании компонента.
+  useEffect(
+    () => () => {
+      cancelCheck();
+      bulkSeq.current += 1;
+      cancelBulk();
+    },
+    []
+  );
+
+  // Пока хотя бы один зонд в работе — тикает живой счётчик прошедшего времени.
+  const checking = avail !== null && (avail.port === null || avail.ping === null);
+  useEffect(() => {
+    if (!checking) return;
+    const id = setInterval(() => {
+      setAvail((a) => (a && (a.port === null || a.ping === null) ? { ...a, elapsed: Date.now() - a.startedAt } : a));
+    }, 100);
+    return () => clearInterval(id);
+  }, [checking]);
+
+  // Одиночная проверка из тултипа тоже обновляет точку в дереве.
+  useEffect(() => {
+    if (!avail || avail.port === null || avail.ping === null) return;
+    const { host, port, ping } = avail;
+    const ok = port.ok || ping.ok;
+    const info: HostStatusMap[string] = { status: ok ? 'ok' : 'fail', ms: ok ? (port.ms ?? ping.ms) : undefined };
+    setHostStatus((m) => ({ ...m, [host.id]: info }));
+  }, [avail?.port, avail?.ping]);
+
   const fmtResult = (res: CheckResult | undefined, okLabel: string): string => {
     if (!res) return '…';
     if (res.ok) return res.ms != null ? `${okLabel} · ${res.ms} мс` : okLabel;
     return `недоступен${res.error ? ` · ${res.error}` : ''}`;
   };
+
+  const fmtElapsed = (ms: number): string => (ms < 1000 ? `${ms} мс` : `${(ms / 1000).toFixed(1)} с`);
 
   const buildMenu = (node: TreeNode): MenuItem[] => {
     if (node.kind === 'group') {
@@ -140,10 +251,24 @@ export default function Sidebar(): React.JSX.Element {
     if (id) void moveNode(id, null);
   };
 
+  const pendingIndicator = (
+    <span className="avail-checking">
+      <span className="avail-spinner" aria-hidden="true" />
+      Проверяю<span className="avail-dots"><i>.</i><i>.</i><i>.</i></span>
+    </span>
+  );
+
   return (
     <div className="sidebar-inner">
       <div className="sidebar-header">
         <span className="sidebar-title">Профили</span>
+        <button
+          className="btn btn--ghost btn--sm"
+          title={bulkChecking ? 'Остановить проверку доступности' : 'Проверить доступность всех хостов'}
+          onClick={() => (bulkChecking ? stopBulk() : void checkAllHosts())}
+        >
+          {bulkChecking ? '■' : '↻'}
+        </button>
       </div>
 
       <div className="sidebar-search">
@@ -197,7 +322,7 @@ export default function Sidebar(): React.JSX.Element {
             </div>
           )
         ) : (
-          <TreeView nodes={filtered} parentId={null} onMenu={(req) => setMenu(req)} />
+          <TreeView nodes={filtered} parentId={null} onMenu={(req) => setMenu(req)} statusMap={hostStatus} />
         )}
       </div>
 
@@ -242,26 +367,25 @@ export default function Sidebar(): React.JSX.Element {
 
       {avail && (
         <div className="avail-tip" style={{ left: avail.left, top: avail.top }} role="status">
-          <button className="avail-tip__close" aria-label="Закрыть" onClick={() => setAvail(null)}>
+          <button className="avail-tip__close" aria-label="Закрыть" onClick={closeAvail}>
             ✕
           </button>
           <div className="avail-tip__host">
             {avail.host.name} · {avail.host.host}:{avail.portNum}
           </div>
-          {avail.status === 'checking' ? (
-            <div className="avail-tip__row avail-tip__pending">Проверяю…</div>
-          ) : (
-            <>
-              <div className={`avail-tip__row${avail.port?.ok ? ' ok' : ' bad'}`}>
-                <span>TCP {avail.portNum}</span>
-                <span>{fmtResult(avail.port, 'открыт')}</span>
-              </div>
-              <div className={`avail-tip__row${avail.ping?.ok ? ' ok' : ' bad'}`}>
-                <span>ICMP ping</span>
-                <span>{fmtResult(avail.ping, 'отвечает')}</span>
-              </div>
-            </>
+          {checking && (
+            <div className="avail-tip__timer" role="timer">
+              Проверка идёт · {fmtElapsed(avail.elapsed)}
+            </div>
           )}
+          <div className={`avail-tip__row${avail.port ? (avail.port.ok ? ' ok' : ' bad') : ' avail-tip__pending'}`}>
+            <span>TCP {avail.portNum}</span>
+            {avail.port ? <span>{fmtResult(avail.port, 'открыт')}</span> : pendingIndicator}
+          </div>
+          <div className={`avail-tip__row${avail.ping ? (avail.ping.ok ? ' ok' : ' bad') : ' avail-tip__pending'}`}>
+            <span>ICMP ping</span>
+            {avail.ping ? <span>{fmtResult(avail.ping, 'отвечает')}</span> : pendingIndicator}
+          </div>
         </div>
       )}
     </div>

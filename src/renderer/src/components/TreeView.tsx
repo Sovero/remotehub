@@ -10,21 +10,32 @@ export interface MenuRequest {
   node: TreeNode;
 }
 
+export type HostStatus = 'checking' | 'ok' | 'fail';
+
+export interface HostStatusInfo {
+  status: HostStatus;
+  ms?: number;
+}
+
+export type HostStatusMap = Record<string, HostStatusInfo>;
+
 export default function TreeView({
   nodes,
   parentId,
   depth = 0,
-  onMenu
+  onMenu,
+  statusMap
 }: {
   nodes: TreeNode[];
   parentId: string | null;
   depth?: number;
   onMenu: (req: MenuRequest) => void;
+  statusMap: HostStatusMap;
 }): React.JSX.Element {
   return (
     <>
       {nodes.map((node) => (
-        <TreeRow key={node.id} node={node} parentId={parentId} depth={depth} onMenu={onMenu} />
+        <TreeRow key={node.id} node={node} parentId={parentId} depth={depth} onMenu={onMenu} statusMap={statusMap} />
       ))}
     </>
   );
@@ -34,17 +45,19 @@ function TreeRow({
   node,
   parentId,
   depth,
-  onMenu
+  onMenu,
+  statusMap
 }: {
   node: TreeNode;
   parentId: string | null;
   depth: number;
   onMenu: (req: MenuRequest) => void;
+  statusMap: HostStatusMap;
 }): React.JSX.Element {
   if (node.kind === 'group') {
-    return <GroupRow group={node} depth={depth} onMenu={onMenu} />;
+    return <GroupRow group={node} depth={depth} onMenu={onMenu} statusMap={statusMap} />;
   }
-  return <HostRow host={node} parentId={parentId} depth={depth} onMenu={onMenu} />;
+  return <HostRow host={node} parentId={parentId} depth={depth} onMenu={onMenu} statusMap={statusMap} />;
 }
 
 function useDragHandlers(
@@ -79,11 +92,13 @@ function useDragHandlers(
 function GroupRow({
   group,
   depth,
-  onMenu
+  onMenu,
+  statusMap
 }: {
   group: Group;
   depth: number;
   onMenu: (req: MenuRequest) => void;
+  statusMap: HostStatusMap;
 }): React.JSX.Element {
   const toggleGroup = useApp((s) => s.toggleGroup);
   const moveNode = useApp((s) => s.moveNode);
@@ -119,7 +134,7 @@ function GroupRow({
         {hostCount > 0 && <span className="tree-count">{hostCount}</span>}
       </div>
       {!group.collapsed && (
-        <TreeView nodes={group.children} parentId={group.id} depth={depth + 1} onMenu={onMenu} />
+        <TreeView nodes={group.children} parentId={group.id} depth={depth + 1} onMenu={onMenu} statusMap={statusMap} />
       )}
       {!group.collapsed && group.children.length === 0 && (
         <div className="tree-group-empty" style={{ paddingLeft: 6 + (depth + 1) * 14 + 22 }}>
@@ -130,19 +145,28 @@ function GroupRow({
   );
 }
 
+function statusTitle(info: HostStatusInfo): string {
+  if (info.status === 'checking') return 'Проверка…';
+  if (info.status === 'ok') return info.ms != null ? `Доступен · ${info.ms} мс` : 'Доступен';
+  return 'Недоступен';
+}
+
 function HostRow({
   host,
   parentId,
   depth,
-  onMenu
+  onMenu,
+  statusMap
 }: {
   host: Host;
   parentId: string | null;
   depth: number;
   onMenu: (req: MenuRequest) => void;
+  statusMap: HostStatusMap;
 }): React.JSX.Element {
   const moveNode = useApp((s) => s.moveNode);
   const openSession = useApp((s) => s.openSession);
+  const status = statusMap[host.id];
   const { dragOver, handlers } = useDragHandlers((e) => {
     const id = e.dataTransfer.getData('text/plain');
     if (id && id !== host.id) void moveNode(id, parentId, host.id);
@@ -167,6 +191,9 @@ function HostRow({
       }}
       title={`${host.protocol.toUpperCase()} · ${host.host}:${host.port ?? ''}`}
     >
+      {status && (
+        <span className={`tree-status tree-status--${status.status}`} title={statusTitle(status)} />
+      )}
       <span className="tree-icon">
         <ProtocolIcon protocol={host.protocol} />
       </span>

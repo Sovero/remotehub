@@ -59,6 +59,35 @@ describe('checkPort', () => {
       spy.mockRestore();
     }
   });
+
+  it('отвечает canceled при отмене в полёте', async () => {
+    const socket = {
+      once: vi.fn(),
+      connect: vi.fn(),
+      destroy: vi.fn()
+    };
+    const spy = vi.spyOn(net, 'Socket').mockImplementation(function () {
+      return socket;
+    } as unknown as typeof net.Socket);
+    try {
+      const controller = new AbortController();
+      const promise = checkPort('10.255.255.1', 81, 5000, controller.signal);
+      controller.abort();
+      const res = await promise;
+      expect(res.ok).toBe(false);
+      expect(res.canceled).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('отвечает canceled, если сигнал уже отменён', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const res = await checkPort('127.0.0.1', 80, 2000, controller.signal);
+    expect(res.ok).toBe(false);
+    expect(res.canceled).toBe(true);
+  });
 });
 
 describe('pingHost', () => {
@@ -66,6 +95,14 @@ describe('pingHost', () => {
     const res = await pingHost('127.0.0.1', 2000);
     expect(res.ok).toBe(true);
     expect(res.ms).toBeGreaterThanOrEqual(0);
+  });
+
+  it('отвечает canceled, если сигнал уже отменён', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const res = await pingHost('127.0.0.1', 2000, controller.signal);
+    expect(res.ok).toBe(false);
+    expect(res.canceled).toBe(true);
   });
 });
 

@@ -9,8 +9,17 @@ export const CHECK_TIMEOUT_MS = 2500;
  * Проверка TCP-порта: установка соединения с таймаутом.
  * Не требует прав и работает для любого протокола.
  */
-export function checkPort(host: string, port: number, timeoutMs = CHECK_TIMEOUT_MS): Promise<CheckResult> {
+export function checkPort(
+  host: string,
+  port: number,
+  timeoutMs = CHECK_TIMEOUT_MS,
+  signal?: AbortSignal
+): Promise<CheckResult> {
   return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve({ ok: false, canceled: true });
+      return;
+    }
     const started = Date.now();
     const socket = new net.Socket();
     let settled = false;
@@ -19,9 +28,12 @@ export function checkPort(host: string, port: number, timeoutMs = CHECK_TIMEOUT_
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
       socket.destroy();
       resolve(res);
     };
+    const onAbort = (): void => done({ ok: false, canceled: true });
+    signal?.addEventListener('abort', onAbort);
     // Реальный дедлайн: ограничивает и саму попытку установки соединения,
     // а не только бездействие после подключения.
     timer = setTimeout(() => done({ ok: false, error: `таймаут: нет ответа за ${timeoutMs} мс` }), timeoutMs);
@@ -56,8 +68,12 @@ export function parsePingError(output: string): string {
  * ICMP ping через системную утилиту `ping` (без внешних зависимостей).
  * Windows: `ping -n 1 -w <мс> host`; Unix: `ping -c 1 -W <сек> host`.
  */
-export function pingHost(host: string, timeoutMs = CHECK_TIMEOUT_MS): Promise<CheckResult> {
+export function pingHost(host: string, timeoutMs = CHECK_TIMEOUT_MS, signal?: AbortSignal): Promise<CheckResult> {
   return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve({ ok: false, canceled: true });
+      return;
+    }
     const win = process.platform === 'win32';
     const args = win
       ? ['-n', '1', '-w', String(timeoutMs), host]
@@ -70,9 +86,12 @@ export function pingHost(host: string, timeoutMs = CHECK_TIMEOUT_MS): Promise<Ch
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
       child.kill();
       resolve(res);
     };
+    const onAbort = (): void => finish({ ok: false, canceled: true });
+    signal?.addEventListener('abort', onAbort);
     const timer = setTimeout(() => finish({ ok: false, error: 'нет ответа (таймаут)' }), timeoutMs + 1500);
     child.stdout.on('data', (d: Buffer) => {
       out += d.toString();

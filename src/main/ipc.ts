@@ -6,6 +6,9 @@ import { app } from 'electron';
 import { nanoid } from 'nanoid';
 import {
   IPC,
+  type CheckCancelRequest,
+  type CheckPingRequest,
+  type CheckPortRequest,
   type CredentialSaveResult,
   type CredentialSetInput,
   type ExportResult,
@@ -377,11 +380,30 @@ export function registerIpc(
   });
 
   // ---- проверка доступности ----
-  ipcMain.handle(IPC.checkPort, async (_e, req: { host: string; port: number }) => {
-    return checkPort(req.host, req.port);
+  const activeChecks = new Map<string, AbortController>();
+
+  ipcMain.handle(IPC.checkPort, async (_e, req: CheckPortRequest) => {
+    const controller = req.requestId ? new AbortController() : null;
+    if (controller && req.requestId) activeChecks.set(req.requestId, controller);
+    try {
+      return await checkPort(req.host, req.port, undefined, controller?.signal);
+    } finally {
+      if (req.requestId) activeChecks.delete(req.requestId);
+    }
   });
 
-  ipcMain.handle(IPC.checkPing, async (_e, host: string) => {
-    return pingHost(host);
+  ipcMain.handle(IPC.checkPing, async (_e, req: CheckPingRequest) => {
+    const controller = req.requestId ? new AbortController() : null;
+    if (controller && req.requestId) activeChecks.set(req.requestId, controller);
+    try {
+      return await pingHost(req.host, undefined, controller?.signal);
+    } finally {
+      if (req.requestId) activeChecks.delete(req.requestId);
+    }
+  });
+
+  ipcMain.handle(IPC.checkCancel, (_e, req: CheckCancelRequest) => {
+    for (const id of req.requestIds) activeChecks.get(id)?.abort();
+    return { ok: true };
   });
 }

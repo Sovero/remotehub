@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import {
   IPC,
+  type CheckPingRequest,
   type CheckPortRequest,
   type CheckResult,
   type CredentialDto,
@@ -110,7 +111,9 @@ const api = {
     return () => ipcRenderer.removeListener(IPC.rdpExited, listener);
   },
   checkPort: (req: CheckPortRequest): Promise<CheckResult> => ipcRenderer.invoke(IPC.checkPort, req),
-  checkPing: (host: string): Promise<CheckResult> => ipcRenderer.invoke(IPC.checkPing, host),
+  checkPing: (req: CheckPingRequest): Promise<CheckResult> => ipcRenderer.invoke(IPC.checkPing, req),
+  checkCancel: (requestIds: string[]): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IPC.checkCancel, { requestIds }),
   onSessionData: (cb: (payload: SessionDataPayload) => void): (() => void) => {
     const listener = (_e: unknown, payload: SessionDataPayload): void => cb(payload);
     ipcRenderer.on(IPC.sessionData, listener);
