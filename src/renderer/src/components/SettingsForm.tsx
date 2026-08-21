@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useApp } from '../store';
 
 const FONTS = [
@@ -40,17 +40,12 @@ export default function SettingsForm(): React.JSX.Element {
   const settings = useApp((s) => s.settings);
   const patchSettings = useApp((s) => s.patchSettings);
   const pushToast = useApp((s) => s.pushToast);
-  const [fontPreview, setFontPreview] = useState(settings.fontFamily);
   const [installed, setInstalled] = useState<Set<string>>(() => installedFonts());
 
-  // Синхронизация: внешнее изменение шрифта (Ctrl+= и т.п.) отражается в селекте.
-  useEffect(() => {
-    setFontPreview(settings.fontFamily);
-  }, [settings.fontFamily]);
-
-  const applyFont = (): void => {
-    void patchSettings({ fontFamily: fontPreview });
-    const fam = familyName(fontPreview);
+  // Шрифт применяется сразу при выборе (как тема, размер и акцентный цвет).
+  const applyFont = (value: string): void => {
+    void patchSettings({ fontFamily: value });
+    const fam = familyName(value);
     const note = installed.has(fam) ? '' : ' — шрифт не найден в системе, будет использован запасной';
     pushToast(`Шрифт терминала: ${fam}${note}`);
   };
@@ -77,7 +72,11 @@ export default function SettingsForm(): React.JSX.Element {
 
       <div className="form-row">
         <label className="form-label">Шрифт терминала</label>
-        <select className="input" value={fontPreview} onChange={(e) => setFontPreview(e.target.value)}>
+        <select
+          className="input"
+          value={settings.fontFamily}
+          onChange={(e) => applyFont(e.target.value)}
+        >
           {FONTS.map((f) => (
             <option key={f.value} value={f.value}>
               {f.label}
@@ -85,13 +84,8 @@ export default function SettingsForm(): React.JSX.Element {
             </option>
           ))}
         </select>
-        <div className="form-hint" style={{ fontFamily: fontPreview }}>
-          AaBbCc 123 ← терминал будет выглядеть так
-        </div>
-        <div className="settings-form__actions">
-          <button className="btn btn--sm" onClick={applyFont}>
-            Применить шрифт
-          </button>
+        <div className="form-hint" style={{ fontFamily: settings.fontFamily }}>
+          AaBbCc 123 ← терминал выглядит так
         </div>
       </div>
 

@@ -145,10 +145,6 @@ body {
   cursor: pointer;
 }
 
-.settings-form__actions {
-  margin-top: 8px;
-}
-
 .sidebar-footer .btn--active {
   background: var(--accent);
   color: #fff;
