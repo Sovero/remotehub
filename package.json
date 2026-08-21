@@ -7,11 +7,13 @@
   "license": "MIT",
   "private": true,
   "scripts": {
+    "predev": "node scripts/generate-icon.mjs",
     "dev": "electron-vite dev",
+    "prebuild": "node scripts/generate-icon.mjs",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
-    "dist": "electron-vite build && electron-builder --win"
+    "dist": "npm run build && electron-builder --win"
   },
   "build": {
     "appId": "com.remotehub.app",
