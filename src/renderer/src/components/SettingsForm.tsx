@@ -1,14 +1,37 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useApp } from '../store';
 
 const FONTS = [
-  '"Cascadia Mono", Consolas, monospace',
-  'Consolas, monospace',
-  '"JetBrains Mono", Consolas, monospace',
-  '"Fira Code", Consolas, monospace',
-  '"DejaVu Sans Mono", monospace',
-  '"Courier New", monospace'
+  { label: 'Cascadia Mono', value: '"Cascadia Mono", Consolas, monospace' },
+  { label: 'Consolas', value: 'Consolas, monospace' },
+  { label: 'JetBrains Mono', value: '"JetBrains Mono", Consolas, monospace' },
+  { label: 'Fira Code', value: '"Fira Code", Consolas, monospace' },
+  { label: 'DejaVu Sans Mono', value: '"DejaVu Sans Mono", monospace' },
+  { label: 'Courier New', value: '"Courier New", monospace' }
 ];
+
+/** Какие моноширинные шрифты реально установлены в системе (для пометки в списке). */
+function installedFonts(): Set<string> {
+  if (typeof document === 'undefined') return new Set();
+  const probe = (name: string): boolean => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return false;
+    ctx.font = `16px "${name}", monospace`;
+    const width = ctx.measureText('iiiiiiiiii').width;
+    ctx.font = '16px monospace';
+    return Math.abs(width - ctx.measureText('iiiiiiiiii').width) > 0.01;
+  };
+  const result = new Set<string>();
+  for (const f of FONTS) if (probe(f.label)) result.add(f.label);
+  return result;
+}
+
+/** Человекочитаемое имя первого шрифта в CSS-стеке. */
+function familyName(cssStack: string): string {
+  const m = cssStack.match(/(["'])?([^"',]+)\1/);
+  return m ? m[2].trim() : cssStack;
+}
 
 const ACCENTS = ['#2d95ec', '#57ab5a', '#c678dd', '#e5534b', '#d29922', '#39c5cf'];
 
@@ -16,7 +39,21 @@ const ACCENTS = ['#2d95ec', '#57ab5a', '#c678dd', '#e5534b', '#d29922', '#39c5cf
 export default function SettingsForm(): React.JSX.Element {
   const settings = useApp((s) => s.settings);
   const patchSettings = useApp((s) => s.patchSettings);
+  const pushToast = useApp((s) => s.pushToast);
   const [fontPreview, setFontPreview] = useState(settings.fontFamily);
+  const [installed, setInstalled] = useState<Set<string>>(() => installedFonts());
+
+  // Синхронизация: внешнее изменение шрифта (Ctrl+= и т.п.) отражается в селекте.
+  useEffect(() => {
+    setFontPreview(settings.fontFamily);
+  }, [settings.fontFamily]);
+
+  const applyFont = (): void => {
+    void patchSettings({ fontFamily: fontPreview });
+    const fam = familyName(fontPreview);
+    const note = installed.has(fam) ? '' : ' — шрифт не найден в системе, будет использован запасной';
+    pushToast(`Шрифт терминала: ${fam}${note}`);
+  };
 
   return (
     <div className="form settings-form">
@@ -42,8 +79,9 @@ export default function SettingsForm(): React.JSX.Element {
         <label className="form-label">Шрифт терминала</label>
         <select className="input" value={fontPreview} onChange={(e) => setFontPreview(e.target.value)}>
           {FONTS.map((f) => (
-            <option key={f} value={f}>
-              {f.split('"')[1] ?? f}
+            <option key={f.value} value={f.value}>
+              {f.label}
+              {installed.has(f.label) ? '' : ' (не установлен)'}
             </option>
           ))}
         </select>
@@ -51,7 +89,7 @@ export default function SettingsForm(): React.JSX.Element {
           AaBbCc 123 ← терминал будет выглядеть так
         </div>
         <div className="settings-form__actions">
-          <button className="btn btn--sm" onClick={() => void patchSettings({ fontFamily: fontPreview })}>
+          <button className="btn btn--sm" onClick={applyFont}>
             Применить шрифт
           </button>
         </div>
