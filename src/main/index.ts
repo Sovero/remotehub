@@ -19,8 +19,7 @@ const MIN_HEIGHT = 600;
 /** Иконка приложения: в окне и в диалогах (в packaged-сборке — внутри app.asar/build). */
 const APP_ICON = join(__dirname, '../../build/icon.ico');
 
-/** PLACEHOLDER: заменить на реальный адрес репозитория проекта. */
-const APP_REPOSITORY = 'https://github.com/remote-hub';
+const APP_REPOSITORY = 'https://github.com/Sovero/remotehub';
 
 function installMenu(): void {
   const sendMenu = (command: string): void => {
