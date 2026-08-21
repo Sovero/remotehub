@@ -14,7 +14,7 @@
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
-    "dist": "npm run build && electron-builder --win"
+    "dist": "npm run build && electron-builder --win --x64"
   },
   "build": {
     "appId": "com.remotehub.app",
@@ -31,6 +31,7 @@
       "target": "nsis",
       "icon": "build/icon.ico"
     },
+    "defaultArch": "x64",
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
