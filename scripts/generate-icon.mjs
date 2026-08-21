@@ -221,7 +221,10 @@ const images = sizes.map((size) => ({ size, png: pngEncode(size, size, renderIco
 writeFileSync(resolve(OUT_DIR, 'icon.ico'), packIco(images));
 writeFileSync(resolve(OUT_DIR, 'icon.png'), pngEncode(512, 512, renderIcon(512)));
 
-console.log('icon.ico: 16..256 (multi-resolution, PNG entries)');
-console.log('icon.png: 512x512');
-console.log('');
-console.log(asciiPreview(96).join('\n'));
+// В сборке — тихо; ASCII-превью только по явному запросу: node scripts/generate-icon.mjs --preview
+if (process.argv.includes('--preview')) {
+  console.log('icon.ico: 16..256 (multi-resolution, PNG entries)');
+  console.log('icon.png: 512x512');
+  console.log('');
+  console.log(asciiPreview(96).join('\n'));
+}
