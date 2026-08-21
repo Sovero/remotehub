@@ -49,7 +49,7 @@ export default function StatusBar(): React.JSX.Element {
       <span className="statusbar-spacer" />
       {appInfo && (
         <span className="statusbar-item statusbar-muted">
-          Remote Hub v{appInfo.version} · Electron {appInfo.electron} · {appInfo.platform}
+          Remote Hub v{appInfo.version} · Electron {appInfo.electron} · {appInfo.arch}
         </span>
       )}
     </footer>

@@ -53,7 +53,7 @@ export type DialogState =
 interface AppState {
   tree: TreeNode[];
   settings: Settings;
-  appInfo: { version: string; electron: string; platform: string } | null;
+  appInfo: { version: string; electron: string; arch: string } | null;
   ready: boolean;
   toasts: Toast[];
   dialog: DialogState;

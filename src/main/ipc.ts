@@ -166,7 +166,8 @@ export function registerIpc(
   ipcMain.handle(IPC.appInfo, () => ({
     version: app.getVersion(),
     electron: process.versions.electron ?? '',
-    platform: process.platform
+    // process.platform всегда 'win32' даже на 64-битной Windows; показываем реальную разрядность.
+    arch: process.arch
   }));
 
   // ---- уведомления из главного процесса ----

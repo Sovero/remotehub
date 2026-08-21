@@ -42,7 +42,7 @@ const api = {
     ipcRenderer.invoke(IPC.credentialsDelete, id),
   pickKeyFile: (): Promise<{ canceled: boolean; path: string | null }> =>
     ipcRenderer.invoke(IPC.dialogPickFile),
-  appInfo: (): Promise<{ version: string; electron: string; platform: string }> =>
+  appInfo: (): Promise<{ version: string; electron: string; arch: string }> =>
     ipcRenderer.invoke(IPC.appInfo),
   onNotify: (cb: (message: string) => void): (() => void) => {
     const listener = (_e: unknown, message: string): void => cb(message);

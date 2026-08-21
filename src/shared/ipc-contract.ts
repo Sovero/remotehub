@@ -97,7 +97,8 @@ export interface CredentialSaveResult {
 export interface AppInfo {
   version: string;
   electron: string;
-  platform: string;
+  /** Реальная разрядность сборки: x64, ia32, arm64 (не process.platform — он всегда win32). */
+  arch: string;
 }
 
 export interface ExportResult {
