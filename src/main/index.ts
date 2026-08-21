@@ -16,6 +16,9 @@ let store: Store;
 const MIN_WIDTH = 900;
 const MIN_HEIGHT = 600;
 
+/** Иконка приложения: в окне и в диалогах (в packaged-сборке — внутри app.asar/build). */
+const APP_ICON = join(__dirname, '../../build/icon.ico');
+
 function installMenu(): void {
   const sendMenu = (command: string): void => {
     for (const win of BrowserWindow.getAllWindows()) {
@@ -51,6 +54,7 @@ function installMenu(): void {
               type: 'info',
               title: 'Remote Hub',
               message: 'Remote Hub',
+              icon: APP_ICON,
               detail: `Версия ${app.getVersion()}\nElectron ${process.versions.electron ?? ''}\nРабочий стол для SSH, Telnet, RDP, VNC и SFTP.`
             });
           }
@@ -76,7 +80,7 @@ function createWindow(): void {
     show: false,
     backgroundColor: settings.theme === 'light' ? '#f4f4f6' : '#17181c',
     title: 'Remote Hub',
-    icon: join(__dirname, '../../build/icon.ico'),
+    icon: APP_ICON,
     autoHideMenuBar: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
