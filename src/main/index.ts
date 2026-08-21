@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, Menu } from 'electron';
+import { app, BrowserWindow, dialog, Menu, shell } from 'electron';
 import { writeFileSync, mkdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { registerIpc } from './ipc';
@@ -18,6 +18,9 @@ const MIN_HEIGHT = 600;
 
 /** Иконка приложения: в окне и в диалогах (в packaged-сборке — внутри app.asar/build). */
 const APP_ICON = join(__dirname, '../../build/icon.ico');
+
+/** PLACEHOLDER: заменить на реальный адрес репозитория проекта. */
+const APP_REPOSITORY = 'https://github.com/remote-hub';
 
 function installMenu(): void {
   const sendMenu = (command: string): void => {
@@ -50,13 +53,21 @@ function installMenu(): void {
         {
           label: 'О программе',
           click: () => {
-            void dialog.showMessageBox({
-              type: 'info',
-              title: 'Remote Hub',
-              message: 'Remote Hub',
-              icon: APP_ICON,
-              detail: `Версия ${app.getVersion()}\nElectron ${process.versions.electron ?? ''}\nРабочий стол для SSH, Telnet, RDP, VNC и SFTP.`
-            });
+            void dialog
+              .showMessageBox({
+                type: 'info',
+                title: 'Remote Hub',
+                message: 'Remote Hub',
+                icon: APP_ICON,
+                buttons: ['Закрыть', 'Открыть репозиторий'],
+                defaultId: 0,
+                cancelId: 0,
+                noLink: true,
+                detail: `Версия ${app.getVersion()}\nElectron ${process.versions.electron ?? ''}\nРабочий стол для SSH, Telnet, RDP, VNC и SFTP.\n\nРепозиторий: ${APP_REPOSITORY}`
+              })
+              .then(({ response }) => {
+                if (response === 1) void shell.openExternal(APP_REPOSITORY);
+              });
           }
         }
       ]
