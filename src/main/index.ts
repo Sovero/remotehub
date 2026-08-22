@@ -580,7 +580,12 @@ function createWindow(rdp: RdpManager): void {
                           if (document.querySelector('.session-overlay')) {
                             return 'overlay-despite-canvas:' + (document.querySelector('.session-overlay-message')?.textContent || '');
                           }
-                          return 'ok:canvas=' + canvas.width + 'x' + canvas.height + ':colored=' + nonBlack;
+                          // Статусбар: живая подсказка — локальный порт VNC-моста.
+                          const hint = document.querySelector('.statusbar-live-hint');
+                          const hintText = hint ? (hint.textContent || '').trim() : '';
+                          if (!hint || !/^порт \\\d+$/.test(hintText)) return 'no-vnc-hint:' + hintText;
+                          if (!hint.querySelector('svg')) return 'no-hint-icon';
+                          return 'ok:canvas=' + canvas.width + 'x' + canvas.height + ':colored=' + nonBlack + ':hint=' + hintText;
                         }
                       }
                     } catch {
@@ -670,6 +675,32 @@ function createWindow(rdp: RdpManager): void {
                 const cCounts = [...counters.querySelectorAll('.statusbar-count')].map((el) => Number(el.textContent));
                 if (cCounts.length !== 2 || cCounts[0] !== 3 || cCounts[1] !== 0)
                   return 'bad-counts:' + JSON.stringify(cCounts);
+                // Статусбар: живая подсказка RDP — адрес сервера из сида (хост h2 → 127.0.0.1).
+                const store = window.__RH_STORE__;
+                if (!store) return 'no-store-hook';
+                store.setState({
+                  tabs: [
+                    {
+                      sessionId: 'rdp-hint',
+                      hostId: 'h2',
+                      title: 'RDP Win',
+                      protocol: 'rdp',
+                      kind: 'rdp',
+                      state: { phase: 'connecting' },
+                      adHocHost: null,
+                      startedAt: null
+                    }
+                  ],
+                  activeTabId: 'rdp-hint'
+                });
+                await wait(250);
+                const rdpHint = document.querySelector('.statusbar-live-hint');
+                const rdpText = rdpHint ? (rdpHint.textContent || '').trim() : '';
+                if (rdpText !== '127.0.0.1') return 'bad-rdp-hint:' + rdpText;
+                if (!rdpHint || !rdpHint.querySelector('svg')) return 'no-rdp-hint-icon';
+                store.setState({ tabs: [], activeTabId: null });
+                await wait(150);
+                if (document.querySelector('.statusbar-live-hint')) return 'rdp-hint-stuck';
                 // Группа дерева: иконка папки + шеврон; клик сворачивает —
                 // шеврон поворачивается, папка меняется на закрытую (1 path) и обратно (2 path).
                 const group = document.querySelector('.tree-group');
@@ -746,7 +777,7 @@ function createWindow(rdp: RdpManager): void {
                 const actions = check('.modal-actions .btn');
                 if (!modalSvg || modalSvg.getBoundingClientRect().width < 8) return 'bad-modal-close';
                 if (actions.some((s) => !s || s.w < 8)) return 'bad-actions:' + JSON.stringify(actions);
-                return 'ok:footer=' + footer.length + ':ctx=' + ctxIcons.length + ':actions=' + actions.length + ':spinner=1:group=1:drag=1:counters=1';
+                return 'ok:footer=' + footer.length + ':ctx=' + ctxIcons.length + ':actions=' + actions.length + ':spinner=1:group=1:drag=1:counters=1:rdp-hint=1';
               })()
             `)
             .then(async (res) => {

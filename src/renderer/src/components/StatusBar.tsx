@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { flattenHosts } from '@shared/tree';
+import { findNode, flattenHosts } from '@shared/tree';
 import { useApp } from '../store';
 import Icon from './Icon';
 import ProtocolIcon from './ProtocolIcon';
@@ -54,6 +54,23 @@ export default function StatusBar(): React.JSX.Element {
 
   const active = tabs.find((t) => t.sessionId === activeTabId);
 
+  // Живая подсказка активной вкладки: адрес RDP-сервера или локальный порт VNC-моста.
+  const liveHint = useMemo(() => {
+    if (!active) return null;
+    if (active.protocol === 'vnc' && active.vnc?.port) {
+      return { icon: 'link' as const, text: `порт ${active.vnc.port}`, title: 'Локальный порт VNC-моста' };
+    }
+    if (active.protocol === 'rdp') {
+      const node = active.hostId ? findNode(tree, active.hostId) : null;
+      const h = node && node.kind === 'host' ? node : active.adHocHost;
+      if (h) {
+        const addr = h.port && h.port !== 3389 ? `${h.host}:${h.port}` : h.host;
+        return { icon: 'host' as const, text: addr, title: 'Адрес RDP-сервера' };
+      }
+    }
+    return null;
+  }, [active, tree]);
+
   const stateLabel: Record<string, string> = {
     connecting: 'Подключение…',
     'auth-required': 'Нужен пароль',
@@ -86,6 +103,12 @@ export default function StatusBar(): React.JSX.Element {
           </span>
           {active.startedAt && active.state.phase === 'connected' && (
             <span className="statusbar-item statusbar-muted">{formatElapsed(Date.now() - active.startedAt)}</span>
+          )}
+          {liveHint && (
+            <span className="statusbar-item statusbar-muted statusbar-live-hint" title={liveHint.title}>
+              <Icon name={liveHint.icon} size={11} />
+              {liveHint.text}
+            </span>
           )}
         </>
       ) : (
