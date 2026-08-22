@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useApp } from '../store';
+import Icon from './Icon';
+import ProtocolIcon from './ProtocolIcon';
 
 function formatElapsed(ms: number): string {
   const total = Math.floor(ms / 1000);
@@ -8,6 +10,24 @@ function formatElapsed(ms: number): string {
   const sec = total % 60;
   if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
   return `${m}:${String(sec).padStart(2, '0')}`;
+}
+
+/** Иконка состояния сессии для строки статуса (по единому набору). */
+function StateIcon({ phase }: { phase: string }): React.JSX.Element {
+  switch (phase) {
+    case 'connecting':
+      return <Icon name="spinner" size={11} className="icon-spin" />;
+    case 'connected':
+      return <Icon name="check" size={11} />;
+    case 'auth-required':
+      return <Icon name="key" size={11} />;
+    case 'error':
+      return <Icon name="warning" size={11} />;
+    case 'closed':
+      return <Icon name="power" size={11} />;
+    default:
+      return <Icon name="power" size={11} />;
+  }
 }
 
 export default function StatusBar(): React.JSX.Element {
@@ -36,15 +56,21 @@ export default function StatusBar(): React.JSX.Element {
       {active ? (
         <>
           <span className="statusbar-item">
+            <ProtocolIcon protocol={active.protocol as 'ssh' | 'telnet' | 'rdp' | 'vnc'} size={12} />
             {active.protocol.toUpperCase()} · {active.title}
           </span>
-          <span className="statusbar-item statusbar-muted">{stateLabel[active.state.phase] ?? active.state.phase}</span>
+          <span className={`statusbar-item statusbar-state statusbar-state--${active.state.phase}`}>
+            <StateIcon phase={active.state.phase} />
+            {stateLabel[active.state.phase] ?? active.state.phase}
+          </span>
           {active.startedAt && active.state.phase === 'connected' && (
             <span className="statusbar-item statusbar-muted">{formatElapsed(Date.now() - active.startedAt)}</span>
           )}
         </>
       ) : (
-        <span className="statusbar-item">Готово</span>
+        <span className="statusbar-item">
+          <Icon name="check" size={11} /> Готово
+        </span>
       )}
       <span className="statusbar-spacer" />
       {appInfo && (

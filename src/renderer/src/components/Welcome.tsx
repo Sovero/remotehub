@@ -6,7 +6,9 @@ export default function Welcome(): React.JSX.Element {
 
   return (
     <div className="welcome">
-      <div className="welcome-logo">◈</div>
+      <div className="welcome-logo">
+        <Icon name="host" size={56} />
+      </div>
       <h1 className="welcome-title">Добро пожаловать в Remote Hub</h1>
       <p className="welcome-text">
         Один рабочий стол для ваших серверов: SSH, Telnet, RDP, VNC и SFTP —

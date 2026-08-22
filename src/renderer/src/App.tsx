@@ -219,7 +219,9 @@ export default function App(): React.JSX.Element {
 function EmptyWorkspace(): React.JSX.Element {
   return (
     <div className="placeholder-panel">
-      <div className="placeholder-icon">▤</div>
+      <div className="placeholder-icon">
+        <Icon name="host" size={44} />
+      </div>
       <p>Выберите профиль в дереве слева, чтобы открыть сессию.</p>
       <p className="placeholder-muted">Двойной клик по хосту или контекстное меню → «Подключить».</p>
     </div>
@@ -439,7 +441,9 @@ function PlaceholderPane({ tab }: { tab: { kind: string; protocol: string; title
   const names: Record<string, string> = {};
   return (
     <div className="placeholder-panel">
-      <div className="placeholder-icon">▤</div>
+      <div className="placeholder-icon">
+        <Icon name="code" size={44} />
+      </div>
       <p>{names[tab.kind] ?? 'Этот тип сессии ещё не реализован'}</p>
       <p className="placeholder-muted">{tab.title}</p>
     </div>

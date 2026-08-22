@@ -853,6 +853,7 @@ function createWindow(rdp: RdpManager): void {
                   document.querySelectorAll('.tree-tag').forEach((el, i) => add(el, 'tree-tag:' + i, 3));
                   document.querySelectorAll('.tree-folder').forEach((el, i) => add(el, 'tree-folder:' + i, 3));
                   document.querySelectorAll('.tree-chevron').forEach((el, i) => add(el, 'tree-chevron:' + i, 3));
+                  document.querySelectorAll('.statusbar-item').forEach((el, i) => add(el, 'statusbar:' + i, 3));
                   document.querySelectorAll('.seg-btn--active').forEach((el, i) => add(el, 'seg-active:' + i, 3));
                   document.querySelectorAll('.sidebar-footer .btn--active').forEach((el, i) => add(el, 'footer-active:' + i, 3));
                   document.querySelectorAll('.btn--primary').forEach((el, i) => add(el, 'btn-primary:' + i, 3));

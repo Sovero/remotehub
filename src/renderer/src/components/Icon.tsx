@@ -35,7 +35,8 @@ export type IconName =
   | 'play'
   | 'folder'
   | 'file'
-  | 'spinner';
+  | 'spinner'
+  | 'warning';
 
 const PATHS: Record<IconName, React.JSX.Element> = {
   plus: <path d="M8 3.2v9.6M3.2 8h9.6" />,
@@ -144,7 +145,13 @@ const PATHS: Record<IconName, React.JSX.Element> = {
     </>
   ),
   // Дуговая «загрузочная» иконка: вращается через .icon-spin.
-  spinner: <path d="M8 1.8a6.2 6.2 0 1 1-6.15 5.05" />
+  spinner: <path d="M8 1.8a6.2 6.2 0 1 1-6.15 5.05" />,
+  warning: (
+    <>
+      <path d="M8 2.3l6.2 11H1.8z" />
+      <path d="M8 6.2v3.6M8 11.8v.01" />
+    </>
+  )
 };
 
 export default function Icon({

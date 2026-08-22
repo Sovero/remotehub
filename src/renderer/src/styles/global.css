@@ -28,7 +28,7 @@
   --text: #1d1d20;
   --text-muted: #5f5f66;
   --danger: #c0392b;
-  --ok: #27ae60;
+  --ok: #259e57;
   --warn: #a8690a;
   --term-bg: #ffffff;
   --scroll-thumb: #c4c4cc;
@@ -238,8 +238,26 @@ body {
   flex: 1;
 }
 
+.statusbar-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
 .statusbar-muted {
   color: var(--text-muted);
+}
+
+.statusbar-state--connected {
+  color: var(--ok);
+}
+
+.statusbar-state--error {
+  color: var(--danger);
+}
+
+.statusbar-state--auth-required {
+  color: var(--warn);
 }
 
 /* ---------- welcome ---------- */

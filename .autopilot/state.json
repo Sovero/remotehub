@@ -1,12 +1,12 @@
 {
-  "slug": "sftp-icons",
-  "title": "Иконки SFTP вместо текстовых глифов",
+  "slug": "statusbar-empty-states",
+  "title": "Иконки в строке статуса и пустых состояниях",
   "mode": "full",
   "depth": "deep",
   "tier": "T0",
-  "startedAt": "2026-08-22T19:00:00+03:00",
-  "updatedAt": "2026-08-22T19:25:00+03:00",
-  "finishedAt": "2026-08-22T19:25:00+03:00",
+  "startedAt": "2026-08-22T19:40:00+03:00",
+  "updatedAt": "2026-08-22T19:55:00+03:00",
+  "finishedAt": "2026-08-22T19:55:00+03:00",
   "requirements": {
     "total": 6,
     "done": 6,
@@ -19,19 +19,20 @@
   "tickets": [
     {
       "id": "01",
-      "title": "Иконки SFTP вместо текстовых глифов",
+      "title": "Иконки в строке статуса и пустых состояниях",
       "requirements": ["R01", "R02", "R03", "R04", "A01", "A02"],
       "blockedBy": [],
       "wave": 1,
       "status": "done",
-      "startedAt": "2026-08-22T19:01:00+03:00",
-      "finishedAt": "2026-08-22T19:22:00+03:00",
+      "startedAt": "2026-08-22T19:41:00+03:00",
+      "finishedAt": "2026-08-22T19:53:00+03:00",
       "retries": 0,
       "files": [
         "src/renderer/src/components/Icon.tsx",
-        "src/renderer/src/components/SftpPane.tsx",
+        "src/renderer/src/components/StatusBar.tsx",
+        "src/renderer/src/components/Welcome.tsx",
+        "src/renderer/src/App.tsx",
         "src/renderer/src/styles/global.css",
-        "src/main/ipc.ts",
         "src/main/index.ts"
       ]
     }
