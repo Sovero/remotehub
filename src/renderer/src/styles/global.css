@@ -26,7 +26,7 @@
   --bg-active: #e3e3e9;
   --border: #d8d8de;
   --text: #1d1d20;
-  --text-muted: #67676e;
+  --text-muted: #5f5f66;
   --danger: #c0392b;
   --ok: #27ae60;
   --warn: #a8690a;
@@ -147,7 +147,7 @@ body {
 
 .sidebar-footer .btn--active {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-fg);
   border-color: var(--accent);
 }
 
@@ -298,7 +298,7 @@ body {
 .btn--primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--accent-fg);
 }
 
 .btn--primary:hover {
@@ -584,7 +584,9 @@ textarea.input {
 
 .tree-tag {
   font-size: 10px;
-  color: var(--accent);
+  /* Текст-акцент с подмешанным цветом текста: тёмный акцент на светлом фоне
+     остаётся читаемым (жёлтый/циан не «проваливаются» в светлой теме). */
+  color: color-mix(in srgb, var(--accent) 45%, var(--text));
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   border-radius: 4px;
   padding: 1px 5px;
@@ -642,12 +644,11 @@ textarea.input {
 
 .ctxmenu-icon {
   flex-shrink: 0;
-  opacity: 0.75;
 }
 
 .ctxmenu-item:hover:not(:disabled) {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-fg);
 }
 
 .ctxmenu-item:disabled {
@@ -683,7 +684,7 @@ textarea.input {
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text);
   font-size: 11px;
   line-height: 1;
   cursor: pointer;
@@ -936,7 +937,7 @@ textarea.input {
 
 .seg-btn--active {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-fg);
 }
 
 /* ---------- tabs ---------- */
@@ -944,7 +945,7 @@ textarea.input {
 .tabbar-new {
   background: transparent;
   border: none;
-  color: var(--text-muted);
+  color: var(--text);
   font-size: 15px;
   cursor: pointer;
   padding: 0 8px;
@@ -953,7 +954,7 @@ textarea.input {
 }
 
 .tabbar-new:hover {
-  color: var(--text);
+  color: var(--accent);
   background: var(--bg-hover);
 }
 
@@ -1040,7 +1041,7 @@ textarea.input {
 .tab-close {
   background: transparent;
   border: none;
-  color: var(--text-muted);
+  color: var(--text);
   font-size: 10px;
   cursor: pointer;
   padding: 2px 4px;
@@ -1049,17 +1050,34 @@ textarea.input {
 }
 
 .tab-close:hover {
-  color: var(--text);
+  color: var(--accent);
   background: var(--bg-active);
 }
 
 .tab-save {
   background: transparent;
   border: none;
+  color: var(--text);
   font-size: 11px;
   cursor: pointer;
   padding: 1px 3px;
+  border-radius: 3px;
   flex-shrink: 0;
+}
+
+.tab-save:hover {
+  color: var(--accent);
+  background: var(--bg-hover);
+}
+
+/* Фокус-рамка у кнопок-иконок: видимая цель и с клавиатуры. */
+.btn:focus-visible,
+.tabbar-new:focus-visible,
+.tab-close:focus-visible,
+.tab-save:focus-visible,
+.avail-tip__close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .quick-connect {
@@ -1466,11 +1484,12 @@ textarea.input {
 
 .snips-item:hover {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-fg);
 }
 
 .snips-item:hover .snips-cmd {
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--accent-fg);
+  opacity: 0.85;
 }
 
 .snips-name {
@@ -2098,7 +2117,7 @@ textarea.input {
   height: 22px;
   border-radius: 50%;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-fg);
   font-weight: 700;
   display: inline-flex;
   align-items: center;
@@ -2307,7 +2326,7 @@ textarea.input {
   height: 18px;
   border-radius: 50%;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-fg);
   font-size: 10px;
   font-weight: 700;
   display: inline-flex;
@@ -2339,7 +2358,7 @@ textarea.input {
   height: 22px;
   border-radius: 50%;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-fg);
   font-size: 12px;
   font-weight: 700;
   display: inline-flex;

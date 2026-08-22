@@ -286,6 +286,42 @@ function createWindow(rdp: RdpManager): void {
           `[smoke] OK — React mounted, profiles: ${store.loadProfiles().data.length}, host rows in DOM: ${String(hostRows)}`
         );
 
+        // Скриншот заданной темы/акцента (RH_SHOT_DIR, RH_SHOT_THEME, RH_SHOT_ACCENT).
+        if (process.env.RH_SHOT_DIR) {
+          clearTimeout(watchdog);
+          const shotTheme = process.env.RH_SHOT_THEME ?? 'dark';
+          const shotAccent = process.env.RH_SHOT_ACCENT ?? '#2d95ec';
+          await mainWindow?.webContents
+            .executeJavaScript(
+              `(async () => {
+                const store = window.__RH_STORE__;
+                if (!store) return 'no-store-hook';
+                store.getState().patchSettings({ theme: '${shotTheme}', accent: '${shotAccent}' });
+                await new Promise((r) => setTimeout(r, 400));
+                return 'ok:1';
+              })()`
+            )
+            .then(async (res) => {
+              if (typeof res !== 'string' || !res.startsWith('ok:')) {
+                console.error(`[shot] apply theme/accent failed: ${String(res)}`);
+                app.exit(1);
+                return;
+              }
+              await new Promise((r) => setTimeout(r, 300));
+              const image = await mainWindow?.webContents.capturePage();
+              if (!image) {
+                console.error('[shot] capturePage вернул null');
+                app.exit(1);
+                return;
+              }
+              mkdirSync(process.env.RH_SHOT_DIR!, { recursive: true });
+              const name = `${shotTheme}-${shotAccent.replace('#', '')}.png`;
+              writeFileSync(join(process.env.RH_SHOT_DIR!, name), image.toPNG());
+              console.log(`[shot] ${name} (${image.getSize().width}x${image.getSize().height})`);
+              app.exit(0);
+            });
+          return;
+        }
         // Генерация реальных скриншотов для встроенной справки (npm run help:shots).
         if (process.env.RH_CAPTURE_HELP === '1') {
           clearTimeout(watchdog);
@@ -680,6 +716,160 @@ function createWindow(rdp: RdpManager): void {
                 app.exit(0);
               } else {
                 console.error(`[smoke] icons flow failed: ${String(res)}`);
+                app.exit(1);
+              }
+            });
+          return;
+        }
+        // Контраст иконок и кнопок-иконок: обе темы × все акцентные цвета.
+        // Порог 3:1 (WCAG 1.4.11 для нетекстовых элементов); ловит светлые
+        // акценты (жёлтый, циан, фиолетовый) и слабые кнопки-иконки.
+        if (process.env.RH_SMOKE_CONTRAST === '1') {
+          await mainWindow?.webContents
+            .executeJavaScript(`
+              (async () => {
+                const store = window.__RH_STORE__;
+                if (!store) return 'no-store-hook';
+                const ACCENTS = ['#2d95ec', '#57ab5a', '#c678dd', '#e5534b', '#d29922', '#39c5cf'];
+                const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+                // Парсит вычисленные цвета: rgb()/rgba(), color(srgb …),
+                // и неразрешённый color-mix(in srgb, …) — Chromium иногда
+                // возвращает его как есть.
+                const parseColor = (str) => {
+                  if (!str) return null;
+                  const s = String(str).trim();
+                  let m = s.match(/^rgba?\\(([^)]+)\\)$/i);
+                  if (m) {
+                    const p = m[1].split(/[,\s/]+/).map((x) => parseFloat(x));
+                    if (p.length >= 3 && !isNaN(p[0])) return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 };
+                    return null;
+                  }
+                  m = s.match(/^color\\(srgb\\s+([\\d.]+)\\s+([\\d.]+)\\s+([\\d.]+)(?:\\s*\\/\\s*([\\d.]+))?\\)$/i);
+                  if (m) return { r: m[1] * 255, g: m[2] * 255, b: m[3] * 255, a: m[4] != null ? m[4] : 1 };
+                  m = s.match(/^color-mix\\(in srgb,\\s*([^,]+?)\\s+([\\d.]+)%\\s*,\\s*([^)]+?)\\s+([\\d.]+)%\\s*\\)$/i);
+                  if (m) {
+                    const a = parseColor(m[1]);
+                    const b = parseColor(m[3]);
+                    if (a && b) {
+                      const t = parseFloat(m[2]) / (parseFloat(m[2]) + parseFloat(m[4]) || 1);
+                      return { r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t, a: a.a + (b.a - a.a) * t };
+                    }
+                  }
+                  return null;
+                };
+                const lin = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+                const lum = (c) => 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b);
+                const ratio = (a, b) => {
+                  const la = lum(a), lb = lum(b);
+                  const hi = Math.max(la, lb), lo = Math.min(la, lb);
+                  return (hi + 0.05) / (lo + 0.05);
+                };
+                const effBg = (el) => {
+                  let cur = { r: 0, g: 0, b: 0, a: 0 };
+                  let node = el;
+                  while (node && node !== document.documentElement) {
+                    const bg = parseColor(getComputedStyle(node).backgroundColor);
+                    if (bg && bg.a > 0) {
+                      const a = bg.a + cur.a * (1 - bg.a);
+                      cur = {
+                        r: (bg.r * bg.a + cur.r * cur.a * (1 - bg.a)) / (a || 1),
+                        g: (bg.g * bg.a + cur.g * cur.a * (1 - bg.a)) / (a || 1),
+                        b: (bg.b * bg.a + cur.b * cur.a * (1 - bg.a)) / (a || 1),
+                        a
+                      };
+                      if (a >= 0.999) break;
+                    }
+                    node = node.parentElement;
+                  }
+                  if (cur.a < 1) {
+                    const body = parseColor(getComputedStyle(document.body).backgroundColor) || { r: 0, g: 0, b: 0, a: 1 };
+                    const a = body.a + cur.a * (1 - body.a);
+                    cur = {
+                      r: (body.r * body.a + cur.r * cur.a * (1 - body.a)) / (a || 1),
+                      g: (body.g * body.a + cur.g * cur.a * (1 - body.a)) / (a || 1),
+                      b: (body.b * body.a + cur.b * cur.a * (1 - body.a)) / (a || 1),
+                      a
+                    };
+                  }
+                  return cur;
+                };
+                // Эффективный цвет с учётом прозрачности самого элемента.
+                const effColor = (el) => {
+                  const cs = getComputedStyle(el);
+                  const c = parseColor(cs.color);
+                  if (!c) return null;
+                  const o = parseFloat(cs.opacity || '1');
+                  if (o >= 1) return c;
+                  const bg = effBg(el);
+                  return {
+                    r: c.r * o + bg.r * (1 - o),
+                    g: c.g * o + bg.g * (1 - o),
+                    b: c.b * o + bg.b * (1 - o),
+                    a: 1
+                  };
+                };
+                const scan = () => {
+                  const items = [];
+                  const add = (el, label, min) => {
+                    const bg = effBg(el);
+                    const c = effColor(el);
+                    if (!c) return; // цвет не распознан — не судим
+                    items.push({ label, ratio: Math.round(ratio(c, bg) * 100) / 100, min });
+                  };
+                  document.querySelectorAll('.tabbar-new').forEach((el, i) => add(el, 'tabbar-new:' + i, 3));
+                  document.querySelectorAll('.btn--icon').forEach((el, i) => add(el, 'btn-icon:' + i, 3));
+                  document.querySelectorAll('.ctxmenu-item').forEach((el, i) => add(el, 'ctxmenu:' + i, 3));
+                  document.querySelectorAll('.ctxmenu-icon').forEach((el, i) => add(el, 'ctxmenu-icon:' + i, 3));
+                  document.querySelectorAll('.tree-tag').forEach((el, i) => add(el, 'tree-tag:' + i, 3));
+                  document.querySelectorAll('.seg-btn--active').forEach((el, i) => add(el, 'seg-active:' + i, 3));
+                  document.querySelectorAll('.sidebar-footer .btn--active').forEach((el, i) => add(el, 'footer-active:' + i, 3));
+                  document.querySelectorAll('.btn--primary').forEach((el, i) => add(el, 'btn-primary:' + i, 3));
+                  return items;
+                };
+                // Открыть панели, чтобы в скане были все виды кнопок.
+                const btns = [...document.querySelectorAll('.sidebar-footer .btn--sm')];
+                const settingsBtn = btns.find((b) => (b.textContent || '').includes('Настройки'));
+                if (settingsBtn) settingsBtn.click();
+                const addHost = btns.find((b) => (b.textContent || '').includes('Хост'));
+                if (addHost) addHost.click();
+                const host = document.querySelector('.tree-host');
+                if (!host) return 'no-host';
+                host.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 40, clientY: 60 }));
+                await wait(350);
+                const fails = [];
+                const report = [];
+                for (const theme of ['dark', 'light']) {
+                  for (const accent of ACCENTS) {
+                    store.getState().patchSettings({ theme, accent });
+                    await wait(140);
+                    const items = scan();
+                    if (items.length === 0) return 'no-elements:' + theme + ':' + accent;
+                    for (const it of items) {
+                      if (it.ratio < it.min) fails.push({ theme, accent, label: it.label, ratio: it.ratio });
+                    }
+                    const worst = items.slice().sort((a, b) => a.ratio - b.ratio)[0];
+                    report.push(theme + ':' + accent + '=' + worst.ratio);
+                    // Hover-контраст: фон --accent-hover, текст/иконка --accent-fg.
+                    const rs = getComputedStyle(document.documentElement);
+                    const hovFg = parseColor(rs.getPropertyValue('--accent-fg'));
+                    const hovBg = parseColor(rs.getPropertyValue('--accent-hover'));
+                    if (hovFg && hovBg) {
+                      const hr = ratio(hovFg, hovBg);
+                      if (hr < 3) fails.push({ theme, accent, label: 'hover:btn--primary', ratio: Math.round(hr * 100) / 100 });
+                    }
+                  }
+                }
+                if (fails.length > 0) return 'fail:' + JSON.stringify(fails.slice(0, 24));
+                return 'ok:' + report.join(' ');
+              })()
+            `)
+            .then((res) => {
+              clearTimeout(watchdog);
+              if (typeof res === 'string' && res.startsWith('ok:')) {
+                console.log(`[smoke] contrast flow OK — ${String(res).slice(3)}`);
+                app.exit(0);
+              } else {
+                console.error(`[smoke] contrast flow failed: ${String(res)}`);
                 app.exit(1);
               }
             });

@@ -53,11 +53,16 @@ export default function App(): React.JSX.Element {
   }, [ready, settings.helpErrorShown, tabs]);
 
   // Тема и акцентный цвет: data-theme на <html> + CSS-переменные.
+  // --accent-fg — цвет текста/иконок поверх акцентного фона: тёмный для
+  // светлых акцентов (жёлтый, циан), белый для тёмных (синий, зелёный, красный).
+  // --accent-hover — hover-фон: тёмные акценты затемняем (белый текст не теряет
+  // контраст), светлые осветляем (тёмный текст читается ещё лучше).
   useEffect(() => {
     const root = document.documentElement;
     root.dataset.theme = theme;
     root.style.setProperty('--accent', accent);
-    root.style.setProperty('--accent-hover', mixWithWhite(accent, 0.18));
+    root.style.setProperty('--accent-hover', accentHover(accent));
+    root.style.setProperty('--accent-fg', accentFg(accent));
   }, [theme, accent]);
 
 
@@ -387,6 +392,47 @@ function mixWithWhite(hex: string, ratio: number): string {
   const b = n & 255;
   const mix = (c: number): number => Math.round(c + (255 - c) * ratio);
   return `#${((mix(r) << 16) | (mix(g) << 8) | mix(b)).toString(16).padStart(6, '0')}`;
+}
+
+/** Смешивает hex-цвет с чёрным. */
+function mixWithBlack(hex: string, ratio: number): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  const mix = (c: number): number => Math.round(c * (1 - ratio));
+  return `#${((mix(r) << 16) | (mix(g) << 8) | mix(b)).toString(16).padStart(6, '0')}`;
+}
+
+/** Hover-фон акцента: тёмный акцент затемняем, светлый осветляем. */
+function accentHover(hex: string): string {
+  return relativeLuminance(hex) > 0.3 ? mixWithWhite(hex, 0.18) : mixWithBlack(hex, 0.1);
+}
+
+/** Относительная яркость цвета по WCAG (0..1). */
+function relativeLuminance(hex: string): number {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return 0;
+  const n = parseInt(m[1], 16);
+  const linear = (c: number): number => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  const r = linear((n >> 16) & 255);
+  const g = linear((n >> 8) & 255);
+  const b = linear(n & 255);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/**
+ * Цвет текста поверх акцентного фона: белый, пока контраст ≥ 3:1 (WCAG 1.4.11),
+ * иначе почти чёрный. Светлые акценты (жёлтый, циан, фиолетовый) получают тёмный текст.
+ */
+function accentFg(hex: string): string {
+  // Белый даёт 3:1, когда яркость акцента ≤ 0.30 (1.05/(L+0.05) ≥ 3).
+  return relativeLuminance(hex) > 0.3 ? '#141519' : '#ffffff';
 }
 
 function PlaceholderPane({ tab }: { tab: { kind: string; protocol: string; title: string } }): React.JSX.Element {
