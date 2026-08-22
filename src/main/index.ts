@@ -624,6 +624,27 @@ function createWindow(rdp: RdpManager): void {
                 if (footer.some((s) => !s || s.w < 8 || s.h < 8)) return 'bad-footer:' + JSON.stringify(footer);
                 const tabbarNew = check('.tabbar-new');
                 if (tabbarNew.some((s) => !s || s.w < 8)) return 'bad-tabbar:' + JSON.stringify(tabbarNew);
+                // Спиннер на кнопке массовой проверки: idle → refresh без вращения,
+                // во время проверки → иконка с классом .icon-spin, после остановки → снова refresh.
+                const bulkBtn = document.querySelector('.sidebar-header .btn');
+                if (!bulkBtn) return 'no-bulk-btn';
+                if (bulkBtn.querySelector('svg.icon-spin')) return 'bad-idle-spin';
+                bulkBtn.click();
+                let sawSpin = false;
+                const spinDeadline = Date.now() + 4000;
+                while (Date.now() < spinDeadline) {
+                  if (bulkBtn.querySelector('svg.icon-spin')) { sawSpin = true; break; }
+                  await wait(50);
+                }
+                if (!sawSpin) return 'no-spinner-during-check';
+                bulkBtn.click(); // остановить проверку
+                let backToRefresh = false;
+                const stopDeadline = Date.now() + 2000;
+                while (Date.now() < stopDeadline) {
+                  if (!bulkBtn.querySelector('svg.icon-spin')) { backToRefresh = true; break; }
+                  await wait(50);
+                }
+                if (!backToRefresh) return 'no-back-to-refresh';
                 // Контекстное меню хоста: у пунктов должны быть иконки.
                 const host = document.querySelector('.tree-host');
                 if (!host) return 'no-host';
@@ -649,7 +670,7 @@ function createWindow(rdp: RdpManager): void {
                 const actions = check('.modal-actions .btn');
                 if (!modalSvg || modalSvg.getBoundingClientRect().width < 8) return 'bad-modal-close';
                 if (actions.some((s) => !s || s.w < 8)) return 'bad-actions:' + JSON.stringify(actions);
-                return 'ok:footer=' + footer.length + ':ctx=' + ctxIcons.length + ':actions=' + actions.length;
+                return 'ok:footer=' + footer.length + ':ctx=' + ctxIcons.length + ':actions=' + actions.length + ':spinner=1';
               })()
             `)
             .then((res) => {

@@ -278,7 +278,7 @@ export default function Sidebar(): React.JSX.Element {
           title={bulkChecking ? 'Остановить проверку доступности' : 'Проверить доступность всех хостов'}
           onClick={() => (bulkChecking ? stopBulk() : void checkAllHosts())}
         >
-          {bulkChecking ? <Icon name="stop" size={12} /> : <Icon name="refresh" size={12} />}
+          {bulkChecking ? <Icon name="spinner" size={12} className="icon-spin" /> : <Icon name="refresh" size={12} />}
         </button>
       </div>
 

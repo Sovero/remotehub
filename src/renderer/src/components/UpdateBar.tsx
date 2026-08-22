@@ -14,7 +14,9 @@ export default function UpdateBar(): React.JSX.Element | null {
   if (update.status === 'checking') {
     return (
       <div className="update-bar update-bar--info">
-        <span className="update-bar__text">Проверка обновлений…</span>
+        <span className="update-bar__text">
+          <Icon name="spinner" size={12} className="icon-spin" /> Проверка обновлений…
+        </span>
         <button className="update-bar__x" onClick={dismissUpdate} title="Скрыть" aria-label="Скрыть">
           <Icon name="close" size={10} />
         </button>

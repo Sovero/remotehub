@@ -295,7 +295,9 @@ function RdpPane({
   if (tab.state.phase !== 'connected') {
     return (
       <div className="placeholder-panel">
-        <div className="placeholder-icon">▤</div>
+        <div className="placeholder-icon">
+          <Icon name="spinner" size={44} className="icon-spin" />
+        </div>
         <p>Запуск Remote Desktop…</p>
         <p className="placeholder-muted">{tab.title}</p>
       </div>

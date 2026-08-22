@@ -144,7 +144,9 @@ export default function SftpPane({ tab }: { tab: SessionTab }): React.JSX.Elemen
           </div>
         ) : (
           <div className="placeholder-panel">
-            <div className="placeholder-icon">⇅</div>
+            <div className="placeholder-icon">
+              <Icon name="spinner" size={44} className="icon-spin" />
+            </div>
             <p>Подключение SFTP…</p>
             <p className="placeholder-muted">{tab.title}</p>
           </div>
@@ -441,7 +443,10 @@ function FilePane(props: {
         {props.error ? (
           <div className="sftp-col-error">{props.error}</div>
         ) : props.entries === null ? (
-          <div className="sftp-col-empty">Загрузка…</div>
+          <div className="sftp-col-empty sftp-loading">
+            <Icon name="spinner" size={13} className="icon-spin" />
+            <span>Загрузка…</span>
+          </div>
         ) : props.entries.length === 0 ? (
           <div className="sftp-col-empty">Каталог пуст</div>
         ) : (

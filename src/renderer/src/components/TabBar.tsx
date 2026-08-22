@@ -92,7 +92,11 @@ export default function TabBar(): React.JSX.Element {
             }}
             title={`${tab.title} — ${dot.title}`}
           >
-            <span className={`tab-dot ${dot.cls}`} />
+            {tab.state.phase === 'connecting' ? (
+              <Icon name="spinner" size={10} className="icon-spin" />
+            ) : (
+              <span className={`tab-dot ${dot.cls}`} />
+            )}
             {tab.kind === 'terminal' && <ProtocolIcon protocol={tab.protocol as 'ssh' | 'telnet' | 'rdp' | 'vnc'} size={12} />}
             {tab.kind !== 'terminal' && <span className="tab-kind">{tab.kind.toUpperCase()}</span>}
             <span className="tab-title">{tab.title}</span>
