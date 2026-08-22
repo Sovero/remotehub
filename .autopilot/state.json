@@ -1,12 +1,12 @@
 {
-  "slug": "help-mock-icons",
-  "title": "SVG-иконки в моках справки",
+  "slug": "statusbar-counters",
+  "title": "Индикатор «хосты / сессии» в строке статуса",
   "mode": "full",
   "depth": "deep",
   "tier": "T0",
-  "startedAt": "2026-08-22T18:10:00+03:00",
-  "updatedAt": "2026-08-22T18:25:00+03:00",
-  "finishedAt": "2026-08-22T18:25:00+03:00",
+  "startedAt": "2026-08-22T18:30:00+03:00",
+  "updatedAt": "2026-08-22T18:40:00+03:00",
+  "finishedAt": "2026-08-22T18:40:00+03:00",
   "requirements": {
     "total": 4,
     "done": 4,
@@ -19,16 +19,18 @@
   "tickets": [
     {
       "id": "01",
-      "title": "SVG-иконки в моках справки",
-      "requirements": ["R01", "R02", "A01", "A02"],
+      "title": "Индикатор «хосты / сессии» в строке статуса",
+      "requirements": ["R01", "R02", "R03", "A01"],
       "blockedBy": [],
       "wave": 1,
       "status": "done",
-      "startedAt": "2026-08-22T18:11:00+03:00",
-      "finishedAt": "2026-08-22T18:24:00+03:00",
+      "startedAt": "2026-08-22T18:31:00+03:00",
+      "finishedAt": "2026-08-22T18:39:00+03:00",
       "retries": 0,
       "files": [
-        "src/renderer/src/components/dialogs/helpContent.tsx",
+        "src/renderer/src/components/Icon.tsx",
+        "src/renderer/src/components/StatusBar.tsx",
+        "src/renderer/src/styles/global.css",
         "src/main/index.ts"
       ]
     }

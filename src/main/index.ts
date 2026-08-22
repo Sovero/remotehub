@@ -660,6 +660,16 @@ function createWindow(rdp: RdpManager): void {
                 if (footer.some((s) => !s || s.w < 8 || s.h < 8)) return 'bad-footer:' + JSON.stringify(footer);
                 const tabbarNew = check('.tabbar-new');
                 if (tabbarNew.some((s) => !s || s.w < 8)) return 'bad-tabbar:' + JSON.stringify(tabbarNew);
+                // Строка статуса: индикатор «хосты / сессии» с иконками дерева и вкладок.
+                const counters = document.querySelector('.statusbar-counters');
+                if (!counters) return 'no-counters';
+                const cSvgs = counters.querySelectorAll('svg');
+                if (cSvgs.length !== 2) return 'bad-counters-svg:' + cSvgs.length;
+                if ([...cSvgs].some((s) => s.getBoundingClientRect().width < 8)) return 'bad-counters-size';
+                if (!counters.querySelector('.statusbar-divider')) return 'no-counter-divider';
+                const cCounts = [...counters.querySelectorAll('.statusbar-count')].map((el) => Number(el.textContent));
+                if (cCounts.length !== 2 || cCounts[0] !== 3 || cCounts[1] !== 0)
+                  return 'bad-counts:' + JSON.stringify(cCounts);
                 // Группа дерева: иконка папки + шеврон; клик сворачивает —
                 // шеврон поворачивается, папка меняется на закрытую (1 path) и обратно (2 path).
                 const group = document.querySelector('.tree-group');
@@ -736,7 +746,7 @@ function createWindow(rdp: RdpManager): void {
                 const actions = check('.modal-actions .btn');
                 if (!modalSvg || modalSvg.getBoundingClientRect().width < 8) return 'bad-modal-close';
                 if (actions.some((s) => !s || s.w < 8)) return 'bad-actions:' + JSON.stringify(actions);
-                return 'ok:footer=' + footer.length + ':ctx=' + ctxIcons.length + ':actions=' + actions.length + ':spinner=1:group=1:drag=1';
+                return 'ok:footer=' + footer.length + ':ctx=' + ctxIcons.length + ':actions=' + actions.length + ':spinner=1:group=1:drag=1:counters=1';
               })()
             `)
             .then(async (res) => {

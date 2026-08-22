@@ -36,7 +36,9 @@ export type IconName =
   | 'folder'
   | 'file'
   | 'spinner'
-  | 'warning';
+  | 'warning'
+  | 'tree'
+  | 'tab';
 
 const PATHS: Record<IconName, React.JSX.Element> = {
   plus: <path d="M8 3.2v9.6M3.2 8h9.6" />,
@@ -151,7 +153,16 @@ const PATHS: Record<IconName, React.JSX.Element> = {
       <path d="M8 2.3l6.2 11H1.8z" />
       <path d="M8 6.2v3.6M8 11.8v.01" />
     </>
-  )
+  ),
+  // Дерево профилей: вертикальный ствол с ветвями-уровнями.
+  tree: (
+    <>
+      <path d="M8 1.8v12.4" />
+      <path d="M2.4 4.8h5.6M2.4 8h8M2.4 11.2h5.6" />
+    </>
+  ),
+  // Вкладка: голова-выступ над телом вкладки.
+  tab: <path d="M2.4 4.4h4.8l1.6 1.8h4.8a1.4 1.4 0 0 1 1.4 1.4v5a1.4 1.4 0 0 1-1.4 1.4H3.8a1.4 1.4 0 0 1-1.4-1.4V5.8a1.4 1.4 0 0 1 1.4-1.4z" />
 };
 
 export default function Icon({

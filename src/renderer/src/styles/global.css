@@ -248,6 +248,22 @@ body {
   color: var(--text-muted);
 }
 
+.statusbar-counters {
+  color: var(--text);
+  gap: 6px;
+}
+
+.statusbar-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.statusbar-divider {
+  width: 1px;
+  height: 12px;
+  background: var(--border);
+  margin: 0 3px;
+}
+
 .statusbar-state--connected {
   color: var(--ok);
 }

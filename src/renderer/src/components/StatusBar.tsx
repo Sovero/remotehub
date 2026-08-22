@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { flattenHosts } from '@shared/tree';
 import { useApp } from '../store';
 import Icon from './Icon';
 import ProtocolIcon from './ProtocolIcon';
@@ -34,7 +35,17 @@ export default function StatusBar(): React.JSX.Element {
   const appInfo = useApp((s) => s.appInfo);
   const tabs = useApp((s) => s.tabs);
   const activeTabId = useApp((s) => s.activeTabId);
+  const tree = useApp((s) => s.tree);
   const [, tick] = useState(0);
+
+  // Индикатор: всего хостов в дереве / активных (живых) сессий.
+  const hostCount = useMemo(() => flattenHosts(tree).length, [tree]);
+  const activeSessions = useMemo(
+    () =>
+      tabs.filter((t) => t.state.phase === 'connecting' || t.state.phase === 'connected' || t.state.phase === 'auth-required')
+        .length,
+    [tabs]
+  );
 
   useEffect(() => {
     const id = setInterval(() => tick((t) => t + 1), 1000);
@@ -53,6 +64,16 @@ export default function StatusBar(): React.JSX.Element {
 
   return (
     <footer className="statusbar">
+      <span
+        className="statusbar-item statusbar-counters"
+        title={`Хостов: ${hostCount} · Активных сессий: ${activeSessions}`}
+      >
+        <Icon name="tree" size={11} />
+        <span className="statusbar-count">{hostCount}</span>
+        <span className="statusbar-divider" aria-hidden="true" />
+        <Icon name="tab" size={11} />
+        <span className="statusbar-count">{activeSessions}</span>
+      </span>
       {active ? (
         <>
           <span className="statusbar-item">
