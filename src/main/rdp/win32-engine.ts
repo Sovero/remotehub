@@ -29,9 +29,12 @@ export function createWin32Engine(): RdpEmbedEngine {
 
   const EnumWindowsProc = koffi.proto('BOOL __stdcall EnumWindowsProc(HWND hwnd, LPARAM lParam)');
   const EnumWindows = user32.func('BOOL __stdcall EnumWindows(EnumWindowsProc *callback, LPARAM lParam)');
+  const EnumChildWindows = user32.func('BOOL __stdcall EnumChildWindows(HWND hwnd, EnumWindowsProc *callback, LPARAM lParam)');
   const GetWindowThreadProcessId = user32.func(
     'DWORD __stdcall GetWindowThreadProcessId(HWND hwnd, _Out_ DWORD *pid)'
   );
+  const GetWindowTextW = user32.func('int __stdcall GetWindowTextW(HWND hwnd, _Out_ char16_t *buf, int max)');
+  const SendMessageW = user32.func('intptr_t __stdcall SendMessageW(HWND hwnd, uint32_t msg, WPARAM wParam, LPARAM lParam)');
   const IsWindowVisible = user32.func('BOOL __stdcall IsWindowVisible(HWND hwnd)');
   const GetWindowLongPtrW = user32.func('intptr_t __stdcall GetWindowLongPtrW(HWND hwnd, int nIndex)');
   const SetWindowLongPtrW = user32.func(
@@ -64,9 +67,62 @@ export function createWin32Engine(): RdpEmbedEngine {
   const SW_HIDE = 0;
   const SW_SHOW = 5;
   const WM_CLOSE = 0x0010;
+  const BM_CLICK = 0x00f5;
   const SWP_NOZORDER = 0x0004;
   const SWP_NOACTIVATE = 0x0010;
   const SWP_FRAMECHANGED = 0x0020;
+
+  /** Текст окна (заголовок / текст кнопки). */
+  const windowText = (hwnd: unknown): string => {
+    const buf = Buffer.allocUnsafe(4096);
+    const n = GetWindowTextW(hwnd, buf, 2048);
+    return n > 0 ? buf.subarray(0, n * 2).toString('utf16le') : '';
+  };
+
+  const isWarningDialog = (hwnd: unknown): boolean => {
+    const t = windowText(hwnd);
+    return (
+      t.includes('Предупреждение системы безопасности') ||
+      t.includes('Remote Desktop Connection') ||
+      /security warning/i.test(t)
+    );
+  };
+
+  /**
+   * Если у процесса pid открыт диалог предупреждения безопасности mstsc
+   * («Подключить»/«Отмена» для непроверенного сертификата), подтверждаем его
+   * кликом по «Подключить». Возвращает true, если клик выполнен.
+   *
+   * mstsc в новых Windows не запоминает принятый сертификат (CertHash не
+   * пишется даже после ручного принятия), поэтому предупреждение всплывает
+   * при каждом подключении — его нужно гасить автоматически.
+   */
+  const confirmSecurityWarning = (pid: number): boolean => {
+    let clicked = false;
+    EnumWindows((hwnd: unknown) => {
+      if (hwnd === null) return 1;
+      const pidRef: (number | null)[] = [null];
+      GetWindowThreadProcessId(hwnd, pidRef);
+      if (pidRef[0] !== pid) return 1;
+      if (!isWarningDialog(hwnd)) return 1;
+      // В диалоге ищем кнопку «Подключить» (с мнемоникой & и без).
+      EnumChildWindows(hwnd, (child: unknown) => {
+        if (child === null || clicked) return 1;
+        const t = windowText(child).replace(/&/g, '');
+        if (t.includes('Подключить') || t.includes('Connect')) {
+          SendMessageW(child, BM_CLICK, 0, 0);
+          clicked = true;
+          return 0;
+        }
+        return 1;
+      }, 0);
+      return 1;
+    }, 0);
+    return clicked;
+  };
+
+  /** Пропускаем диалог предупреждения при выборе окна для встраивания. */
+  const isSkipWindow = (hwnd: unknown): boolean => isWarningDialog(hwnd);
 
   /** koffi 3.x возвращает указатели BigInt'ами; внутри движка работаем с Number. */
   const toNum = (v: bigint | number | null | undefined): number =>
@@ -76,6 +132,9 @@ export function createWin32Engine(): RdpEmbedEngine {
     async findWindowByPid(pid: number, timeoutMs = 15000, intervalMs = 120): Promise<number | null> {
       const deadline = Date.now() + timeoutMs;
       const scan = (): number | null => {
+        // Предупреждение безопасности (непроверенный сертификат) гасим кликом
+        // «Подключить» — иначе оно перекрывает встроенную сессию.
+        confirmSecurityWarning(pid);
         let first: number | null = null;
         let visible: number | null = null;
         EnumWindows((hwnd: unknown) => {
@@ -83,6 +142,7 @@ export function createWin32Engine(): RdpEmbedEngine {
           const pidRef: (number | null)[] = [null];
           GetWindowThreadProcessId(hwnd, pidRef);
           if (pidRef[0] !== pid) return 1;
+          if (isSkipWindow(hwnd)) return 1;
           const h = toNum(hwnd as number | bigint);
           if (first === null) first = h;
           if (IsWindowVisible(hwnd) !== 0) {
@@ -108,6 +168,10 @@ export function createWin32Engine(): RdpEmbedEngine {
 
     isWindow(hwnd: number): boolean {
       return IsWindow(hwnd) !== 0;
+    },
+
+    confirmSecurityWarning(pid: number): boolean {
+      return confirmSecurityWarning(pid);
     },
 
     embed(hwnd: number, parentHwnd: number): void {

@@ -107,16 +107,58 @@ function createWindow(rdp: RdpManager): void {
 
   mainWindow.once('ready-to-show', () => mainWindow?.show());
 
-  // RH_SMOKE_RDP_EMBED: реальный mstsc против мёртвого порта; проверяем факт встраивания.
+  // RH_SMOKE_RDP_EMBED: реальный mstsc против живого/мёртвого порта (RH_RDP_PORT).
+  // Проверяем: окно найдено и встроено, а предупреждение безопасности сертификата
+  // автоматически подтверждено (mstsc не запоминает сертификат в новых Windows).
   if (process.env.RH_SMOKE_RDP_EMBED === '1') {
     mainWindow.webContents.once('did-finish-load', () => {
       console.log('[smoke] rdp embed: запуск');
+      // Счётчик видимых предупреждений безопасности у живых mstsc-процессов.
+      // koffi-привязки создаются один раз, вне циклов опроса.
+      let countWarnings: () => number = () => -1;
+      try {
+        const { execFileSync } = require('child_process') as typeof import('child_process');
+        const koffi = require('koffi') as typeof import('koffi');
+        const user32 = koffi.load('user32.dll');
+        const SBOOL = koffi.alias('SMOKE_BOOL', 'int32_t');
+        const SDWORD = koffi.alias('SMOKE_DWORD', 'uint32_t');
+        const SHANDLE = koffi.pointer('SMOKE_HANDLE', koffi.opaque());
+        const SHWND = koffi.alias('SMOKE_HWND', SHANDLE);
+        const SLPARAM = koffi.alias('SMOKE_LPARAM', koffi.types.intptr);
+        const sproto = koffi.proto('SMOKE_BOOL __stdcall SP(SMOKE_HWND hwnd, SMOKE_LPARAM lParam)');
+        const SEnumWindows = user32.func('SMOKE_BOOL __stdcall EnumWindows(SP *cb, SMOKE_LPARAM lParam)');
+        const SGetWindowThreadProcessId = user32.func('SMOKE_DWORD __stdcall GetWindowThreadProcessId(SMOKE_HWND hwnd, _Out_ SMOKE_DWORD *pid)');
+        const SGetWindowTextW = user32.func('int __stdcall GetWindowTextW(SMOKE_HWND hwnd, _Out_ char16_t *buf, int max)');
+        const SIsWindowVisible = user32.func('SMOKE_BOOL __stdcall IsWindowVisible(SMOKE_HWND hwnd)');
+        countWarnings = (): number => {
+          const out = execFileSync('tasklist', ['/FI', 'IMAGENAME eq mstsc.exe', '/FO', 'CSV', '/NH'], {
+            encoding: 'utf8'
+          });
+          const pids = [...out.matchAll(/"mstsc.exe","(\d+)"/g)].map((m) => Number(m[1]));
+          let count = 0;
+          SEnumWindows((hwnd: unknown) => {
+            if (hwnd === null) return 1;
+            const ref: (number | null)[] = [null];
+            SGetWindowThreadProcessId(hwnd, ref);
+            if (!pids.includes(ref[0] ?? -1) || SIsWindowVisible(hwnd) === 0) return 1;
+            const buf = Buffer.allocUnsafe(2048);
+            const n = SGetWindowTextW(hwnd, buf, 1024);
+            const t = n > 0 ? buf.subarray(0, n * 2).toString('utf16le') : '';
+            if (t.includes('Предупреждение системы безопасности')) count++;
+            return 1;
+          }, 0);
+          return count;
+        };
+      } catch (err) {
+        console.error('[smoke] rdp embed: не удалось инициализировать проверку предупреждений:', (err as Error).message);
+      }
+
       const host = createHost({
         id: 'smoke-rdp',
         name: 'Smoke RDP',
         protocol: 'rdp',
         host: '127.0.0.1',
-        port: 1,
+        port: Number(process.env.RH_RDP_PORT ?? 3389),
         username: 'smoke',
         rdp: {
           domain: '',
@@ -133,9 +175,27 @@ function createWindow(rdp: RdpManager): void {
         const deadline = Date.now() + 20000;
         const poll = (): void => {
           if (rdp.isEmbedded(sessionId)) {
-            console.log('[smoke] rdp embed OK — окно mstsc найдено и встроено');
-            rdp.stop(sessionId);
-            setTimeout(() => app.exit(0), 1200);
+            // Предупреждение появляется чуть позже встраивания (mstsc сначала
+            // показывает окно, затем — диалог о сертификате); сторож гасит его
+            // кликом «Подключить» на своих тиках. Даём ему до 8 секунд.
+            const warnDeadline = Date.now() + 8000;
+            const waitWarningsGone = (): void => {
+              const warningsLeft = countWarnings();
+              if (warningsLeft === 0) {
+                console.log('[smoke] rdp embed OK — окно встроено, предупреждение безопасности погашено');
+                rdp.stop(sessionId);
+                setTimeout(() => app.exit(0), 1200);
+                return;
+              }
+              if (Date.now() > warnDeadline) {
+                console.error(`[smoke] rdp embed FAIL — предупреждение не погашено за 8 секунд (осталось: ${String(warningsLeft)})`);
+                rdp.closeAll();
+                app.exit(1);
+                return;
+              }
+              setTimeout(waitWarningsGone, 300);
+            };
+            waitWarningsGone();
             return;
           }
           if (Date.now() > deadline) {

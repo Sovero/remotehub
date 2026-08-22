@@ -48,6 +48,10 @@ class FakeEngine implements RdpEmbedEngine {
     this.calls.push(`isWindow:${hwnd}`);
     return this.alive && [...this.hwndByPid.values()].some((w) => w.hwnd === hwnd);
   }
+  confirmSecurityWarning(pid: number): boolean {
+    this.calls.push(`confirm:${pid}`);
+    return true;
+  }
   embed(hwnd: number, parentHwnd: number): void {
     this.calls.push(`embed:${hwnd}->${parentHwnd}`);
   }
@@ -235,6 +239,15 @@ describe('RdpManager: встраивание', () => {
     // mstsc проигнорировал WM_CLOSE — через KILL_GRACE_MS(3s в проде; здесь 50мс интервал не влияет)
     // ждём фолбэк-таймер 3с: не ждём реально, а проверяем, что exited не ушёл
     expect(sends).toHaveLength(0); // закрытие вкладки не шлёт rdp:exited
+  });
+
+  it('сторож гасит предупреждение безопасности mstsc на каждом тике', async () => {
+    const { manager, engine, child } = makeManager({ watchdogInterval: 5 });
+    engine.hwndByPid.set(child.pid, { hwnd: 21, visible: true });
+    await manager.launch(rdpHost(), null, 's1');
+    await sleep(30);
+    // findWindowByPid не зовёт confirm (это делает сторож); проверяем вызовы тика
+    expect(engine.calls.some((c) => c.startsWith('confirm:4242'))).toBe(true);
   });
 
   it('пересозданное окно перевстраивается сторожем', async () => {

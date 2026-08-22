@@ -198,6 +198,11 @@ export class RdpManager {
   private tick(): void {
     for (const [sessionId, active] of this.active) {
       if (active.mode !== 'embedded' || active.closing) continue;
+      // Гасим предупреждение безопасности mstsc (непроверенный сертификат):
+      // оно может всплыть и после встраивания окна.
+      if (active.child?.pid != null) {
+        this.engine.confirmSecurityWarning(active.child.pid);
+      }
       if (active.hwnd !== null) {
         if (!this.engine.isWindow(active.hwnd)) {
           active.hwnd = null; // окно пересоздано — найдём заново
