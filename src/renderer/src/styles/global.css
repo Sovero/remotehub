@@ -1154,6 +1154,12 @@ textarea.input {
   text-align: center;
 }
 
+/* Встроенный режим: подложка ровно в размер рабочей области — поверх неё ложится окно mstsc. */
+.rdp-pane--embedded {
+  padding: 0;
+  gap: 0;
+}
+
 .rdp-icon {
   font-size: 52px;
 }

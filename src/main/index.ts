@@ -187,10 +187,17 @@ function createWindow(rdp: RdpManager): void {
           app.exit(1);
           return;
         }
-        const hostRows = await mainWindow?.webContents.executeJavaScript(
-          'document.querySelectorAll(".tree-host").length'
-        );
+        // Дерево отрисовывается после IPC-инициализации — ждём появления хостов (до 8 с).
         const expected = Number(process.env.RH_EXPECT_HOSTS ?? 0);
+        let hostRows = 0;
+        const hostDeadline = Date.now() + 8000;
+        while (Date.now() < hostDeadline) {
+          hostRows = (await mainWindow?.webContents.executeJavaScript(
+            'document.querySelectorAll(".tree-host").length'
+          )) as number;
+          if (hostRows === expected) break;
+          await new Promise((r) => setTimeout(r, 150));
+        }
         console.log(
           `[smoke] OK — React mounted, profiles: ${store.loadProfiles().data.length}, host rows in DOM: ${String(hostRows)}`
         );

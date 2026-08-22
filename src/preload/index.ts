@@ -65,8 +65,18 @@ const api = {
     ipcRenderer.invoke(IPC.sessionClose, sessionId),
   sessionAuth: (sessionId: string, password: string): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke(IPC.sessionAuth, { sessionId, password }),
-  rdpLaunch: (req: { sessionId: string; host: import('../shared/types').Host }): Promise<{ ok: boolean; error?: string }> =>
-    ipcRenderer.invoke(IPC.rdpLaunch, req),
+  rdpLaunch: (req: { sessionId: string; host: import('../shared/types').Host }): Promise<{
+    ok: boolean;
+    mode?: 'embedded' | 'window';
+    error?: string;
+  }> => ipcRenderer.invoke(IPC.rdpLaunch, req),
+  /** Прямоугольник панели RDP-вкладки (CSS-пиксели) — main переведёт в физические. */
+  rdpSetRect: (sessionId: string, rect: { x: number; y: number; width: number; height: number }): void =>
+    ipcRenderer.send(IPC.rdpRect, { sessionId, rect }),
+  /** Переключение вкладок: показать встроенное окно сессии, спрятать остальные. */
+  rdpActivate: (sessionId: string): void => ipcRenderer.send(IPC.rdpActivate, sessionId),
+  /** Модальный диалог открыт/закрыт: встроенные окна временно прячутся. */
+  rdpOverlay: (active: boolean): void => ipcRenderer.send(IPC.rdpOverlay, active),
   vncOpen: (req: {
     sessionId: string;
     host: import('../shared/types').Host;

@@ -29,6 +29,8 @@ export interface SessionTab {
   protocol: string;
   kind: 'terminal' | 'vnc' | 'rdp' | 'sftp';
   state: SessionState;
+  /** Как запущена RDP-сессия: встроена во вкладку или открыта отдельным окном (fullscreen). */
+  rdpMode?: 'embedded' | 'window';
   adHocHost: Host | null;
   startedAt: number | null;
   /** Транзитная информация VNC-сессии (порт моста и пароль — только в памяти). */
@@ -75,6 +77,8 @@ interface AppState {
   dismissToast: (id: number) => void;
   openDialog: (d: Exclude<DialogState, null>) => void;
   closeDialog: () => void;
+  /** Встроенные RDP-окна не должны перекрывать модальные диалоги/онбординг. */
+  setRdpOverlay: (active: boolean) => void;
   /** Онбординг-мастер: первый запуск или ручной вызов. */
   onboardingOpen: boolean;
   openOnboarding: () => void;
@@ -225,11 +229,24 @@ export const useApp = create<AppState>((set, get) => ({
     set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
   },
 
-  openDialog: (d) => set({ dialog: d }),
-  closeDialog: () => set({ dialog: null }),
+  openDialog: (d) => {
+    window.api.rdpOverlay(true);
+    set({ dialog: d });
+  },
+  closeDialog: () => {
+    window.api.rdpOverlay(false);
+    set({ dialog: null });
+  },
+  setRdpOverlay: (active) => window.api.rdpOverlay(active),
   onboardingOpen: false,
-  openOnboarding: () => set({ onboardingOpen: true, dialog: null }),
-  closeOnboarding: () => set({ onboardingOpen: false }),
+  openOnboarding: () => {
+    window.api.rdpOverlay(true);
+    set({ onboardingOpen: true, dialog: null });
+  },
+  closeOnboarding: () => {
+    window.api.rdpOverlay(false);
+    set({ onboardingOpen: false });
+  },
   finishOnboarding: async () => {
     await get().patchSettings({ onboardingDone: true });
     set({ onboardingOpen: false });
@@ -448,12 +465,17 @@ export const useApp = create<AppState>((set, get) => ({
     get().persistTabs();
   },
 
-  applyRdpOutcome: (sessionId, outcome: { ok: boolean; error?: string }) => {
+  applyRdpOutcome: (sessionId, outcome: { ok: boolean; mode?: 'embedded' | 'window'; error?: string }) => {
     set((s) => ({
       tabs: s.tabs.map((t) =>
         t.sessionId === sessionId
           ? outcome.ok
-            ? { ...t, state: { phase: 'connected' }, startedAt: Date.now() }
+            ? {
+                ...t,
+                state: { phase: 'connected' },
+                rdpMode: outcome.mode ?? 'embedded',
+                startedAt: Date.now()
+              }
             : { ...t, state: { phase: 'error', message: outcome.error ?? 'Не удалось запустить RDP' } }
           : t
       )
@@ -476,7 +498,9 @@ export const useApp = create<AppState>((set, get) => ({
     }
     if (tab.kind === 'rdp') {
       set((s) => ({
-        tabs: s.tabs.map((t) => (t.sessionId === sessionId ? { ...t, state: { phase: 'connecting' } } : t))
+        tabs: s.tabs.map((t) =>
+          t.sessionId === sessionId ? { ...t, state: { phase: 'connecting' }, rdpMode: undefined } : t
+        )
       }));
       const res = await window.api.rdpLaunch({ sessionId, host });
       get().applyRdpOutcome(sessionId, res);
@@ -551,7 +575,12 @@ export const useApp = create<AppState>((set, get) => ({
     get().persistTabs();
   },
 
-  switchTab: (sessionId) => set({ activeTabId: sessionId }),
+  switchTab: (sessionId) => {
+    set({ activeTabId: sessionId });
+    // Показываем встроенное окно активной RDP-сессии, прячем остальные.
+    const tab = get().tabs.find((t) => t.sessionId === sessionId);
+    if (tab?.kind === 'rdp') window.api.rdpActivate(sessionId);
+  },
 
   submitPassword: async (sessionId, password) => {
     await window.api.sessionAuth(sessionId, password);

@@ -180,7 +180,7 @@ export default function App(): React.JSX.Element {
                   {tab.kind === 'terminal' ? (
                     <TerminalPane tab={tab} active={tab.sessionId === activeTabId} />
                   ) : tab.kind === 'rdp' ? (
-                    <RdpPane tab={tab} />
+                    <RdpPane tab={tab} active={tab.sessionId === activeTabId} />
                   ) : tab.kind === 'vnc' ? (
                     <VncViewer tab={tab} />
                   ) : tab.kind === 'sftp' ? (
@@ -214,12 +214,42 @@ function EmptyWorkspace(): React.JSX.Element {
 }
 
 function RdpPane({
-  tab
+  tab,
+  active
 }: {
-  tab: { sessionId: string; state: { phase: string }; title: string };
+  tab: { sessionId: string; state: { phase: string }; title: string; rdpMode?: 'embedded' | 'window' };
+  active: boolean;
 }): React.JSX.Element {
   const reconnectTab = useApp((s) => s.reconnectTab);
   const closeTab = useApp((s) => s.closeTab);
+  const paneRef = useRef<HTMLDivElement | null>(null);
+
+  // Встроенный режим: поверх этой подложки main кладёт живое окно mstsc.
+  const sendRect = (): void => {
+    const el = paneRef.current;
+    if (!el || !active) return;
+    const r = el.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) return; // панель скрыта — прямоугольник неактуален
+    window.api.rdpSetRect(tab.sessionId, { x: r.x, y: r.y, width: r.width, height: r.height });
+  };
+  useEffect(() => {
+    if (!active || tab.state.phase !== 'connected') return;
+    window.api.rdpActivate(tab.sessionId);
+    sendRect();
+    const el = paneRef.current;
+    let ro: ResizeObserver | null = null;
+    if (el && typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => sendRect());
+      ro.observe(el);
+    }
+    window.addEventListener('resize', sendRect);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener('resize', sendRect);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, tab.sessionId, tab.state.phase]);
+
   if (tab.state.phase !== 'connected') {
     return (
       <div className="placeholder-panel">
@@ -229,14 +259,34 @@ function RdpPane({
       </div>
     );
   }
-  return (
-    <div className="rdp-pane">
-      <div className="rdp-icon">🖥</div>
-      <div className="rdp-title">Remote Desktop запущен</div>
-      <div className="rdp-text">
-        Сессия открыта в отдельном окне {`mstsc`}. Вкладка останется до закрытия окна Remote Desktop — закрытие
-        приложения её не прервёт.
+
+  // Полноэкранный/мультимониторный RDP встроить нельзя — окно открыто отдельно.
+  if (tab.rdpMode === 'window') {
+    return (
+      <div className="rdp-pane rdp-pane--fallback">
+        <div className="rdp-icon">🖥</div>
+        <div className="rdp-title">Remote Desktop открыт отдельным окном</div>
+        <div className="rdp-text">
+          Профиль использует полный экран или несколько мониторов — такой режим нельзя встроить во вкладку,
+          поэтому окно Remote Desktop открыто отдельно. Оно закроется вместе с вкладкой.
+        </div>
+        <div className="rdp-actions">
+          <button className="btn btn--primary" onClick={() => void reconnectTab(tab.sessionId)}>
+            Запустить заново
+          </button>
+          <button className="btn" onClick={() => void closeTab(tab.sessionId, true)}>
+            Закрыть вкладку
+          </button>
+        </div>
       </div>
+    );
+  }
+
+  return (
+    <div className="rdp-pane rdp-pane--embedded" ref={paneRef}>
+      <div className="rdp-icon">🖥</div>
+      <div className="rdp-title">Remote Desktop подключён</div>
+      <div className="rdp-text">Рабочий стол открыт прямо во вкладке.</div>
       <div className="rdp-actions">
         <button className="btn btn--primary" onClick={() => void reconnectTab(tab.sessionId)}>
           Запустить заново
