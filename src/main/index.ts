@@ -8,7 +8,9 @@ import { SftpManager } from './sftp/manager';
 import { TunnelManager } from './tunnels/manager';
 import { VncManager } from './vnc/manager';
 import { Store } from './store';
+import { createHost } from '../shared/types';
 import { dpapiSealer } from './store/crypto';
+import { Updater } from './updater';
 
 let mainWindow: BrowserWindow | null = null;
 let store: Store;
@@ -21,7 +23,7 @@ const APP_ICON = join(__dirname, '../../build/icon.ico');
 
 const APP_REPOSITORY = 'https://github.com/Sovero/remotehub';
 
-function installMenu(): void {
+function installMenu(updater: Updater): void {
   const sendMenu = (command: string): void => {
     for (const win of BrowserWindow.getAllWindows()) {
       win.webContents.send('menu:command', command);
@@ -46,9 +48,12 @@ function installMenu(): void {
     {
       label: 'Помощь',
       submenu: [
-        { label: 'Горячие клавиши', accelerator: 'F1', click: () => sendMenu('hotkeys') },
+        { label: 'Справка', accelerator: 'F1', click: () => sendMenu('help') },
+        { label: 'Мастер настройки', accelerator: 'F2', click: () => sendMenu('onboarding') },
+        { label: 'Горячие клавиши', accelerator: 'F3', click: () => sendMenu('hotkeys') },
         { label: 'Настройки', click: () => sendMenu('settings') },
         { type: 'separator' },
+        { label: 'Проверить обновления', click: () => void updater.check(true) },
         {
           label: 'О программе',
           click: () => {
@@ -75,7 +80,7 @@ function installMenu(): void {
   Menu.setApplicationMenu(menu);
 }
 
-function createWindow(): void {
+function createWindow(rdp: RdpManager): void {
   const settings = store.loadSettings().data;
   const bounds: { x?: number; y?: number; width: number; height: number } =
     settings.winBounds ?? { width: 1280, height: 800 };
@@ -101,6 +106,50 @@ function createWindow(): void {
   });
 
   mainWindow.once('ready-to-show', () => mainWindow?.show());
+
+  // RH_SMOKE_RDP_EMBED: реальный mstsc против мёртвого порта; проверяем факт встраивания.
+  if (process.env.RH_SMOKE_RDP_EMBED === '1') {
+    mainWindow.webContents.once('did-finish-load', () => {
+      console.log('[smoke] rdp embed: запуск');
+      const host = createHost({
+        id: 'smoke-rdp',
+        name: 'Smoke RDP',
+        protocol: 'rdp',
+        host: '127.0.0.1',
+        port: 1,
+        username: 'smoke',
+        rdp: {
+          domain: '',
+          screenMode: 'window',
+          width: 800,
+          height: 600,
+          multiMonitor: false,
+          promptForCreds: false
+        }
+      });
+      const sessionId = 'smoke-rdp-embed';
+      const outcome = rdp.launch(host, null, sessionId);
+      Promise.resolve(outcome).then(() => {
+        const deadline = Date.now() + 20000;
+        const poll = (): void => {
+          if (rdp.isEmbedded(sessionId)) {
+            console.log('[smoke] rdp embed OK — окно mstsc найдено и встроено');
+            rdp.stop(sessionId);
+            setTimeout(() => app.exit(0), 1200);
+            return;
+          }
+          if (Date.now() > deadline) {
+            console.error('[smoke] rdp embed FAIL — окно не встроено за 20 секунд');
+            rdp.closeAll();
+            app.exit(1);
+            return;
+          }
+          setTimeout(poll, 300);
+        };
+        poll();
+      });
+    });
+  }
 
   if (process.env.RH_SMOKE === '1') {
     mainWindow.webContents.on('console-message', (event) => {
@@ -145,6 +194,87 @@ function createWindow(): void {
         console.log(
           `[smoke] OK — React mounted, profiles: ${store.loadProfiles().data.length}, host rows in DOM: ${String(hostRows)}`
         );
+
+        // Генерация реальных скриншотов для встроенной справки (npm run help:shots).
+        if (process.env.RH_CAPTURE_HELP === '1') {
+          clearTimeout(watchdog);
+          const captureDir = process.env.RH_CAPTURE_DIR ?? join(process.cwd(), 'src/renderer/src/assets/help');
+          const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+          const drive = (js: string): Promise<unknown> =>
+            mainWindow?.webContents.executeJavaScript(js) ?? Promise.resolve(null);
+          const shot = async (name: string): Promise<void> => {
+            await sleep(700);
+            const image = await mainWindow?.webContents.capturePage();
+            if (!image) {
+              console.error(`[capture] ${name}: capturePage вернул null`);
+              return;
+            }
+            mkdirSync(captureDir, { recursive: true });
+            writeFileSync(join(captureDir, `${name}.png`), image.toPNG());
+            console.log(`[capture] ${name}.png (${image.getSize().width}x${image.getSize().height})`);
+          };
+          const closeModal = "(() => { const c = document.querySelector('.modal-close'); if (c) c.click(); return 'ok'; })()";
+          const waitProbe = "const wait = (ms) => new Promise((r) => setTimeout(r, ms));";
+          const steps: { name: string; js: string; close?: string }[] = [
+            {
+              name: 'overview',
+              js: `(async () => { ${waitProbe} const deadline = Date.now() + 6000; while (Date.now() < deadline) { const t = document.querySelector('.tour-overlay'); if (!t) return 'ok'; const skip = t.querySelector('.btn--ghost'); if (skip) skip.click(); await wait(100); } return document.querySelector('.tour-overlay') ? 'tour-open' : 'ok'; })()`
+            },
+            {
+              name: 'settings',
+              js: `(async () => { ${waitProbe} const btn = document.querySelector('.sidebar-footer [title="Настройки"]'); if (!btn) return 'no-btn'; btn.click(); const deadline = Date.now() + 6000; while (Date.now() < deadline) { if (document.querySelector('.sidebar-settings-sheet')) return 'ok'; await wait(100); } return 'no-panel'; })()`,
+              close: `(() => { const btn = document.querySelector('.sidebar-footer [title="Настройки"]'); if (btn) btn.click(); return 'ok'; })()`
+            },
+            {
+              name: 'host-dialog',
+              js: `(async () => { ${waitProbe} const btn = [...document.querySelectorAll('.sidebar-footer .btn--sm')].find((b) => (b.textContent || '').includes('Хост')); if (!btn) return 'no-btn'; btn.click(); const deadline = Date.now() + 6000; while (Date.now() < deadline) { const m = document.querySelector('.modal'); if (m && (m.textContent || '').includes('Протокол')) return 'ok'; await wait(100); } return 'no-modal'; })()`,
+              close: closeModal
+            },
+            {
+              name: 'credentials',
+              js: `(async () => { ${waitProbe} const btn = document.querySelector('[title="Наборы учётных данных"]'); if (!btn) return 'no-btn'; btn.click(); const deadline = Date.now() + 6000; while (Date.now() < deadline) { const m = document.querySelector('.modal'); if (m && (m.textContent || '').includes('Учётные данные')) return 'ok'; await wait(100); } return 'no-modal'; })()`,
+              close: closeModal
+            },
+            {
+              name: 'availability',
+              js: `(async () => { ${waitProbe} const host = document.querySelector('.tree-host'); if (!host) return 'no-host'; host.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 60, clientY: 150 })); let item = null; const d1 = Date.now() + 6000; while (Date.now() < d1) { item = [...document.querySelectorAll('.ctxmenu-item')].find((b) => (b.textContent || '').includes('Проверить доступность')); if (item) break; await wait(100); } if (!item) return 'no-item'; item.click(); const d2 = Date.now() + 8000; while (Date.now() < d2) { if (document.querySelector('.avail-tip')) return 'ok'; await wait(100); } return 'no-tip'; })()`,
+              close: `(() => { const c = document.querySelector('.avail-tip__close'); if (c) c.click(); return 'ok'; })()`
+            },
+            {
+              name: 'tree',
+              js: `(async () => { ${waitProbe} const host = document.querySelector('.tree-host'); if (!host) return 'no-host'; host.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 60, clientY: 150 })); const deadline = Date.now() + 6000; while (Date.now() < deadline) { if (document.querySelector('.ctxmenu')) return 'ok'; await wait(100); } return 'no-ctxmenu'; })()`,
+              close: `(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); return 'ok'; })()`
+            },
+            {
+              name: 'snips',
+              js: `(async () => { ${waitProbe} const btn = document.querySelector('[title="Сниппеты"]'); if (!btn) return 'no-btn'; btn.click(); const deadline = Date.now() + 6000; while (Date.now() < deadline) { if (document.querySelector('.snips-pop')) return 'ok'; await wait(100); } return 'no-pop'; })()`,
+              close: `(() => { const b = document.querySelector('[title="Сниппеты"]'); if (b) b.click(); return 'ok'; })()`
+            },
+            {
+              name: 'new-session',
+              js: `(async () => { ${waitProbe} const btn = document.querySelector('.tabbar-new'); if (!btn) return 'no-btn'; btn.click(); const deadline = Date.now() + 6000; while (Date.now() < deadline) { const m = document.querySelector('.modal'); if (m && (m.textContent || '').includes('Новая сессия')) return 'ok'; await wait(100); } return 'no-modal'; })()`,
+              close: closeModal
+            },
+            {
+              name: 'session-error',
+              js: `(async () => { ${waitProbe} const input = document.querySelector('.quick-connect-input'); if (!input) return 'no-input'; const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; setter.call(input, 'root@127.0.0.1:1'); input.dispatchEvent(new Event('input', { bubbles: true })); await wait(200); input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); const deadline = Date.now() + 15000; while (Date.now() < deadline) { if (document.querySelector('.session-overlay')) return 'ok'; await wait(200); } return 'no-overlay'; })()`,
+              close: `(() => { const b = [...document.querySelectorAll('.session-overlay .btn')].find((x) => (x.textContent || '').includes('Закрыть вкладку')); if (b) b.click(); return 'ok'; })()`
+            }
+          ];
+          for (const s of steps) {
+            const res = await drive(s.js);
+            console.log(`[capture] step ${s.name} → ${String(res)}`);
+            await shot(s.name);
+            if (s.close) {
+              await drive(s.close);
+              await sleep(400);
+            }
+          }
+          console.log(`[capture] готово: ${captureDir}`);
+          app.exit(0);
+          return;
+        }
+
         if (expected !== (hostRows as number)) {
           console.error(`[smoke] expected ${expected} host rows, got ${String(hostRows)}`);
           app.exit(1);
@@ -239,6 +369,35 @@ function createWindow(): void {
                 })()
               `)
               .then((r) => console.log('[smoke] screenshot: availability tip →', String(r)));
+          }
+          if (process.env.RH_SHOT_HELP === '1') {
+            mainWindow?.webContents.send('menu:command', 'help');
+            const wantSection = process.env.RH_SHOT_HELP_SECTION ?? '';
+            await mainWindow?.webContents
+              .executeJavaScript(`
+                (async () => {
+                  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+                  const deadline = Date.now() + 6000;
+                  const want = ${JSON.stringify(wantSection)};
+                  while (Date.now() < deadline) {
+                    const h = document.querySelector('.help');
+                    if (h && (h.textContent || '').includes('Справка Remote Hub')) {
+                      if (want) {
+                        const item = [...document.querySelectorAll('.help-nav-item')].find((b) =>
+                          (b.textContent || '').includes(want)
+                        );
+                        if (item) { item.click(); await wait(300); }
+                        const title = document.querySelector('.help-section-title')?.textContent || '';
+                        return 'ok:sections=' + document.querySelectorAll('.help-nav-item').length + ':title=' + title;
+                      }
+                      return 'ok:sections=' + document.querySelectorAll('.help-nav-item').length;
+                    }
+                    await wait(100);
+                  }
+                  return 'no-help';
+                })()
+              `)
+              .then((r) => console.log('[smoke] screenshot: open help →', String(r)));
           }
           // ждём, пока отрисуются анимации появления и дерево
           await new Promise((r) => setTimeout(r, 1600));
@@ -516,6 +675,70 @@ function createWindow(): void {
             });
           return;
         }
+        // Сценарий справки: меню → диалог с оглавлением.
+        if (process.env.RH_SMOKE_HELP === '1') {
+          mainWindow?.webContents.send('menu:command', 'help');
+          const res = await mainWindow?.webContents.executeJavaScript(`
+            (async () => {
+              const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+              const deadline = Date.now() + 6000;
+              while (Date.now() < deadline) {
+                const h = document.querySelector('.help');
+                if (h) {
+                  const sections = document.querySelectorAll('.help-nav-item').length;
+                  const title = document.querySelector('.help-section-title')?.textContent || '';
+                  return 'ok:' + sections + ':' + title;
+                }
+                await wait(100);
+              }
+              return 'no-help';
+            })()
+          `);
+          clearTimeout(watchdog);
+          if (typeof res === 'string' && res.startsWith('ok:')) {
+            const parts = res.split(':');
+            console.log(`[smoke] help flow OK — справка открылась, разделов: ${parts[1]}, первый: ${parts[2]}`);
+            app.exit(0);
+          } else {
+            console.error(`[smoke] help flow failed: ${String(res)}`);
+            app.exit(1);
+          }
+          return;
+        }
+        // Авто-открытие раздела «Неполадки» при первой ошибке подключения.
+        if (process.env.RH_SMOKE_AUTO_HELP === '1') {
+          const res = await mainWindow?.webContents.executeJavaScript(`
+            (async () => {
+              const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+              const input = document.querySelector('.quick-connect-input');
+              if (!input) return 'no-input';
+              const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+              setter.call(input, 'root@127.0.0.1:1');
+              input.dispatchEvent(new Event('input', { bubbles: true }));
+              await wait(200);
+              input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+              const deadline = Date.now() + 20000;
+              while (Date.now() < deadline) {
+                const h = document.querySelector('.help');
+                if (h) {
+                  const title = document.querySelector('.help-section-title')?.textContent || '';
+                  if (title.includes('Частые вопросы')) return 'ok:' + title;
+                }
+                await wait(200);
+              }
+              return 'no-auto-help';
+            })()
+          `);
+          clearTimeout(watchdog);
+          if (typeof res === 'string' && res.startsWith('ok:')) {
+            console.log(`[smoke] auto-help OK — справка открылась на разделе «${String(res).slice(3)}»`);
+            app.exit(0);
+          } else {
+            console.error(`[smoke] auto-help failed: ${String(res)}`);
+            app.exit(1);
+          }
+          return;
+        }
         const expectTabs = Number(process.env.RH_EXPECT_TABS ?? -1);
         if (expectTabs >= 0) {
           const tabRows = await mainWindow?.webContents.executeJavaScript(
@@ -671,7 +894,6 @@ if (!gotLock) {
   });
 
   app.whenReady().then(() => {
-    installMenu();
     store = new Store(app.getPath('userData'), dpapiSealer);
     const broadcast = (channel: string, payload: unknown): void => {
       for (const win of BrowserWindow.getAllWindows()) {
@@ -679,22 +901,38 @@ if (!gotLock) {
       }
     };
     const sessions = new SessionManager(dpapiSealer, broadcast as (c: 'session:data' | 'session:state', p: unknown) => void);
-    const rdp = new RdpManager(dpapiSealer, broadcast as (c: 'rdp:exited', p: unknown) => void);
+    const getParentHwnd = (): number | null => {
+      if (!mainWindow || mainWindow.isDestroyed()) return null;
+      try {
+        return mainWindow.getNativeWindowHandle().readUInt32LE(0);
+      } catch {
+        return null;
+      }
+    };
+    const rdp = new RdpManager({
+      sealer: dpapiSealer,
+      send: broadcast as (c: 'rdp:exited', p: unknown) => void,
+      getParentHwnd
+    });
     const vnc = new VncManager(dpapiSealer);
     const sftp = new SftpManager(dpapiSealer);
     const tunnels = new TunnelManager(dpapiSealer);
-    registerIpc(store, sessions, rdp, vnc, sftp, tunnels);
+    const updater = new Updater(broadcast);
+    installMenu(updater);
+    registerIpc(store, sessions, rdp, vnc, sftp, tunnels, updater);
     app.on('before-quit', () => {
       sessions.closeAll();
       rdp.closeAll();
       vnc.closeAll();
       sftp.closeAll();
       tunnels.closeAll();
+      updater.dispose();
     });
-    createWindow();
+    createWindow(rdp);
+    updater.start();
 
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+      if (BrowserWindow.getAllWindows().length === 0) createWindow(rdp);
     });
   });
 

@@ -1,7 +1,7 @@
 import { mkdirSync, renameSync, rmdirSync, unlinkSync, writeFileSync } from 'fs';
 import { readFile } from 'fs/promises';
 import { basename, posix } from 'path';
-import { BrowserWindow, dialog, ipcMain } from 'electron';
+import { BrowserWindow, dialog, ipcMain, screen } from 'electron';
 import { app } from 'electron';
 import { nanoid } from 'nanoid';
 import {
@@ -14,6 +14,7 @@ import {
   type ExportResult,
   type ImportResult,
   type RdpLaunchRequest,
+  type RdpRectRequest,
   type SessionAuthRequest,
   type SessionOpenRequest,
   type SftpOpenRequest,
@@ -34,6 +35,7 @@ import { SessionManager } from './sessions/manager';
 import { SftpManager } from './sftp/manager';
 import { TunnelManager } from './tunnels/manager';
 import { VncManager } from './vnc/manager';
+import { Updater } from './updater';
 import type { Store } from './store';
 
 export function registerIpc(
@@ -42,7 +44,8 @@ export function registerIpc(
   rdp: RdpManager,
   vnc: VncManager,
   sftp: SftpManager,
-  tunnels: TunnelManager
+  tunnels: TunnelManager,
+  updater: Updater
 ): void {
   const resolveCredential = (host: { credentialId?: string | null }): CredentialSet | null =>
     host.credentialId ? store.loadCredentials().data.find((c) => c.id === host.credentialId) ?? null : null;
@@ -219,6 +222,29 @@ export function registerIpc(
       ? store.loadCredentials().data.find((c) => c.id === req.host.credentialId) ?? null
       : null;
     return rdp.launch(req.host, credential, req.sessionId);
+  });
+
+  // Прямоугольник панели вкладки (CSS-пиксели) → физические пиксели и в менеджер.
+  ipcMain.on(IPC.rdpRect, (e, req: RdpRectRequest) => {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    if (!win || win.isDestroyed()) return;
+    const sf = screen.getDisplayMatching(win.getBounds()).scaleFactor;
+    rdp.setRect(req.sessionId, {
+      x: Math.round(req.rect.x * sf),
+      y: Math.round(req.rect.y * sf),
+      width: Math.round(req.rect.width * sf),
+      height: Math.round(req.rect.height * sf)
+    });
+  });
+
+  // Переключение вкладок: показать окно активной RDP-сессии, спрятать остальные.
+  ipcMain.on(IPC.rdpActivate, (_e, sessionId: string) => {
+    rdp.activate(sessionId);
+  });
+
+  // Открытие/закрытие модального диалога: встроенные окна временно прячутся.
+  ipcMain.on(IPC.rdpOverlay, (_e, overlay: boolean) => {
+    rdp.setOverlay(overlay);
   });
 
   // ---- VNC ----
@@ -405,6 +431,22 @@ export function registerIpc(
 
   ipcMain.handle(IPC.checkCancel, (_e, req: CheckCancelRequest) => {
     for (const id of req.requestIds) activeChecks.get(id)?.abort();
+    return { ok: true };
+  });
+
+  // ---- автообновление ----
+  ipcMain.handle(IPC.updateCheck, async () => {
+    await updater.check(true);
+    return { ok: true };
+  });
+
+  ipcMain.handle(IPC.updateDownload, async () => {
+    await updater.download();
+    return { ok: true };
+  });
+
+  ipcMain.handle(IPC.updateInstall, () => {
+    updater.quitAndInstall();
     return { ok: true };
   });
 }

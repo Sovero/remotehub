@@ -90,6 +90,9 @@ export interface Settings {
   winBounds: WindowBounds | null;
   openTabs: OpenTabMeta[];
   snippets: Snippet[];
+  onboardingDone: boolean;
+  /** Справка об ошибке подключения уже открывалась автоматически (один раз). */
+  helpErrorShown: boolean;
 }
 
 export interface ProfilesFile {
@@ -118,7 +121,9 @@ export const DEFAULT_SETTINGS: Settings = {
   restoreTabs: true,
   winBounds: null,
   openTabs: [],
-  snippets: []
+  snippets: [],
+  onboardingDone: false,
+  helpErrorShown: false
 };
 
 export const DEFAULT_SSH: SshOptions = { keepalive: 30, agent: false, timeout: 10 };

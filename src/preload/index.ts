@@ -19,7 +19,8 @@ import {
   type TransferProgress,
   type TunnelAddRequest,
   type TunnelAddResult,
-  type TunnelInfo
+  type TunnelInfo,
+  type UpdateStatus
 } from '../shared/ipc-contract';
 import type { Settings, TreeNode } from '../shared/types';
 
@@ -109,6 +110,14 @@ const api = {
       cb(payload);
     ipcRenderer.on(IPC.rdpExited, listener);
     return () => ipcRenderer.removeListener(IPC.rdpExited, listener);
+  },
+  checkForUpdates: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.updateCheck),
+  downloadUpdate: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.updateDownload),
+  quitAndInstall: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.updateInstall),
+  onUpdateState: (cb: (state: UpdateStatus) => void): (() => void) => {
+    const listener = (_e: unknown, payload: { state: UpdateStatus }): void => cb(payload.state);
+    ipcRenderer.on(IPC.updateState, listener);
+    return () => ipcRenderer.removeListener(IPC.updateState, listener);
   },
   checkPort: (req: CheckPortRequest): Promise<CheckResult> => ipcRenderer.invoke(IPC.checkPort, req),
   checkPing: (req: CheckPingRequest): Promise<CheckResult> => ipcRenderer.invoke(IPC.checkPing, req),

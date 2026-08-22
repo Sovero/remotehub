@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { nanoid } from 'nanoid';
 import type { Group, Host, Settings, Snippet, TreeNode } from '@shared/types';
 import { createGroup, createHost } from '@shared/types';
-import type { SessionState } from '@shared/ipc-contract';
+import type { SessionState, UpdateStatus } from '@shared/ipc-contract';
 import {
   applyImport,
   duplicateHost,
@@ -47,6 +47,7 @@ export type DialogState =
   | { type: 'credentials' }
   | { type: 'snippets' }
   | { type: 'hotkeys' }
+  | { type: 'help'; sectionId?: string }
   | { type: 'tunnels'; sessionId: string; title: string; host: Host }
   | null;
 
@@ -59,7 +60,14 @@ interface AppState {
   dialog: DialogState;
   tabs: SessionTab[];
   activeTabId: string | null;
+  /** Состояние автообновления (транслируется из главного процесса). */
+  update: UpdateStatus;
   init: () => Promise<void>;
+  applyUpdateState: (state: UpdateStatus) => void;
+  checkUpdates: () => Promise<void>;
+  downloadUpdate: () => Promise<void>;
+  installUpdate: () => Promise<void>;
+  dismissUpdate: () => void;
   saveTree: (tree: TreeNode[]) => Promise<void>;
   setTree: (tree: TreeNode[]) => void;
   patchSettings: (patch: Partial<Settings>) => Promise<void>;
@@ -67,6 +75,11 @@ interface AppState {
   dismissToast: (id: number) => void;
   openDialog: (d: Exclude<DialogState, null>) => void;
   closeDialog: () => void;
+  /** Онбординг-мастер: первый запуск или ручной вызов. */
+  onboardingOpen: boolean;
+  openOnboarding: () => void;
+  closeOnboarding: () => void;
+  finishOnboarding: () => Promise<void>;
   /** Текущий вид левой панели: дерево профилей или встроенные настройки. */
   sidebarView: 'tree' | 'settings';
   setSidebarView: (v: 'tree' | 'settings') => void;
@@ -107,7 +120,9 @@ export const useApp = create<AppState>((set, get) => ({
     restoreTabs: true,
     winBounds: null,
     openTabs: [],
-    snippets: []
+    snippets: [],
+    onboardingDone: false,
+    helpErrorShown: false
   },
   appInfo: null,
   ready: false,
@@ -115,6 +130,23 @@ export const useApp = create<AppState>((set, get) => ({
   dialog: null,
   tabs: [],
   activeTabId: null,
+  update: { status: 'idle' },
+
+  applyUpdateState: (update) => set({ update }),
+
+  checkUpdates: async () => {
+    await window.api.checkForUpdates();
+  },
+
+  downloadUpdate: async () => {
+    await window.api.downloadUpdate();
+  },
+
+  installUpdate: async () => {
+    await window.api.quitAndInstall();
+  },
+
+  dismissUpdate: () => set({ update: { status: 'idle' } }),
 
   init: async () => {
     const [profiles, settings, info] = await Promise.all([
@@ -195,6 +227,13 @@ export const useApp = create<AppState>((set, get) => ({
 
   openDialog: (d) => set({ dialog: d }),
   closeDialog: () => set({ dialog: null }),
+  onboardingOpen: false,
+  openOnboarding: () => set({ onboardingOpen: true, dialog: null }),
+  closeOnboarding: () => set({ onboardingOpen: false }),
+  finishOnboarding: async () => {
+    await get().patchSettings({ onboardingDone: true });
+    set({ onboardingOpen: false });
+  },
   sidebarView: 'tree',
   setSidebarView: (sidebarView) => set({ sidebarView }),
 

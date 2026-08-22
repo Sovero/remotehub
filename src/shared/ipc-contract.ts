@@ -41,6 +41,13 @@ export const IPC = {
   tunnelsList: 'tunnels:list',
   rdpLaunch: 'rdp:launch',
   rdpExited: 'rdp:exited',
+  rdpRect: 'rdp:rect',
+  rdpActivate: 'rdp:activate',
+  rdpOverlay: 'rdp:overlay',
+  updateState: 'update:state',
+  updateCheck: 'update:check',
+  updateDownload: 'update:download',
+  updateInstall: 'update:install',
   checkPort: 'check:port',
   checkPing: 'check:ping',
   checkCancel: 'check:cancel',
@@ -162,6 +169,33 @@ export interface RdpExitedPayload {
   sessionId: string;
   code: number | null;
   error?: string;
+}
+
+/** Результат запуска RDP: mode сообщает, встроена ли сессия или открыта отдельным окном. */
+export interface RdpLaunchResult {
+  ok: boolean;
+  mode?: 'embedded' | 'window';
+  error?: string;
+}
+
+/** Прямоугольник панели вкладки в CSS-пикселях (main переводит в физические). */
+export interface RdpRectRequest {
+  sessionId: string;
+  rect: { x: number; y: number; width: number; height: number };
+}
+
+/** Состояние автообновления, которое main шлёт в рендерер. */
+export type UpdateStatus =
+  | { status: 'idle' }
+  | { status: 'checking' }
+  | { status: 'available'; version: string; releaseNotes?: string }
+  | { status: 'not-available' }
+  | { status: 'downloading'; percent: number; bytesPerSecond: number }
+  | { status: 'downloaded'; version: string }
+  | { status: 'error'; message: string };
+
+export interface UpdateStatePayload {
+  state: UpdateStatus;
 }
 
 export interface VncOpenRequest {

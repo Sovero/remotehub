@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { SessionState } from '@shared/ipc-contract';
 import { useApp } from './store';
 import Sidebar from './components/Sidebar';
@@ -7,10 +7,12 @@ import StatusBar from './components/StatusBar';
 import Welcome from './components/Welcome';
 import Toasts from './components/Toasts';
 import DialogRoot from './components/DialogRoot';
+import InteractiveTour from './components/InteractiveTour';
 import TerminalPane from './components/TerminalPane';
 import SessionOverlay from './components/SessionOverlay';
 import SftpPane from './components/SftpPane';
 import VncViewer from './components/VncViewer';
+import UpdateBar from './components/UpdateBar';
 
 export default function App(): React.JSX.Element {
   const init = useApp((s) => s.init);
@@ -20,6 +22,33 @@ export default function App(): React.JSX.Element {
   const activeTabId = useApp((s) => s.activeTabId);
   const theme = useApp((s) => s.settings.theme);
   const accent = useApp((s) => s.settings.accent);
+  const settings = useApp((s) => s.settings);
+
+  const onboardingOpen = useApp((s) => s.onboardingOpen);
+  // Авто-открытие мастера при первом запуске: один раз за сессию и не поверх открытого диалога.
+  const tourAutoOpened = useRef(false);
+  useEffect(() => {
+    if (
+      ready &&
+      !settings.onboardingDone &&
+      !tourAutoOpened.current &&
+      useApp.getState().dialog === null
+    ) {
+      tourAutoOpened.current = true;
+      useApp.getState().openOnboarding();
+    }
+  }, [ready, settings.onboardingDone]);
+
+  // Авто-открытие раздела «Неполадки» при первой ошибке подключения (один раз).
+  useEffect(() => {
+    if (!ready || settings.helpErrorShown) return;
+    if (tabs.some((t) => t.state.phase === 'error')) {
+      const s = useApp.getState();
+      s.closeOnboarding();
+      s.openDialog({ type: 'help', sectionId: 'troubleshooting' });
+      void s.patchSettings({ helpErrorShown: true });
+    }
+  }, [ready, settings.helpErrorShown, tabs]);
 
   // Тема и акцентный цвет: data-theme на <html> + CSS-переменные.
   useEffect(() => {
@@ -54,8 +83,17 @@ export default function App(): React.JSX.Element {
     const offMenu = window.api.onMenuCommand((command) => {
       const s = useApp.getState();
       if (command === 'hotkeys') s.openDialog({ type: 'hotkeys' });
-      else if (command === 'settings') s.setSidebarView('settings');
-      else if (command === 'new-session') s.openDialog({ type: 'new-session' });
+      else if (command === 'help') {
+        s.closeOnboarding();
+        s.openDialog({ type: 'help' });
+      } else if (command === 'settings') s.setSidebarView('settings');
+      else if (command === 'onboarding') {
+        s.closeDialog();
+        s.openOnboarding();
+      } else if (command === 'new-session') s.openDialog({ type: 'new-session' });
+    });
+    const offUpdate = window.api.onUpdateState((state) => {
+      useApp.getState().applyUpdateState(state);
     });
     return () => {
       offData();
@@ -63,6 +101,7 @@ export default function App(): React.JSX.Element {
       offRdp();
       offNotify();
       offMenu();
+      offUpdate();
     };
   }, []);
 
@@ -123,6 +162,7 @@ export default function App(): React.JSX.Element {
       </aside>
       <main className="workspace">
         <TabBar />
+        <UpdateBar />
         <section className="content">
           {tabs.length === 0 ? (
             tree.length === 0 ? (
@@ -158,6 +198,7 @@ export default function App(): React.JSX.Element {
       <StatusBar />
       <Toasts />
       <DialogRoot />
+      {onboardingOpen && <InteractiveTour />}
     </div>
   );
 }

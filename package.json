@@ -14,7 +14,9 @@
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
-    "dist": "npm run build && electron-builder --win --x64"
+    "help:shots": "node scripts/capture-help.mjs",
+    "dist": "npm run build && electron-builder --win --x64",
+    "dist:sign": "npm run build && node scripts/sign.mjs"
   },
   "build": {
     "appId": "com.remotehub.app",
@@ -27,16 +29,37 @@
       "build/icon.ico",
       "package.json"
     ],
+    "asarUnpack": [
+      "node_modules/koffi/**",
+      "node_modules/@koromix/**"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Sovero",
+        "repo": "remotehub"
+      }
+    ],
     "win": {
       "target": "nsis",
-      "icon": "build/icon.ico"
+      "icon": "build/icon.ico",
+      "verifyUpdateCodeSignature": true,
+      "signtoolOptions": {
+        "signingHashAlgorithms": [
+          "sha256"
+        ],
+        "rfc3161TimeStampServer": "http://timestamp.digicert.com",
+        "publisherName": "Remote Hub"
+      }
     },
     "defaultArch": "x64",
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
+      "runAfterFinish": true,
+      "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
+      "menuCategory": "Remote Hub",
       "shortcutName": "Remote Hub"
     }
   },
@@ -45,6 +68,8 @@
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-search": "^0.16.0",
     "@xterm/addon-web-links": "^0.12.0",
+    "electron-updater": "^6.8.9",
+    "koffi": "^3.1.6",
     "nanoid": "^6.0.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
@@ -61,7 +86,7 @@
     "@types/ssh2": "^1.15.5",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^5.2.0",
-    "electron": "^43.4.0",
+    "electron": "43.4.0",
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "typescript": "^7.0.2",
