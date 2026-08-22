@@ -490,20 +490,47 @@ function createWindow(rdp: RdpManager): void {
                 el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
                 const deadline = Date.now() + 8000;
                 while (Date.now() < deadline) {
-                  if (document.querySelector('.vnc-wrap')) return 'ok';
+                  if (document.querySelector('.vnc-wrap')) break;
                   if (document.querySelector('.session-overlay')) {
                     const msg = document.querySelector('.session-overlay-message')?.textContent || '';
                     return 'overlay:' + msg;
                   }
                   await new Promise((r) => setTimeout(r, 200));
                 }
-                return 'no-pane';
+                if (!document.querySelector('.vnc-wrap')) return 'no-pane';
+                // Ждём отрисовки реального кадра: canvas noVNC с ненулевыми пикселями.
+                const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+                const pixelDeadline = Date.now() + 8000;
+                let colored = 0;
+                while (Date.now() < pixelDeadline) {
+                  const canvas = document.querySelector('.vnc-canvas canvas');
+                  if (canvas) {
+                    try {
+                      const ctx = canvas.getContext('2d');
+                      if (ctx) {
+                        const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        let nonBlack = 0;
+                        for (let i = 0; i < img.data.length; i += 40) {
+                          if (img.data[i] > 10 || img.data[i + 1] > 10 || img.data[i + 2] > 10) nonBlack++;
+                        }
+                        colored = nonBlack;
+                        if (nonBlack > 0) {
+                          return 'ok:canvas=' + canvas.width + 'x' + canvas.height + ':colored=' + nonBlack;
+                        }
+                      }
+                    } catch {
+                      // canvas ещё не готов
+                    }
+                  }
+                  await wait(200);
+                }
+                return 'blank-canvas:' + colored;
               })()
             `)
             .then((res) => {
               clearTimeout(watchdog);
-              if (res === 'ok') {
-                console.log('[smoke] vnc flow OK — мост поднят, вьювер смонтирован');
+              if (typeof res === 'string' && res.startsWith('ok:')) {
+                console.log(`[smoke] vnc flow OK — мост поднят, кадр отрисован (${String(res).slice(3)})`);
                 app.exit(0);
               } else {
                 console.error(`[smoke] vnc flow failed: ${String(res)}`);

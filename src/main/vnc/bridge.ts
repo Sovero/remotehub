@@ -21,6 +21,10 @@ export function startBridge(targetHost: string, targetPort: number): Promise<Bri
     let wsClient: WebSocket | null = null;
     let settled = false;
     let closed = false;
+    // RFB-сервер шлёт свой баннер версии сразу после TCP-connect — раньше,
+    // чем noVNC успевает открыть WebSocket. Буферизуем ранние байты и
+    // отдаём их клиенту при подключении, иначе рукопожатие зависает навсегда.
+    let pending: Buffer[] = [];
 
     const cleanup = (): void => {
       if (closed) return;
@@ -79,6 +83,8 @@ export function startBridge(targetHost: string, targetPort: number): Promise<Bri
       tcp.on('data', (chunk) => {
         if (wsClient && wsClient.readyState === WebSocket.OPEN) {
           wsClient.send(chunk);
+        } else {
+          pending.push(Buffer.from(chunk));
         }
       });
     });
@@ -89,6 +95,10 @@ export function startBridge(targetHost: string, targetPort: number): Promise<Bri
         return;
       }
       wsClient = socket;
+      if (pending.length > 0) {
+        for (const chunk of pending) socket.send(chunk);
+        pending = [];
+      }
       socket.on('message', (data) => {
         if (tcp && !tcp.destroyed) tcp.write(data as Buffer);
       });

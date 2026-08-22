@@ -42,6 +42,35 @@ describe('vnc bridge', () => {
     ws.close();
   });
 
+  it('буферизует ранние байты сервера до подключения WebSocket-клиента', async () => {
+    // RFB-сервер шлёт свой баннер сразу после TCP-connect — раньше, чем
+    // noVNC успевает открыть WebSocket. Эти байты не должны теряться,
+    // иначе рукопожатие зависает навсегда.
+    const banner = Buffer.from('RFB 003.008\n');
+    tcpServer = createServer((socket) => {
+      socket.write(banner); // шлём баннер немедленно
+      socket.on('data', () => undefined);
+    });
+    tcpServer.listen(0, '127.0.0.1');
+    await once(tcpServer, 'listening');
+    const tcpPort = (tcpServer.address() as { port: number }).port;
+
+    bridge = await startBridge('127.0.0.1', tcpPort);
+
+    // Подключаемся ПОСЛЕ того, как баннер уже ушёл в мост. Слушатель
+    // вешаем до 'open', чтобы не пропустить баннер, отправленный мостом
+    // сразу после установки WebSocket-соединения.
+    const ws = new WebSocket(`ws://127.0.0.1:${bridge.port}`);
+    const bannerReceived = new Promise<Buffer>((resolve) => {
+      ws.on('message', (data) => resolve(Buffer.from(data as Buffer)));
+    });
+    await once(ws, 'open');
+
+    const got = await bannerReceived;
+    expect(got.toString()).toBe('RFB 003.008\n');
+    ws.close();
+  });
+
   it('возвращает ошибку, если VNC-сервер недоступен', async () => {
     // Порт, на котором никто не слушает (выбрали и сразу закрыли).
     const probe = createServer();
