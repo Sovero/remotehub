@@ -338,7 +338,8 @@ export default function SftpPane({ tab }: { tab: SessionTab }): React.JSX.Elemen
           {activeOps.map((o) => (
             <div key={o.opId} className={`sftp-op${o.error ? ' sftp-op--err' : ''}`}>
               <span className="sftp-op-name">
-                {o.direction === 'upload' ? '↑' : '↓'} {o.name}
+                <Icon name={o.direction === 'upload' ? 'upload' : 'download'} size={11} />
+                <span className="sftp-op-file">{o.name}</span>
               </span>
               <span className="sftp-op-meta">
                 {o.error
@@ -360,9 +361,12 @@ export default function SftpPane({ tab }: { tab: SessionTab }): React.JSX.Elemen
           {doneOps.slice(-3).map((o) => (
             <div key={o.opId} className="sftp-op sftp-op--done">
               <span className="sftp-op-name">
-                {o.direction === 'upload' ? '↑' : '↓'} {o.name}
+                <Icon name={o.direction === 'upload' ? 'upload' : 'download'} size={11} />
+                <span className="sftp-op-file">{o.name}</span>
               </span>
-              <span className="sftp-op-meta">✓ {fmtSize(o.transferred)}</span>
+              <span className="sftp-op-meta">
+                <Icon name="check" size={10} /> {fmtSize(o.transferred)}
+              </span>
             </div>
           ))}
         </div>
@@ -464,9 +468,9 @@ function FilePane(props: {
               >
                 <span className="sftp-row-name">
                   <span className={`sftp-ico${e.isDirectory ? ' sftp-ico--dir' : ''}`}>
-                    {e.isDirectory ? '▸' : '▢'}
+                    <Icon name={e.isDirectory ? 'folder' : 'file'} size={12} />
                   </span>
-                  {e.name}
+                  <span className="sftp-row-file">{e.name}</span>
                 </span>
                 <span className="sftp-row-size">{e.isDirectory ? '—' : fmtSize(e.size)}</span>
                 <span className="sftp-row-time">{fmtTime(e.mtime)}</span>

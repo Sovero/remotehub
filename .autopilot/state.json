@@ -1,12 +1,12 @@
 {
-  "slug": "group-drag-folder",
-  "title": "Анимация папки группы при перетаскивании хоста",
+  "slug": "sftp-icons",
+  "title": "Иконки SFTP вместо текстовых глифов",
   "mode": "full",
   "depth": "deep",
   "tier": "T0",
-  "startedAt": "2026-08-22T18:40:00+03:00",
-  "updatedAt": "2026-08-22T18:55:00+03:00",
-  "finishedAt": "2026-08-22T18:55:00+03:00",
+  "startedAt": "2026-08-22T19:00:00+03:00",
+  "updatedAt": "2026-08-22T19:25:00+03:00",
+  "finishedAt": "2026-08-22T19:25:00+03:00",
   "requirements": {
     "total": 6,
     "done": 6,
@@ -19,18 +19,19 @@
   "tickets": [
     {
       "id": "01",
-      "title": "Анимация папки группы при перетаскивании хоста",
+      "title": "Иконки SFTP вместо текстовых глифов",
       "requirements": ["R01", "R02", "R03", "R04", "A01", "A02"],
       "blockedBy": [],
       "wave": 1,
       "status": "done",
-      "startedAt": "2026-08-22T18:41:00+03:00",
-      "finishedAt": "2026-08-22T18:53:00+03:00",
+      "startedAt": "2026-08-22T19:01:00+03:00",
+      "finishedAt": "2026-08-22T19:22:00+03:00",
       "retries": 0,
       "files": [
-        "src/renderer/src/components/ProtocolIcon.tsx",
-        "src/renderer/src/components/TreeView.tsx",
+        "src/renderer/src/components/Icon.tsx",
+        "src/renderer/src/components/SftpPane.tsx",
         "src/renderer/src/styles/global.css",
+        "src/main/ipc.ts",
         "src/main/index.ts"
       ]
     }

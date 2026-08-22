@@ -1,6 +1,6 @@
 import { mkdirSync, renameSync, rmdirSync, unlinkSync, writeFileSync } from 'fs';
 import { readFile } from 'fs/promises';
-import { basename, posix } from 'path';
+import { basename, join, posix } from 'path';
 import { BrowserWindow, dialog, ipcMain, screen } from 'electron';
 import { app } from 'electron';
 import { nanoid } from 'nanoid';
@@ -315,15 +315,22 @@ export function registerIpc(
 
   ipcMain.handle(IPC.sftpDownload, async (e, req: { sessionId: string; remotePath: string }) => {
     const win = BrowserWindow.fromWebContents(e.sender);
-    const options: Electron.SaveDialogOptions = {
-      title: 'Сохранить как',
-      defaultPath: basename(req.remotePath),
-      filters: [{ name: 'Все файлы', extensions: ['*'] }]
-    };
-    const { canceled, filePath } = win
-      ? await dialog.showSaveDialog(win, options)
-      : await dialog.showSaveDialog(options);
-    if (canceled || !filePath) return { ok: false, canceled: true };
+    let filePath: string;
+    if (process.env.RH_SMOKE === '1') {
+      // Смоук: нативный диалог не показываем, сохраняем в temp.
+      filePath = join(app.getPath('temp'), `rh-sftp-dl-${nanoid(8)}-${basename(req.remotePath)}`);
+    } else {
+      const options: Electron.SaveDialogOptions = {
+        title: 'Сохранить как',
+        defaultPath: basename(req.remotePath),
+        filters: [{ name: 'Все файлы', extensions: ['*'] }]
+      };
+      const { canceled, filePath: fp } = win
+        ? await dialog.showSaveDialog(win, options)
+        : await dialog.showSaveDialog(options);
+      if (canceled || !fp) return { ok: false, canceled: true };
+      filePath = fp;
+    }
     const opId = nanoid(8);
     try {
       await sftp.download(req.sessionId, req.remotePath, filePath, (p) => broadcast(IPC.sftpProgress, p), opId);

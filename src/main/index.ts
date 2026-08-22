@@ -907,6 +907,89 @@ function createWindow(rdp: RdpManager): void {
             });
           return;
         }
+        // SFTP: реальный список каталога через fake-сервер — иконки файла/папки,
+        // передача с иконкой направления и завершение с галочкой.
+        if (process.env.RH_SMOKE_SFTP === '1') {
+          await mainWindow?.webContents
+            .executeJavaScript(`
+              (async () => {
+                const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+                const log = (m) => console.log('[sftp-smoke]', m);
+                const hostRow = document.querySelector('.tree-host');
+                if (!hostRow) return 'no-host';
+                hostRow.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 60, clientY: 120 }));
+                let sftpItem = null;
+                const d1 = Date.now() + 6000;
+                while (Date.now() < d1) {
+                  sftpItem = [...document.querySelectorAll('.ctxmenu-item')].find((b) => (b.textContent || '').includes('SFTP'));
+                  if (sftpItem) break;
+                  await wait(100);
+                }
+                if (!sftpItem) return 'no-sftp-item';
+                log('clicking sftp item');
+                sftpItem.click();
+                // Ждём список каталога (папка var + файлы) — только удалённая колонка.
+                let rows = [];
+                const d2 = Date.now() + 20000;
+                while (Date.now() < d2) {
+                  rows = [...document.querySelectorAll('.sftp-pane-col--remote .sftp-row')];
+                  if (rows.length >= 3) break;
+                  await wait(150);
+                }
+                log('remote-rows=' + rows.length);
+                if (rows.length < 3) return 'no-rows:' + rows.length;
+                const dirRow = rows.find((r) => r.querySelector('.sftp-ico--dir'));
+                const fileRow = rows.find((r) => !r.querySelector('.sftp-ico--dir'));
+                if (!dirRow || !fileRow) return 'no-ico-kinds';
+                const dirD = (dirRow.querySelector('.sftp-ico svg path') || {}).getAttribute?.('d') || '';
+                const fileD = (fileRow.querySelector('.sftp-ico svg path') || {}).getAttribute?.('d') || '';
+                if (!dirD.startsWith('M2.2 4.2')) return 'bad-dir-icon:' + dirD.slice(0, 24);
+                if (!fileD.startsWith('M3.2 2.4')) return 'bad-file-icon:' + fileD.slice(0, 24);
+                // Скачивание файла: двойной клик по строке файла (удалённая сторона).
+                fileRow.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+                let sawDownload = false;
+                const d3 = Date.now() + 20000;
+                while (Date.now() < d3) {
+                  const op = document.querySelector('.sftp-op');
+                  if (op) {
+                    const ic = op.querySelector('.sftp-op-name svg path');
+                    if (ic && (ic.getAttribute('d') || '').startsWith('M8 2.6')) { sawDownload = true; break; }
+                  }
+                  await wait(150);
+                }
+                log('download op seen');
+                if (!sawDownload) return 'no-download-op';
+                let sawDone = false;
+                const d4 = Date.now() + 20000;
+                while (Date.now() < d4) {
+                  const op = document.querySelector('.sftp-op--done');
+                  if (op) {
+                    const chk = op.querySelector('.sftp-op-meta svg path');
+                    if (chk && (chk.getAttribute('d') || '').startsWith('M3 8.4')) { sawDone = true; break; }
+                  }
+                  await wait(150);
+                }
+                if (!sawDone) return 'no-done-check';
+                return 'ok:rows=' + rows.length;
+              })()
+            `)
+            .then((res) => {
+              clearTimeout(watchdog);
+              if (typeof res === 'string' && res.startsWith('ok:')) {
+                console.log(`[smoke] sftp flow OK — ${String(res).slice(3)}`);
+                app.exit(0);
+              } else {
+                console.error(`[smoke] sftp flow failed: ${String(res)}`);
+                app.exit(1);
+              }
+            })
+            .catch((err) => {
+              clearTimeout(watchdog);
+              console.error(`[smoke] sftp flow rejected: ${String(err && err.message ? err.message : err)}`);
+              app.exit(1);
+            });
+          return;
+        }
         if (process.env.RH_SMOKE_RDP === '1') {
           await mainWindow?.webContents
             .executeJavaScript(`

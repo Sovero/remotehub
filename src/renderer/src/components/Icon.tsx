@@ -34,6 +34,7 @@ export type IconName =
   | 'copy'
   | 'play'
   | 'folder'
+  | 'file'
   | 'spinner';
 
 const PATHS: Record<IconName, React.JSX.Element> = {
@@ -136,6 +137,12 @@ const PATHS: Record<IconName, React.JSX.Element> = {
   ),
   play: <path d="M5.6 3.6v8.8l6.8-4.4z" />,
   folder: <path d="M2.2 4.2h3.9l1.5 1.7h6.2a1.1 1.1 0 0 1 1.1 1.1v5.6a1.1 1.1 0 0 1-1.1 1.1H3.3a1.1 1.1 0 0 1-1.1-1.1V4.2z" />,
+  file: (
+    <>
+      <path d="M3.2 2.4h6.3l3.1 3.1v8.1a1 1 0 0 1-1 1H3.2a1 1 0 0 1-1-1V3.4a1 1 0 0 1 1-1z" />
+      <path d="M9.5 2.4v3.1h3.1" />
+    </>
+  ),
   // Дуговая «загрузочная» иконка: вращается через .icon-spin.
   spinner: <path d="M8 1.8a6.2 6.2 0 1 1-6.15 5.05" />
 };
