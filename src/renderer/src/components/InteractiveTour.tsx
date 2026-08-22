@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useApp } from '../store';
+import Icon from './Icon';
 
 interface TourStep {
   /** CSS-селектор целевого элемента. */
@@ -263,21 +264,21 @@ export default function InteractiveTour(): React.JSX.Element {
         </div>
         <div className="tour-tooltip-footer">
           <button className="btn btn--ghost btn--sm" onClick={closeOnboarding}>
-            Пропустить
+            <Icon name="close" size={12} /> Пропустить
           </button>
           <span className="tour-tooltip-spacer" />
           {!isFirst && (
             <button className="btn btn--sm" onClick={() => goTo(step - 1)}>
-              ← Назад
+              <Icon name="arrow-left" size={12} /> Назад
             </button>
           )}
           {isLast ? (
             <button className="btn btn--primary btn--sm" onClick={() => void finishOnboarding()}>
-              Завершить
+              <Icon name="check" size={12} /> Завершить
             </button>
           ) : (
             <button className="btn btn--primary btn--sm" onClick={() => goTo(step + 1)}>
-              Далее →
+              Далее <Icon name="arrow-right" size={12} />
             </button>
           )}
         </div>

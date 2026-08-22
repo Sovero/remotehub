@@ -1,4 +1,5 @@
 import { useApp } from '../store';
+import Icon from './Icon';
 
 export default function Welcome(): React.JSX.Element {
   const openDialog = useApp((s) => s.openDialog);
@@ -13,10 +14,10 @@ export default function Welcome(): React.JSX.Element {
       </p>
       <div className="welcome-actions">
         <button className="btn btn--primary" onClick={() => openDialog({ type: 'group', group: null, parentId: null })}>
-          Добавить группу
+          <Icon name="folder-plus" size={14} /> Добавить группу
         </button>
         <button className="btn btn--primary" onClick={() => openDialog({ type: 'host', host: null, parentId: null })}>
-          Добавить хост
+          <Icon name="host" size={14} /> Добавить хост
         </button>
       </div>
     </div>

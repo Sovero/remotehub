@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CredentialDto } from '@shared/ipc-contract';
 import { useApp } from '../../store';
+import Icon from '../Icon';
 import Modal from './Modal';
 
 type View = { mode: 'list' } | { mode: 'edit'; set: CredentialDto | null };
@@ -60,7 +61,7 @@ export default function CredentialsDialog({ onClose }: { onClose: () => void }):
                   </div>
                   <div className="cred-item-actions">
                     <button className="btn btn--sm" onClick={() => setView({ mode: 'edit', set: c })}>
-                      Изменить
+                      <Icon name="pencil" size={12} /> Изменить
                     </button>
                     <button
                       className="btn btn--sm btn--danger"
@@ -70,7 +71,7 @@ export default function CredentialsDialog({ onClose }: { onClose: () => void }):
                         }
                       }}
                     >
-                      Удалить
+                      <Icon name="trash" size={12} /> Удалить
                     </button>
                   </div>
                 </div>
@@ -79,10 +80,10 @@ export default function CredentialsDialog({ onClose }: { onClose: () => void }):
           )}
           <div className="modal-actions">
             <button className="btn" onClick={onClose}>
-              Закрыть
+              <Icon name="close" size={13} /> Закрыть
             </button>
             <button className="btn btn--primary" onClick={() => setView({ mode: 'edit', set: null })}>
-              Добавить набор
+              <Icon name="plus" size={13} /> Добавить набор
             </button>
           </div>
         </div>
@@ -207,7 +208,7 @@ function CredentialEditor({
             placeholder="Путь к файлу ключа"
           />
           <button className="btn" onClick={pickKey}>
-            Обзор…
+            <Icon name="folder" size={13} /> Обзор…
           </button>
         </div>
         <input
@@ -228,10 +229,10 @@ function CredentialEditor({
 
       <div className="modal-actions">
         <button className="btn" onClick={onCancel}>
-          Назад
+          <Icon name="arrow-left" size={13} /> Назад
         </button>
         <button className="btn btn--primary" onClick={save}>
-          Сохранить
+          <Icon name="check" size={13} /> Сохранить
         </button>
       </div>
     </div>

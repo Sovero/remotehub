@@ -3,6 +3,7 @@ import type { CredentialDto } from '@shared/ipc-contract';
 import type { Host, Protocol } from '@shared/types';
 import { defaultPort } from '@shared/types';
 import { makeHost, useApp } from '../../store';
+import Icon from '../Icon';
 import Modal from './Modal';
 
 const PROTOCOLS: { value: Protocol; label: string }[] = [
@@ -360,10 +361,10 @@ export default function HostDialog({
 
         <div className="modal-actions">
           <button className="btn" onClick={onClose}>
-            Отмена
+            <Icon name="close" size={13} /> Отмена
           </button>
           <button className="btn btn--primary" onClick={save}>
-            {host ? 'Сохранить' : 'Добавить'}
+            <Icon name="check" size={13} /> {host ? 'Сохранить' : 'Добавить'}
           </button>
         </div>
       </div>

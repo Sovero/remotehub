@@ -1,4 +1,5 @@
 import { useApp } from '../../store';
+import Icon from '../Icon';
 import Modal from './Modal';
 
 export default function ImportDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
@@ -17,13 +18,13 @@ export default function ImportDialog({ onClose }: { onClose: () => void }): Reac
       </div>
       <div className="modal-actions">
         <button className="btn" onClick={onClose}>
-          Отмена
+          <Icon name="close" size={13} /> Отмена
         </button>
         <button className="btn" onClick={() => run('merge')}>
-          Слить с текущими
+          <Icon name="copy" size={13} /> Слить с текущими
         </button>
         <button className="btn btn--primary" onClick={() => run('replace')}>
-          Заменить всё
+          <Icon name="import" size={13} /> Заменить всё
         </button>
       </div>
     </Modal>

@@ -1,3 +1,4 @@
+import Icon from '../Icon';
 import Modal from './Modal';
 
 export default function ConfirmDialog({
@@ -20,7 +21,7 @@ export default function ConfirmDialog({
       <div className="confirm-text">{message}</div>
       <div className="modal-actions">
         <button className="btn" onClick={onClose}>
-          Отмена
+          <Icon name="close" size={13} /> Отмена
         </button>
         <button
           className={`btn ${danger ? 'btn--danger' : 'btn--primary'}`}
@@ -29,7 +30,7 @@ export default function ConfirmDialog({
             onClose();
           }}
         >
-          {confirmLabel ?? 'Подтвердить'}
+          {danger ? <Icon name="trash" size={13} /> : <Icon name="check" size={13} />} {confirmLabel ?? 'Подтвердить'}
         </button>
       </div>
     </Modal>

@@ -1,4 +1,5 @@
 import { useApp } from '../store';
+import Icon from './Icon';
 
 /** Тонкий баннер автообновления: проверка, скачивание, готовность к установке, ошибка. */
 export default function UpdateBar(): React.JSX.Element | null {
@@ -15,7 +16,7 @@ export default function UpdateBar(): React.JSX.Element | null {
       <div className="update-bar update-bar--info">
         <span className="update-bar__text">Проверка обновлений…</span>
         <button className="update-bar__x" onClick={dismissUpdate} title="Скрыть" aria-label="Скрыть">
-          ✕
+          <Icon name="close" size={10} />
         </button>
       </div>
     );
@@ -28,10 +29,10 @@ export default function UpdateBar(): React.JSX.Element | null {
           Доступна версия <strong>{update.version}</strong>
         </span>
         <button className="btn btn--primary btn--sm" onClick={() => void downloadUpdate()}>
-          Скачать
+          <Icon name="download" size={12} /> Скачать
         </button>
         <button className="update-bar__x" onClick={dismissUpdate} title="Скрыть" aria-label="Скрыть">
-          ✕
+          <Icon name="close" size={10} />
         </button>
       </div>
     );
@@ -56,7 +57,7 @@ export default function UpdateBar(): React.JSX.Element | null {
           Версия <strong>{update.version}</strong> готова к установке
         </span>
         <button className="btn btn--primary btn--sm" onClick={() => void installUpdate()}>
-          Перезапустить и установить
+          <Icon name="power" size={12} /> Перезапустить и установить
         </button>
         <button className="btn btn--sm" onClick={dismissUpdate}>
           Позже
@@ -72,10 +73,10 @@ export default function UpdateBar(): React.JSX.Element | null {
         Ошибка обновления: {update.message}
       </span>
       <button className="btn btn--sm" onClick={() => void checkUpdates()}>
-        Повторить
+        <Icon name="refresh" size={12} /> Повторить
       </button>
       <button className="update-bar__x" onClick={dismissUpdate} title="Скрыть" aria-label="Скрыть">
-        ✕
+        <Icon name="close" size={10} />
       </button>
     </div>
   );

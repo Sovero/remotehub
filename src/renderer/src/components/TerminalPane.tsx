@@ -6,6 +6,7 @@ import { SearchAddon } from '@xterm/addon-search';
 import 'xterm/css/xterm.css';
 import { registerTermPaste } from '../lib/termRegistry';
 import { useApp, type SessionTab } from '../store';
+import Icon from './Icon';
 
 const DARK_THEME = {
   background: '#101014',
@@ -243,14 +244,14 @@ export default function TerminalPane({
             }}
             autoFocus
           />
-          <button className="btn btn--sm" onClick={() => runSearch(-1)} title="Назад (Shift+Enter)">
-            ↑
+          <button className="btn btn--sm btn--icon" onClick={() => runSearch(-1)} title="Назад (Shift+Enter)">
+            <Icon name="chevron-up" size={13} />
           </button>
-          <button className="btn btn--sm" onClick={() => runSearch(1)} title="Далее (Enter)">
-            ↓
+          <button className="btn btn--sm btn--icon" onClick={() => runSearch(1)} title="Далее (Enter)">
+            <Icon name="chevron-down" size={13} />
           </button>
-          <button className="btn btn--sm" onClick={() => setSearchOpen(false)} title="Закрыть (Esc)">
-            ✕
+          <button className="btn btn--sm btn--icon" onClick={() => setSearchOpen(false)} title="Закрыть (Esc)">
+            <Icon name="close" size={13} />
           </button>
         </div>
       )}

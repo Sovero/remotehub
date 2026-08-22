@@ -3,6 +3,7 @@ import type { LocalEntry, SftpEntry, TransferProgress } from '@shared/ipc-contra
 import { findNode } from '@shared/tree';
 import type { Host } from '@shared/types';
 import { useApp, type SessionTab } from '../store';
+import Icon from './Icon';
 
 interface Op {
   opId: string;
@@ -418,19 +419,19 @@ function FilePane(props: {
     <div className={`sftp-pane-col${isRemote ? ' sftp-pane-col--remote' : ''}`}>
       <div className="sftp-col-head">
         <span className="sftp-col-title">{props.title}</span>
-        <button className="btn btn--sm btn--ghost" title="Обновить" onClick={props.onRefresh}>
-          ⟳
+        <button className="btn btn--sm btn--ghost btn--icon" title="Обновить" onClick={props.onRefresh}>
+          <Icon name="refresh" size={13} />
         </button>
-        <button className="btn btn--sm btn--ghost" title="Вверх" disabled={!props.canGoUp} onClick={props.onGoUp}>
-          ↑
+        <button className="btn btn--sm btn--ghost btn--icon" title="Вверх" disabled={!props.canGoUp} onClick={props.onGoUp}>
+          <Icon name="arrow-up" size={13} />
         </button>
         {isRemote && props.onUpload && (
           <button className="btn btn--sm" title="Загрузить файл на сервер" onClick={props.onUpload}>
-            ↑ Загрузить
+            <Icon name="upload" size={13} /> Загрузить
           </button>
         )}
         <button className="btn btn--sm" title="Новая папка" onClick={props.onNewFolder}>
-          ＋ Папка
+          <Icon name="folder-plus" size={13} /> Папка
         </button>
       </div>
       <div className="sftp-col-path" title={props.path}>
@@ -467,41 +468,41 @@ function FilePane(props: {
                 {isSel && (
                   <span className="sftp-row-actions">
                     {e.isDirectory && (
-                      <button className="btn btn--sm btn--ghost" title="Открыть" onClick={() => props.onNavigate(e.name)}>
-                        ▶
+                      <button className="btn btn--sm btn--ghost btn--icon" title="Открыть" onClick={() => props.onNavigate(e.name)}>
+                        <Icon name="arrow-right" size={13} />
                       </button>
                     )}
                     {!e.isDirectory && isRemote && props.onDownload && (
                       <button
-                        className="btn btn--sm btn--ghost"
+                        className="btn btn--sm btn--ghost btn--icon"
                         title="Скачать"
                         onClick={(ev) => {
                           ev.stopPropagation();
                           props.onDownload?.(e.name);
                         }}
                       >
-                        ↓
+                        <Icon name="download" size={13} />
                       </button>
                     )}
                     <button
-                      className="btn btn--sm btn--ghost"
+                      className="btn btn--sm btn--ghost btn--icon"
                       title="Переименовать"
                       onClick={(ev) => {
                         ev.stopPropagation();
                         props.onRename(e.name);
                       }}
                     >
-                      ✎
+                      <Icon name="pencil" size={13} />
                     </button>
                     <button
-                      className="btn btn--sm btn--ghost btn--danger"
+                      className="btn btn--sm btn--ghost btn--icon btn--danger"
                       title="Удалить"
                       onClick={(ev) => {
                         ev.stopPropagation();
                         props.onDelete(e.name, e.isDirectory);
                       }}
                     >
-                      🗑
+                      <Icon name="trash" size={13} />
                     </button>
                   </span>
                 )}

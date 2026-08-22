@@ -14,6 +14,7 @@ import SessionOverlay from './components/SessionOverlay';
 import SftpPane from './components/SftpPane';
 import VncViewer from './components/VncViewer';
 import UpdateBar from './components/UpdateBar';
+import Icon from './components/Icon';
 
 export default function App(): React.JSX.Element {
   const init = useApp((s) => s.init);
@@ -325,11 +326,11 @@ function RdpPane({
           </label>
           {!host?.rdp.multiMonitor && (
             <button className="btn btn--primary" onClick={() => void relaunchRdp(tab.sessionId, { screenMode: 'window' })}>
-              Встроить во вкладку
+              <Icon name="window" size={13} /> Встроить во вкладку
             </button>
           )}
           <button className="btn" onClick={() => void closeTab(tab.sessionId, true)}>
-            Закрыть вкладку
+            <Icon name="close" size={13} /> Закрыть вкладку
           </button>
         </div>
       </div>
@@ -354,7 +355,7 @@ function RdpPane({
           title="Открыть сессию в полноэкранном режиме"
           onClick={() => void relaunchRdp(tab.sessionId, { screenMode: 'fullscreen' })}
         >
-          ⛶ Полный экран
+          <Icon name="expand" size={13} /> Полный экран
         </button>
       </div>
       <div className="rdp-stage" ref={paneRef}>
@@ -363,10 +364,10 @@ function RdpPane({
         <div className="rdp-text">Рабочий стол открыт прямо во вкладке.</div>
         <div className="rdp-actions">
           <button className="btn btn--primary" onClick={() => void reconnectTab(tab.sessionId)}>
-            Запустить заново
+            <Icon name="refresh" size={13} /> Запустить заново
           </button>
           <button className="btn" onClick={() => void closeTab(tab.sessionId, true)}>
-            Закрыть вкладку
+            <Icon name="close" size={13} /> Закрыть вкладку
           </button>
         </div>
       </div>

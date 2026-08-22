@@ -321,6 +321,26 @@ body {
   font-size: 12px;
 }
 
+/* Иконки в кнопках: единое выравнивание и размер */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.btn svg {
+  flex-shrink: 0;
+}
+
+.btn--icon {
+  padding: 6px;
+}
+
+.btn--icon.btn--sm {
+  padding: 3px;
+}
+
 /* ---------- toasts ---------- */
 
 .toasts {
@@ -605,7 +625,9 @@ textarea.input {
 }
 
 .ctxmenu-item {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   text-align: left;
   font-family: var(--font-ui);
@@ -616,6 +638,11 @@ textarea.input {
   border-radius: 4px;
   padding: 6px 10px;
   cursor: pointer;
+}
+
+.ctxmenu-icon {
+  flex-shrink: 0;
+  opacity: 0.75;
 }
 
 .ctxmenu-item:hover:not(:disabled) {
@@ -1282,6 +1309,16 @@ textarea.input {
 
 .host-list-name {
   font-weight: 500;
+}
+
+.host-list-go {
+  margin-left: 4px;
+  opacity: 0.4;
+  flex-shrink: 0;
+}
+
+.host-list-item:hover .host-list-go {
+  opacity: 1;
 }
 
 .host-list-sub {

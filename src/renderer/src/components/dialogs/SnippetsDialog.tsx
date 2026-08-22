@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { nanoid } from 'nanoid';
 import type { Snippet } from '@shared/types';
 import { useApp } from '../../store';
+import Icon from '../Icon';
 import Modal from './Modal';
 
 export default function SnippetsDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
@@ -52,7 +53,7 @@ export default function SnippetsDialog({ onClose }: { onClose: () => void }): Re
                 </div>
                 <div className="cred-item-actions">
                   <button className="btn btn--sm" onClick={() => setEditing({ snippet: s })}>
-                    Изменить
+                    <Icon name="pencil" size={12} /> Изменить
                   </button>
                   <button
                     className="btn btn--sm btn--danger"
@@ -61,7 +62,7 @@ export default function SnippetsDialog({ onClose }: { onClose: () => void }): Re
                       pushToast(`Сниппет «${s.name}» удалён`);
                     }}
                   >
-                    Удалить
+                    <Icon name="trash" size={12} /> Удалить
                   </button>
                 </div>
               </div>
@@ -70,10 +71,10 @@ export default function SnippetsDialog({ onClose }: { onClose: () => void }): Re
         )}
         <div className="modal-actions">
           <button className="btn" onClick={onClose}>
-            Закрыть
+            <Icon name="close" size={13} /> Закрыть
           </button>
           <button className="btn btn--primary" onClick={() => setEditing({ snippet: null })}>
-            Добавить сниппет
+            <Icon name="plus" size={13} /> Добавить сниппет
           </button>
         </div>
       </div>
@@ -112,12 +113,12 @@ function SnippetEditor({
         </div>
         <div className="form-hint">Сниппет вставляется в активный терминал без нажатия Enter.</div>
         <div className="modal-actions">
-          <button className="btn" onClick={onCancel}>
-            Назад
-          </button>
-          <button className="btn btn--primary" onClick={() => onSave(name, command, initial?.id)}>
-            Сохранить
-          </button>
+        <button className="btn" onClick={onCancel}>
+          <Icon name="arrow-left" size={13} /> Назад
+        </button>
+        <button className="btn btn--primary" onClick={() => onSave(name, command, initial?.id)}>
+          <Icon name="check" size={13} /> Сохранить
+        </button>
         </div>
       </div>
     </Modal>

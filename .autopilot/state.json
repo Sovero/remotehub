@@ -1,15 +1,15 @@
 {
-  "slug": "vnc-errors",
-  "title": "Понятные сообщения об ошибках в VNC-вкладке",
+  "slug": "ui-icons",
+  "title": "Иконки для кнопок",
   "mode": "full",
   "depth": "deep",
   "tier": "T0",
-  "startedAt": "2026-08-22T13:30:00+03:00",
-  "updatedAt": "2026-08-22T10:45:00.000Z",
-  "finishedAt": "2026-08-22T10:45:00.000Z",
+  "startedAt": "2026-08-22T14:00:00+03:00",
+  "updatedAt": "2026-08-22T11:15:00.000Z",
+  "finishedAt": "2026-08-22T11:15:00.000Z",
   "requirements": {
-    "total": 6,
-    "done": 6,
+    "total": 4,
+    "done": 4,
     "inTicket": 0,
     "inSpec": 0,
     "placeholder": 0,
@@ -19,31 +19,35 @@
   "tickets": [
     {
       "id": "01",
-      "title": "Понятные сообщения об ошибках в VNC-вкладке",
+      "title": "Иконки для кнопок",
       "requirements": [
         "R01",
-        "R02",
         "R01.1",
         "R01.2",
-        "A01",
-        "A02"
+        "A01"
       ],
       "blockedBy": [],
       "wave": 1,
       "status": "done",
-      "startedAt": "2026-08-22T13:31:00+03:00",
-      "finishedAt": "2026-08-22T10:45:00.000Z",
+      "startedAt": "2026-08-22T14:01:00+03:00",
+      "finishedAt": "2026-08-22T11:15:00.000Z",
       "retries": 0,
       "files": [
-        "src/main/vnc/bridge.ts",
-        "src/shared/ipc-contract.ts",
-        "src/main/vnc/manager.ts",
-        "src/main/index.ts",
-        "src/preload/index.ts",
-        "src/renderer/src/App.tsx",
+        "src/renderer/src/components/Icon.tsx",
+        "src/renderer/src/components/Sidebar.tsx",
+        "src/renderer/src/components/TabBar.tsx",
+        "src/renderer/src/components/SessionOverlay.tsx",
+        "src/renderer/src/components/App.tsx",
         "src/renderer/src/components/VncViewer.tsx",
-        "src/renderer/src/types/novnc.d.ts",
-        "tests/vnc-bridge.test.ts"
+        "src/renderer/src/components/SftpPane.tsx",
+        "src/renderer/src/components/TerminalPane.tsx",
+        "src/renderer/src/components/ContextMenu.tsx",
+        "src/renderer/src/components/Welcome.tsx",
+        "src/renderer/src/components/UpdateBar.tsx",
+        "src/renderer/src/components/InteractiveTour.tsx",
+        "src/renderer/src/components/dialogs/",
+        "src/renderer/src/styles/global.css",
+        "src/main/index.ts"
       ]
     }
   ],

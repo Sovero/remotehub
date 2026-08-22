@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useApp } from '../../store';
+import Icon from '../Icon';
 import Modal from './Modal';
 
 export default function PasswordDialog({
@@ -43,10 +44,10 @@ export default function PasswordDialog({
         </div>
         <div className="modal-actions">
           <button className="btn" onClick={closeDialog}>
-            Отмена
+            <Icon name="close" size={13} /> Отмена
           </button>
           <button className="btn btn--primary" disabled={busy || !password} onClick={submit}>
-            Подключиться
+            <Icon name="play" size={13} /> Подключиться
           </button>
         </div>
       </div>

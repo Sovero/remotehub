@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Group } from '@shared/types';
 import { makeGroup, useApp } from '../../store';
+import Icon from '../Icon';
 import Modal from './Modal';
 
 export default function GroupDialog({
@@ -49,10 +50,10 @@ export default function GroupDialog({
         {error && <div className="form-error">{error}</div>}
         <div className="modal-actions">
           <button className="btn" onClick={onClose}>
-            Отмена
+            <Icon name="close" size={13} /> Отмена
           </button>
           <button className="btn btn--primary" onClick={save}>
-            {group ? 'Переименовать' : 'Создать'}
+            <Icon name="check" size={13} /> {group ? 'Переименовать' : 'Создать'}
           </button>
         </div>
       </div>

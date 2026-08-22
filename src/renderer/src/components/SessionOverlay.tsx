@@ -1,4 +1,5 @@
 import { useApp, type SessionTab } from '../store';
+import Icon from './Icon';
 
 export default function SessionOverlay({ tab }: { tab: SessionTab }): React.JSX.Element | null {
   const reconnectTab = useApp((s) => s.reconnectTab);
@@ -17,10 +18,10 @@ export default function SessionOverlay({ tab }: { tab: SessionTab }): React.JSX.
         </div>
         <div className="session-overlay-actions">
           <button className="btn btn--primary" onClick={() => void reconnectTab(tab.sessionId)}>
-            Переподключить
+            <Icon name="refresh" size={13} /> Переподключить
           </button>
           <button className="btn" onClick={() => void closeTab(tab.sessionId, true)}>
-            Закрыть вкладку
+            <Icon name="close" size={13} /> Закрыть вкладку
           </button>
         </div>
       </div>

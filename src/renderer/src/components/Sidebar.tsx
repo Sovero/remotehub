@@ -4,6 +4,7 @@ import { defaultPort, type Host, type TreeNode } from '@shared/types';
 import { collectTags, countHosts, filterTree, findParent, flattenHosts, matchesHostQuery } from '@shared/tree';
 import { useApp } from '../store';
 import ContextMenu, { type MenuItem } from './ContextMenu';
+import Icon from './Icon';
 import SettingsForm from './SettingsForm';
 import TreeView, { type HostStatusMap, type MenuRequest } from './TreeView';
 
@@ -218,28 +219,38 @@ export default function Sidebar(): React.JSX.Element {
   const buildMenu = (node: TreeNode): MenuItem[] => {
     if (node.kind === 'group') {
       return [
-        { label: 'Добавить хост сюда…', action: () => openDialog({ type: 'host', host: null, parentId: node.id }) },
-        { label: 'Добавить группу сюда…', action: () => openDialog({ type: 'group', group: null, parentId: node.id }) },
+        {
+          label: 'Добавить хост сюда…',
+          icon: 'host',
+          action: () => openDialog({ type: 'host', host: null, parentId: node.id })
+        },
+        {
+          label: 'Добавить группу сюда…',
+          icon: 'folder-plus',
+          action: () => openDialog({ type: 'group', group: null, parentId: node.id })
+        },
         {
           label: 'Переименовать…',
+          icon: 'pencil',
           action: () => openDialog({ type: 'group', group: node, parentId: findParent(tree, node.id)?.id ?? null })
         },
-        { label: 'Удалить', danger: true, action: () => requestDelete(node) }
+        { label: 'Удалить', icon: 'trash', danger: true, action: () => requestDelete(node) }
       ];
     }
     const host = node as Host;
-    const items: MenuItem[] = [{ label: 'Подключить', action: () => void openSession(host) }];
+    const items: MenuItem[] = [{ label: 'Подключить', icon: 'play', action: () => void openSession(host) }];
     if (host.protocol === 'ssh') {
-      items.push({ label: 'SFTP', action: () => void openSftp(host) });
+      items.push({ label: 'SFTP', icon: 'folder', action: () => void openSftp(host) });
     }
     items.push(
-      { label: 'Проверить доступность', action: () => checkAvailability(host) },
+      { label: 'Проверить доступность', icon: 'search', action: () => checkAvailability(host) },
       {
         label: 'Изменить…',
+        icon: 'pencil',
         action: () => openDialog({ type: 'host', host, parentId: findParent(tree, host.id)?.id ?? null })
       },
-      { label: 'Дублировать', action: () => void duplicateNode(host.id) },
-      { label: 'Удалить', danger: true, action: () => requestDelete(host) }
+      { label: 'Дублировать', icon: 'copy', action: () => void duplicateNode(host.id) },
+      { label: 'Удалить', icon: 'trash', danger: true, action: () => requestDelete(host) }
     );
     return items;
   };
@@ -263,11 +274,11 @@ export default function Sidebar(): React.JSX.Element {
       <div className="sidebar-header">
         <span className="sidebar-title">Профили</span>
         <button
-          className="btn btn--ghost btn--sm"
+          className="btn btn--ghost btn--sm btn--icon"
           title={bulkChecking ? 'Остановить проверку доступности' : 'Проверить доступность всех хостов'}
           onClick={() => (bulkChecking ? stopBulk() : void checkAllHosts())}
         >
-          {bulkChecking ? '■' : '↻'}
+          {bulkChecking ? <Icon name="stop" size={12} /> : <Icon name="refresh" size={12} />}
         </button>
       </div>
 
@@ -330,8 +341,8 @@ export default function Sidebar(): React.JSX.Element {
         <div className="sidebar-settings-sheet">
           <div className="sidebar-settings-sheet__head">
             <span>Настройки</span>
-            <button className="btn btn--ghost btn--sm" onClick={() => setView('tree')} title="Закрыть настройки">
-              ✕
+            <button className="btn btn--ghost btn--sm btn--icon" onClick={() => setView('tree')} title="Закрыть настройки">
+              <Icon name="close" size={12} />
             </button>
           </div>
           <SettingsForm />
@@ -340,26 +351,26 @@ export default function Sidebar(): React.JSX.Element {
 
       <div className="sidebar-footer">
         <button className="btn btn--sm" onClick={() => openDialog({ type: 'group', group: null, parentId: null })}>
-          ＋ Группа
+          <Icon name="folder-plus" size={13} /> Группа
         </button>
         <button className="btn btn--sm" onClick={() => openDialog({ type: 'host', host: null, parentId: null })}>
-          ＋ Хост
+          <Icon name="host" size={13} /> Хост
         </button>
         <button className="btn btn--sm" onClick={() => openDialog({ type: 'import' })}>
-          Импорт
+          <Icon name="import" size={13} /> Импорт
         </button>
         <button className="btn btn--sm" onClick={() => void exportTree()}>
-          Экспорт
+          <Icon name="export" size={13} /> Экспорт
         </button>
         <button className="btn btn--sm" title="Наборы учётных данных" onClick={() => openDialog({ type: 'credentials' })}>
-          🔑 Учётные данные
+          <Icon name="key" size={13} /> Учётные данные
         </button>
         <button
           className={`btn btn--sm${view === 'settings' ? ' btn--active' : ''}`}
           title="Настройки"
           onClick={() => setView(view === 'settings' ? 'tree' : 'settings')}
         >
-          ⚙ Настройки
+          <Icon name="gear" size={13} /> Настройки
         </button>
       </div>
 
@@ -368,7 +379,7 @@ export default function Sidebar(): React.JSX.Element {
       {avail && (
         <div className="avail-tip" style={{ left: avail.left, top: avail.top }} role="status">
           <button className="avail-tip__close" aria-label="Закрыть" onClick={closeAvail}>
-            ✕
+            <Icon name="close" size={10} />
           </button>
           <div className="avail-tip__host">
             {avail.host.name} · {avail.host.host}:{avail.portNum}

@@ -4,6 +4,7 @@ import { parseQuickConnect } from '@shared/quick-connect';
 import { findNode } from '@shared/tree';
 import { pasteToTerminal } from '../lib/termRegistry';
 import { useApp, type SessionTab } from '../store';
+import Icon from './Icon';
 import ProtocolIcon from './ProtocolIcon';
 
 function stateDot(state: SessionState): { cls: string; title: string } {
@@ -77,7 +78,7 @@ export default function TabBar(): React.JSX.Element {
   return (
     <div className="tabbar">
       <button className="tabbar-new" title="Новая сессия (Ctrl+Shift+T)" onClick={() => openDialog({ type: 'new-session' })}>
-        ＋
+        <Icon name="plus" size={15} />
       </button>
       {tabs.map((tab) => {
         const dot = stateDot(tab.state);
@@ -104,7 +105,7 @@ export default function TabBar(): React.JSX.Element {
                   void useApp.getState().saveAdHocAsProfile(tab.sessionId);
                 }}
               >
-                💾
+                <Icon name="save" size={12} />
               </button>
             )}
             <button
@@ -115,7 +116,7 @@ export default function TabBar(): React.JSX.Element {
                 void closeTab(tab.sessionId);
               }}
             >
-              ✕
+              <Icon name="close" size={11} />
             </button>
           </div>
         );
@@ -135,7 +136,7 @@ export default function TabBar(): React.JSX.Element {
               })
             }
           >
-            ⧉
+            <Icon name="link" size={14} />
           </button>
         )}
         <div className="snips" ref={snipsRef}>
@@ -144,7 +145,7 @@ export default function TabBar(): React.JSX.Element {
             title="Сниппеты"
             onClick={() => setSnipsOpen((v) => !v)}
           >
-            Σ
+            <Icon name="code" size={14} />
           </button>
           {snipsOpen && (
             <div className="snips-pop">

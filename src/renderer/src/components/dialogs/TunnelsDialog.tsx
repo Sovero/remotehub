@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { TunnelInfo } from '@shared/ipc-contract';
 import type { Host } from '@shared/types';
+import Icon from '../Icon';
 import Modal from './Modal';
 
 export default function TunnelsDialog({
@@ -97,7 +98,7 @@ export default function TunnelsDialog({
           onChange={(e) => setTargetPort(e.target.value.replace(/[^0-9]/g, ''))}
         />
         <button className="btn btn--primary" disabled={busy} onClick={() => void add()}>
-          Добавить
+          <Icon name="plus" size={13} /> Добавить
         </button>
       </div>
 
@@ -117,7 +118,7 @@ export default function TunnelsDialog({
                 {t.active ? 'активен' : t.error ?? 'остановлен'}
               </span>
               <button className="btn btn--sm btn--danger" onClick={() => void stop(t.id)}>
-                Остановить
+                <Icon name="stop" size={11} /> Остановить
               </button>
             </div>
           ))

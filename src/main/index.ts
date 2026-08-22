@@ -601,6 +601,69 @@ function createWindow(rdp: RdpManager): void {
             });
           return;
         }
+        // Иконки в кнопках: после добавления Icon-компонента кнопки не должны
+        // терять содержимое, а svg — рендериться с ненулевым размером.
+        if (process.env.RH_SMOKE_ICONS === '1') {
+          await mainWindow?.webContents
+            .executeJavaScript(`
+              (async () => {
+                const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+                const svgInfo = (svg) => ({
+                  w: svg.getBoundingClientRect().width,
+                  h: svg.getBoundingClientRect().height,
+                  vis: getComputedStyle(svg).visibility !== 'hidden'
+                });
+                const check = (selector) => {
+                  const els = [...document.querySelectorAll(selector)];
+                  return els.map((el) => {
+                    const svg = el.querySelector('svg');
+                    return svg ? svgInfo(svg) : null;
+                  });
+                };
+                const footer = check('.sidebar-footer .btn');
+                if (footer.some((s) => !s || s.w < 8 || s.h < 8)) return 'bad-footer:' + JSON.stringify(footer);
+                const tabbarNew = check('.tabbar-new');
+                if (tabbarNew.some((s) => !s || s.w < 8)) return 'bad-tabbar:' + JSON.stringify(tabbarNew);
+                // Контекстное меню хоста: у пунктов должны быть иконки.
+                const host = document.querySelector('.tree-host');
+                if (!host) return 'no-host';
+                host.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 40, clientY: 60 }));
+                await wait(150);
+                const ctxIcons = check('.ctxmenu-item');
+                if (ctxIcons.length === 0) return 'no-ctxmenu';
+                if (ctxIcons.some((s) => !s || s.w < 8)) return 'bad-ctx:' + JSON.stringify(ctxIcons);
+                document.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+                await wait(100);
+                // Диалог хоста: кнопки с иконками.
+                const btns = [...document.querySelectorAll('.sidebar-footer .btn--sm')];
+                const addHost = btns.find((b) => (b.textContent || '').includes('Хост'));
+                if (!addHost) return 'no-add-host';
+                addHost.click();
+                const deadline = Date.now() + 6000;
+                while (Date.now() < deadline) {
+                  const m = document.querySelector('.modal');
+                  if (m && (m.textContent || '').includes('Протокол')) break;
+                  await wait(100);
+                }
+                const modalSvg = document.querySelector('.modal-close svg');
+                const actions = check('.modal-actions .btn');
+                if (!modalSvg || modalSvg.getBoundingClientRect().width < 8) return 'bad-modal-close';
+                if (actions.some((s) => !s || s.w < 8)) return 'bad-actions:' + JSON.stringify(actions);
+                return 'ok:footer=' + footer.length + ':ctx=' + ctxIcons.length + ':actions=' + actions.length;
+              })()
+            `)
+            .then((res) => {
+              clearTimeout(watchdog);
+              if (typeof res === 'string' && res.startsWith('ok:')) {
+                console.log(`[smoke] icons flow OK — ${String(res).slice(3)}`);
+                app.exit(0);
+              } else {
+                console.error(`[smoke] icons flow failed: ${String(res)}`);
+                app.exit(1);
+              }
+            });
+          return;
+        }
         if (process.env.RH_SMOKE_RDP === '1') {
           await mainWindow?.webContents
             .executeJavaScript(`

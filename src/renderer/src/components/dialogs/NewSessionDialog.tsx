@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { Host } from '@shared/types';
 import { flattenHosts, matchesHostQuery } from '@shared/tree';
 import { useApp } from '../../store';
+import Icon from '../Icon';
 import ProtocolIcon from '../ProtocolIcon';
 import Modal from './Modal';
 
@@ -46,6 +47,7 @@ export default function NewSessionDialog({ onClose }: { onClose: () => void }): 
                 <span className="host-list-sub">
                   {h.protocol.toUpperCase()} · {h.host}:{h.port ?? ''}
                 </span>
+                <Icon name="play" size={12} className="host-list-go" />
               </button>
             ))
           )}

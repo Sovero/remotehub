@@ -1,7 +1,9 @@
 import { useEffect, useRef } from 'react';
+import Icon, { type IconName } from './Icon';
 
 export interface MenuItem {
   label: string;
+  icon?: IconName;
   danger?: boolean;
   disabled?: boolean;
   action: () => void;
@@ -53,7 +55,8 @@ export default function ContextMenu({
             item.action();
           }}
         >
-          {item.label}
+          {item.icon && <Icon name={item.icon} size={13} className="ctxmenu-icon" />}
+          <span>{item.label}</span>
         </button>
       ))}
     </div>

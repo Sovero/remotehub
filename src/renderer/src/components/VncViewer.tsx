@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import RFB from '@novnc/novnc';
 import { useApp, type SessionTab } from '../store';
+import Icon from './Icon';
 
 export default function VncViewer({ tab }: { tab: SessionTab }): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -87,7 +88,7 @@ export default function VncViewer({ tab }: { tab: SessionTab }): React.JSX.Eleme
       <div className="vnc-toolbar">
         <span className="vnc-hint">VNC · {tab.title}</span>
         <button className="btn btn--sm" onClick={fullscreen}>
-          ⛶ Полный экран
+          <Icon name="expand" size={13} /> Полный экран
         </button>
       </div>
       <div className="vnc-canvas" ref={containerRef} />

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '../../store';
+import Icon from '../Icon';
 import { HELP_SECTIONS } from './helpContent';
 
 export default function HelpDialog({
@@ -64,10 +65,10 @@ export default function HelpDialog({
           </div>
           <div className="help-header-actions">
             <button className="btn btn--sm" onClick={startTour}>
-              ▶ Пройти тур
+              <Icon name="play" size={12} /> Пройти тур
             </button>
             <button className="help-close" onClick={onClose} aria-label="Закрыть">
-              ✕
+              <Icon name="close" size={12} />
             </button>
           </div>
         </header>
