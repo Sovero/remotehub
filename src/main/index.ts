@@ -172,9 +172,33 @@ function createWindow(rdp: RdpManager): void {
       const sessionId = 'smoke-rdp-embed';
       const outcome = rdp.launch(host, null, sessionId);
       Promise.resolve(outcome).then(() => {
+        const autoAccept = process.env.RH_RDP_AUTO_ACCEPT !== '0';
         const deadline = Date.now() + 20000;
         const poll = (): void => {
           if (rdp.isEmbedded(sessionId)) {
+            if (!autoAccept) {
+              // Настройка «показывать предупреждение»: диалог должен остаться
+              // видимым для пользователя — авто-подтверждения быть не должно.
+              const warnDeadline = Date.now() + 8000;
+              const waitWarningShown = (): void => {
+                const warningsLeft = countWarnings();
+                if (warningsLeft > 0) {
+                  console.log(`[smoke] rdp embed OK — окно встроено, предупреждение показано пользователю (видимых: ${String(warningsLeft)})`);
+                  rdp.stop(sessionId);
+                  setTimeout(() => app.exit(0), 1200);
+                  return;
+                }
+                if (Date.now() > warnDeadline) {
+                  console.error('[smoke] rdp embed FAIL — предупреждение не показано за 8 секунд');
+                  rdp.closeAll();
+                  app.exit(1);
+                  return;
+                }
+                setTimeout(waitWarningShown, 300);
+              };
+              waitWarningShown();
+              return;
+            }
             // Предупреждение появляется чуть позже встраивания (mstsc сначала
             // показывает окно, затем — диалог о сертификате); сторож гасит его
             // кликом «Подключить» на своих тиках. Даём ему до 8 секунд.
@@ -1006,7 +1030,8 @@ if (!gotLock) {
     const rdp = new RdpManager({
       sealer: dpapiSealer,
       send: broadcast as (c: 'rdp:exited', p: unknown) => void,
-      getParentHwnd
+      getParentHwnd,
+      autoAcceptCert: store.loadSettings().data.rdpAutoAcceptCert
     });
     const vnc = new VncManager(dpapiSealer);
     const sftp = new SftpManager(dpapiSealer);

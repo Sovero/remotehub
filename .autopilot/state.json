@@ -1,11 +1,11 @@
 {
-  "slug": "vnc-embed",
-  "title": "VNC открывается внутри приложения (фикс гонки ранних байтов в мосте)",
+  "slug": "rdp-cert-toggle",
+  "title": "Переключатель авто-подтверждения сертификата RDP",
   "mode": "full",
   "depth": "deep",
   "tier": "T0",
-  "startedAt": "2026-08-22T11:00:00+03:00",
-  "updatedAt": "2026-08-22T08:05:00.000Z",
+  "startedAt": "2026-08-22T12:00:00+03:00",
+  "updatedAt": "2026-08-22T09:00:00.000Z",
   "finishedAt": null,
   "requirements": {
     "total": 3,
@@ -19,7 +19,7 @@
   "tickets": [
     {
       "id": "01",
-      "title": "VNC открывается внутри приложения — фикс гонки ранних байтов в мосте",
+      "title": "Переключатель авто-подтверждения сертификата RDP",
       "requirements": [
         "R01",
         "R01.1",
@@ -28,13 +28,18 @@
       "blockedBy": [],
       "wave": 1,
       "status": "done",
-      "startedAt": "2026-08-22T11:01:00+03:00",
-      "finishedAt": "2026-08-22T08:05:00.000Z",
+      "startedAt": "2026-08-22T12:01:00+03:00",
+      "finishedAt": "2026-08-22T09:00:00.000Z",
       "retries": 0,
       "files": [
-        "src/main/vnc/bridge.ts",
-        "tests/vnc-bridge.test.ts",
-        "src/main/index.ts"
+        "src/shared/types.ts",
+        "src/renderer/src/components/SettingsForm.tsx",
+        "src/renderer/src/store.ts",
+        "src/main/rdp/manager.ts",
+        "src/main/rdp/win32-engine.ts",
+        "src/main/ipc.ts",
+        "src/main/index.ts",
+        "tests/rdp-embed.test.ts"
       ]
     }
   ],

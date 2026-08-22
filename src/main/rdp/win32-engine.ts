@@ -132,9 +132,9 @@ export function createWin32Engine(): RdpEmbedEngine {
     async findWindowByPid(pid: number, timeoutMs = 15000, intervalMs = 120): Promise<number | null> {
       const deadline = Date.now() + timeoutMs;
       const scan = (): number | null => {
-        // Предупреждение безопасности (непроверенный сертификат) гасим кликом
-        // «Подключить» — иначе оно перекрывает встроенную сессию.
-        confirmSecurityWarning(pid);
+        // Предупреждение безопасности здесь не гасим: авто-подтверждение —
+        // настройка пользователя, и ей управляет менеджер (attachWindow/tick).
+        // Сам диалог исключаем из кандидатов на встраивание (isSkipWindow).
         let first: number | null = null;
         let visible: number | null = null;
         EnumWindows((hwnd: unknown) => {

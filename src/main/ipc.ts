@@ -117,6 +117,10 @@ export function registerIpc(
     const current = store.loadSettings().data;
     const next: Settings = { ...current, ...patch };
     store.saveSettings(next);
+    // Настройка RDP применяется к живым менеджеру сразу, без перезапуска.
+    if ('rdpAutoAcceptCert' in patch) {
+      rdp.setAutoAcceptCert(next.rdpAutoAcceptCert);
+    }
     return { ok: true, settings: next };
   });
 

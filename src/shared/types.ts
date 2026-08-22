@@ -87,6 +87,8 @@ export interface Settings {
   accent: string;
   confirmOnDelete: boolean;
   restoreTabs: boolean;
+  /** Авто-подтверждать предупреждение безопасности RDP (непроверенный сертификат). */
+  rdpAutoAcceptCert: boolean;
   winBounds: WindowBounds | null;
   openTabs: OpenTabMeta[];
   snippets: Snippet[];
@@ -119,6 +121,7 @@ export const DEFAULT_SETTINGS: Settings = {
   accent: '#2d95ec',
   confirmOnDelete: true,
   restoreTabs: true,
+  rdpAutoAcceptCert: true,
   winBounds: null,
   openTabs: [],
   snippets: [],

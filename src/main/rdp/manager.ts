@@ -43,6 +43,12 @@ export interface RdpManagerDeps {
   legacyLaunch?: typeof launchRdp;
   /** Период сторожа в мс (тесты ставят меньше). */
   watchdogInterval?: number;
+  /**
+   * Авто-подтверждать предупреждение безопасности mstsc (непроверенный
+   * сертификат). По умолчанию true — диалог гасится кликом «Подключить».
+   * false — предупреждение показывается пользователю.
+   */
+  autoAcceptCert?: boolean;
 }
 
 /**
@@ -58,13 +64,21 @@ export class RdpManager {
   private readonly watchdog: NodeJS.Timeout;
   /** Модальный диалог/онбординг открыт — встроенные окна временно скрыты. */
   private overlayHidden = false;
+  /** Авто-подтверждение предупреждения безопасности (настройка пользователя). */
+  private autoAcceptCert: boolean;
 
   constructor(private readonly deps: RdpManagerDeps) {
     this.engine = deps.engine ?? createEmbedEngine();
     this.spawnImpl = deps.spawn ?? spawnRdp;
     this.legacyLaunch = deps.legacyLaunch ?? launchRdp;
+    this.autoAcceptCert = deps.autoAcceptCert ?? true;
     this.watchdog = setInterval(() => this.tick(), deps.watchdogInterval ?? WATCHDOG_INTERVAL);
     this.watchdog.unref?.();
+  }
+
+  /** Настройка «авто-подтверждать сертификат RDP» (из IPC при сохранении настроек). */
+  setAutoAcceptCert(value: boolean): void {
+    this.autoAcceptCert = value;
   }
 
   launch(
@@ -164,6 +178,11 @@ export class RdpManager {
     if (active.child?.pid == null) return;
     active.searching = true;
     try {
+      // Предупреждение о недоверенном сертификате гасим как можно раньше,
+      // если настройка «авто-подтверждать» включена; иначе показываем его.
+      if (this.autoAcceptCert) {
+        this.engine.confirmSecurityWarning(active.child.pid);
+      }
       const hwnd = await this.engine.findWindowByPid(active.child.pid, WINDOW_FIND_TIMEOUT);
       if (this.active.get(sessionId) !== active || active.closing) return;
       if (hwnd === null) {
@@ -199,8 +218,9 @@ export class RdpManager {
     for (const [sessionId, active] of this.active) {
       if (active.mode !== 'embedded' || active.closing) continue;
       // Гасим предупреждение безопасности mstsc (непроверенный сертификат):
-      // оно может всплыть и после встраивания окна.
-      if (active.child?.pid != null) {
+      // оно может всплыть и после встраивания окна. Только при включённой
+      // настройке — иначе пользователь сам решает в диалоге.
+      if (this.autoAcceptCert && active.child?.pid != null) {
         this.engine.confirmSecurityWarning(active.child.pid);
       }
       if (active.hwnd !== null) {

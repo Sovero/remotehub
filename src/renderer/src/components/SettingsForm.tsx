@@ -133,6 +133,19 @@ export default function SettingsForm(): React.JSX.Element {
         />
         Восстанавливать вкладки после перезапуска
       </label>
+
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={settings.rdpAutoAcceptCert}
+          onChange={(e) => void patchSettings({ rdpAutoAcceptCert: e.target.checked })}
+        />
+        Авто-подтверждать сертификат RDP
+      </label>
+      <div className="form-hint">
+        Вкл: предупреждение о недоверенном сертификате гасится автоматически. Выкл: оно
+        показывается при каждом подключении — вы решаете сами.
+      </div>
     </div>
   );
 }

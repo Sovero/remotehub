@@ -122,6 +122,7 @@ export const useApp = create<AppState>((set, get) => ({
     accent: '#2d95ec',
     confirmOnDelete: true,
     restoreTabs: true,
+    rdpAutoAcceptCert: true,
     winBounds: null,
     openTabs: [],
     snippets: [],

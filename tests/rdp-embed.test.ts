@@ -92,6 +92,7 @@ function makeManager(opts: {
   spawnResult?: () => { child: FakeChild; cleanup: () => void };
   legacyCalls?: { calls: number };
   watchdogInterval?: number;
+  autoAcceptCert?: boolean;
   send?: (c: string, p: unknown) => void;
 }): {
   manager: RdpManager;
@@ -118,7 +119,8 @@ function makeManager(opts: {
       setTimeout(() => onExit({ code: 0 }), 5);
       return { ok: true };
     }) as never,
-    watchdogInterval: opts.watchdogInterval ?? 50
+    watchdogInterval: opts.watchdogInterval ?? 50,
+    autoAcceptCert: opts.autoAcceptCert ?? true
   });
   return { manager, engine, sends, child, legacyCalls };
 }
@@ -246,7 +248,22 @@ describe('RdpManager: встраивание', () => {
     engine.hwndByPid.set(child.pid, { hwnd: 21, visible: true });
     await manager.launch(rdpHost(), null, 's1');
     await sleep(30);
-    // findWindowByPid не зовёт confirm (это делает сторож); проверяем вызовы тика
+    // findWindowByPid не зовёт confirm (это делает менеджер); проверяем вызовы
+    expect(engine.calls.some((c) => c.startsWith('confirm:4242'))).toBe(true);
+  });
+
+  it('выключенный авто-подтверждение не гасит предупреждение (показывается пользователю)', async () => {
+    const { manager, engine, child } = makeManager({ watchdogInterval: 5, autoAcceptCert: false });
+    engine.hwndByPid.set(child.pid, { hwnd: 21, visible: true });
+    await manager.launch(rdpHost(), null, 's1');
+    await sleep(30);
+    // окно встраивается, но ни один confirm не вызывается
+    expect(engine.calls).toContain('embed:21->111');
+    expect(engine.calls.some((c) => c.startsWith('confirm:4242'))).toBe(false);
+
+    // включаем настройку — следующий тик начинает гасить предупреждение
+    manager.setAutoAcceptCert(true);
+    await sleep(20);
     expect(engine.calls.some((c) => c.startsWith('confirm:4242'))).toBe(true);
   });
 
