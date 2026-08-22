@@ -16,17 +16,39 @@ const COLORS: Record<Protocol, string> = {
 export default function ProtocolIcon({
   protocol,
   size = 14,
-  open
+  open,
+  drag
 }: {
   protocol: Protocol | 'group';
   size?: number;
   /** Для групп: true — развёрнутый узел (открытая папка), false/undefined — свёрнутый. */
   open?: boolean;
+  /** Для групп: true — drag-over (папка «приоткрыта»). Приоритетнее open. */
+  drag?: boolean;
 }): React.JSX.Element {
   if (protocol === 'group') {
+    const label = drag ? 'Группа (принимает)' : open ? 'Группа (открыта)' : 'Группа';
     return (
-      <svg width={size} height={size} viewBox="0 0 14 14" fill="none" aria-label={open ? 'Группа (открыта)' : 'Группа'}>
-        {open ? (
+      <svg width={size} height={size} viewBox="0 0 14 14" fill="none" aria-label={label}>
+        {drag ? (
+          <>
+            {/* «Приоткрытая» папка: крышка приподнята наполовину, лоток виден. */}
+            <path
+              d="M1.9 4.9l.6-1.3h3.4l1.3 1.4h4.5"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M2.4 6.3h9.2a.95.95 0 0 1 .9 1.28l-.85 2.4a.95.95 0 0 1-.9.62H3.25a.95.95 0 0 1-.9-.62l-.85-2.4a.95.95 0 0 1 .9-1.28z"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </>
+        ) : open ? (
           <>
             {/* Открытая папка: поднятая крышка + основание. */}
             <path

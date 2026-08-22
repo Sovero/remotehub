@@ -132,8 +132,8 @@ function GroupRow({
         <span className={`tree-chevron${group.collapsed ? ' tree-chevron--closed' : ''}`}>
           <Icon name="chevron-down" size={10} />
         </span>
-        <span className="tree-folder">
-          <ProtocolIcon protocol="group" open={!group.collapsed} size={13} />
+        <span className={`tree-folder${dragOver ? ' tree-folder--drag' : ''}`}>
+          <ProtocolIcon protocol="group" open={!group.collapsed} drag={dragOver} size={13} />
         </span>
         <span className="tree-label">{group.name}</span>
         {hostCount > 0 && <span className="tree-count">{hostCount}</span>}

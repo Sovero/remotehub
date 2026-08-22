@@ -678,6 +678,18 @@ function createWindow(rdp: RdpManager): void {
                 if (!gFolder2 || gFolder2.querySelectorAll('path').length !== 1) return 'no-closed-folder';
                 group.click(); // развернуть обратно
                 await wait(120);
+                // Drag-over группы: папка подсвечивается и «приоткрывается»,
+                // уход мыши возвращает исходное состояние.
+                const dragEvt = (type) => new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() });
+                group.dispatchEvent(dragEvt('dragover'));
+                await wait(150);
+                const gFolder3 = group.querySelector('.tree-folder');
+                if (!gFolder3 || !gFolder3.classList.contains('tree-folder--drag')) return 'no-drag-highlight';
+                const ajarSvg = gFolder3.querySelector('svg');
+                if (!ajarSvg || ajarSvg.querySelectorAll('path').length !== 2) return 'bad-ajar-folder';
+                group.dispatchEvent(dragEvt('dragleave'));
+                await wait(150);
+                if (group.querySelector('.tree-folder--drag')) return 'drag-stuck';
                 // Спиннер на кнопке массовой проверки: idle → refresh без вращения,
                 // во время проверки → иконка с классом .icon-spin, после остановки → снова refresh.
                 const bulkBtn = document.querySelector('.sidebar-header .btn');
@@ -724,7 +736,7 @@ function createWindow(rdp: RdpManager): void {
                 const actions = check('.modal-actions .btn');
                 if (!modalSvg || modalSvg.getBoundingClientRect().width < 8) return 'bad-modal-close';
                 if (actions.some((s) => !s || s.w < 8)) return 'bad-actions:' + JSON.stringify(actions);
-                return 'ok:footer=' + footer.length + ':ctx=' + ctxIcons.length + ':actions=' + actions.length + ':spinner=1:group=1';
+                return 'ok:footer=' + footer.length + ':ctx=' + ctxIcons.length + ':actions=' + actions.length + ':spinner=1:group=1:drag=1';
               })()
             `)
             .then((res) => {

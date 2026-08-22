@@ -522,6 +522,26 @@ textarea.input {
   display: inline-flex;
   color: var(--warn);
   flex-shrink: 0;
+  transition: color 0.15s ease;
+}
+
+/* Drag-over: папка подсвечивается акцентом и «приоткрывается» пульсацией. */
+.tree-folder--drag {
+  color: var(--accent);
+}
+
+.tree-folder--drag svg {
+  animation: folder-ajar 0.9s ease-in-out infinite;
+}
+
+@keyframes folder-ajar {
+  0%,
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+  50% {
+    transform: scale(1.18) rotate(-6deg);
+  }
 }
 
 .tree-count {
