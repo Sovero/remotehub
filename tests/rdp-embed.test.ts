@@ -90,7 +90,6 @@ function rdpHost(over: Partial<Host> = {}): Host {
 function makeManager(opts: {
   engine?: FakeEngine;
   spawnResult?: () => { child: FakeChild; cleanup: () => void };
-  legacyCalls?: { calls: number };
   watchdogInterval?: number;
   autoAcceptCert?: boolean;
   send?: (c: string, p: unknown) => void;
@@ -103,7 +102,6 @@ function makeManager(opts: {
   const engine = opts.engine ?? new FakeEngine();
   const child = new FakeChild(4242);
   const sends: { channel: string; payload: unknown }[] = [];
-  const legacyCalls = opts.legacyCalls ?? { calls: 0 };
   const manager = new RdpManager({
     sealer: {} as never,
     send: (c, p) => sends.push({ channel: c, payload: p }),
@@ -113,16 +111,10 @@ function makeManager(opts: {
       if (opts.spawnResult) return opts.spawnResult();
       return { ok: true, child, cleanup: () => undefined };
     },
-    legacyLaunch: ((_o, _p, onExit) => {
-      legacyCalls.calls++;
-      // эмулируем запуск отдельного окна: исход придёт по onExit
-      setTimeout(() => onExit({ code: 0 }), 5);
-      return { ok: true };
-    }) as never,
     watchdogInterval: opts.watchdogInterval ?? 50,
     autoAcceptCert: opts.autoAcceptCert ?? true
   });
-  return { manager, engine, sends, child, legacyCalls };
+  return { manager, engine, sends, child };
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -162,25 +154,38 @@ describe('RdpManager: встраивание', () => {
   });
 
   it('fullscreen-профиль → фолбэк в отдельное окно (mode=window)', async () => {
-    const { manager, legacyCalls } = makeManager({});
+    const { manager } = makeManager({});
     const res = await manager.launch(
       rdpHost({ rdp: { domain: '', screenMode: 'fullscreen', width: 0, height: 0, multiMonitor: false, promptForCreds: false } }),
       null,
       's1'
     );
     expect(res).toEqual({ ok: true, mode: 'window' });
-    expect(legacyCalls.calls).toBe(1);
   });
 
   it('multiMonitor-профиль → фолбэк в отдельное окно', async () => {
-    const { manager, legacyCalls } = makeManager({});
+    const { manager } = makeManager({});
     const res = await manager.launch(
       rdpHost({ rdp: { domain: '', screenMode: 'window', width: 1280, height: 800, multiMonitor: true, promptForCreds: false } }),
       null,
       's1'
     );
     expect(res).toEqual({ ok: true, mode: 'window' });
-    expect(legacyCalls.calls).toBe(1);
+  });
+
+  it('полноэкранный mstsc (mode=window) убивается при закрытии вкладки', async () => {
+    const { manager, child } = makeManager({});
+    const res = await manager.launch(
+      rdpHost({ rdp: { domain: '', screenMode: 'fullscreen', width: 0, height: 0, multiMonitor: false, promptForCreds: false } }),
+      null,
+      's1'
+    );
+    expect(res).toEqual({ ok: true, mode: 'window' });
+    await sleep(10);
+    manager.stop('s1');
+    await sleep(20);
+    expect(child.killed).toBe(true);
+    // закрытие вкладки не шлёт rdp:exited
   });
 
   it('activate показывает активную и прячет остальные', async () => {
@@ -199,7 +204,6 @@ describe('RdpManager: встраивание', () => {
       getParentHwnd: () => 111,
       engine,
       spawn: async () => spawns.shift()!,
-      legacyLaunch: (() => ({ ok: true })) as never,
       watchdogInterval: 50
     });
     await manager.launch(rdpHost(), null, 's1');

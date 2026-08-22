@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { SessionState } from '@shared/ipc-contract';
+import { findNode } from '@shared/tree';
 import { useApp } from './store';
 import Sidebar from './components/Sidebar';
 import TabBar from './components/TabBar';
@@ -213,18 +214,41 @@ function EmptyWorkspace(): React.JSX.Element {
   );
 }
 
+const RDP_RESOLUTIONS = [
+  [1024, 768],
+  [1280, 800],
+  [1366, 768],
+  [1600, 900],
+  [1920, 1080]
+] as const;
+
 function RdpPane({
   tab,
   active
 }: {
-  tab: { sessionId: string; state: { phase: string }; title: string; rdpMode?: 'embedded' | 'window' };
+  tab: {
+    sessionId: string;
+    hostId: string | null;
+    title: string;
+    state: { phase: string };
+    rdpMode?: 'embedded' | 'window';
+  };
   active: boolean;
 }): React.JSX.Element {
   const reconnectTab = useApp((s) => s.reconnectTab);
   const closeTab = useApp((s) => s.closeTab);
+  const relaunchRdp = useApp((s) => s.relaunchRdp);
+  const tree = useApp((s) => s.tree);
   const paneRef = useRef<HTMLDivElement | null>(null);
 
-  // Встроенный режим: поверх этой подложки main кладёт живое окно mstsc.
+  const host = useMemo(() => {
+    if (!tab.hostId) return null;
+    const node = findNode(tree, tab.hostId);
+    return node && node.kind === 'host' ? node : null;
+  }, [tree, tab.hostId]);
+
+  // Встроенный режим: поверх сцены (stage) main кладёт живое окно mstsc.
+  // Тулбар — отдельная строка над сценой, чтобы его не перекрывало окно mstsc.
   const sendRect = (): void => {
     const el = paneRef.current;
     if (!el || !active) return;
@@ -250,6 +274,17 @@ function RdpPane({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, tab.sessionId, tab.state.phase]);
 
+  const currentRes = host ? `${host.rdp.width}×${host.rdp.height}` : '';
+  const resOptions = [...RDP_RESOLUTIONS.map(([w, h]) => `${w}×${h}`)];
+  if (currentRes && !resOptions.includes(currentRes)) resOptions.unshift(currentRes);
+
+  const setResolution = (value: string): void => {
+    const [w, h] = value.split('×').map(Number);
+    if (w && h && (w !== host?.rdp.width || h !== host?.rdp.height)) {
+      void relaunchRdp(tab.sessionId, { width: w, height: h });
+    }
+  };
+
   if (tab.state.phase !== 'connected') {
     return (
       <div className="placeholder-panel">
@@ -267,13 +302,26 @@ function RdpPane({
         <div className="rdp-icon">🖥</div>
         <div className="rdp-title">Remote Desktop открыт отдельным окном</div>
         <div className="rdp-text">
-          Профиль использует полный экран или несколько мониторов — такой режим нельзя встроить во вкладку,
-          поэтому окно Remote Desktop открыто отдельно. Оно закроется вместе с вкладкой.
+          {host?.rdp.multiMonitor
+            ? 'Профиль использует несколько мониторов — такой режим нельзя встроить во вкладку, поэтому окно Remote Desktop открыто отдельно.'
+            : 'Сессия работает в полноэкранном режиме. Верните её во вкладку или закройте.'}
         </div>
-        <div className="rdp-actions">
-          <button className="btn btn--primary" onClick={() => void reconnectTab(tab.sessionId)}>
-            Запустить заново
-          </button>
+        <div className="rdp-controls">
+          <label className="rdp-control">
+            <span className="rdp-control-label">Разрешение</span>
+            <select className="input" value={currentRes} onChange={(e) => setResolution(e.target.value)}>
+              {resOptions.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          </label>
+          {!host?.rdp.multiMonitor && (
+            <button className="btn btn--primary" onClick={() => void relaunchRdp(tab.sessionId, { screenMode: 'window' })}>
+              Встроить во вкладку
+            </button>
+          )}
           <button className="btn" onClick={() => void closeTab(tab.sessionId, true)}>
             Закрыть вкладку
           </button>
@@ -283,17 +331,38 @@ function RdpPane({
   }
 
   return (
-    <div className="rdp-pane rdp-pane--embedded" ref={paneRef}>
-      <div className="rdp-icon">🖥</div>
-      <div className="rdp-title">Remote Desktop подключён</div>
-      <div className="rdp-text">Рабочий стол открыт прямо во вкладке.</div>
-      <div className="rdp-actions">
-        <button className="btn btn--primary" onClick={() => void reconnectTab(tab.sessionId)}>
-          Запустить заново
+    <div className="rdp-pane rdp-pane--embedded">
+      <div className="rdp-toolbar">
+        <label className="rdp-control">
+          <span className="rdp-control-label">Разрешение</span>
+          <select className="input" value={currentRes} onChange={(e) => setResolution(e.target.value)}>
+            {resOptions.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          className="btn btn--sm"
+          title="Открыть сессию в полноэкранном режиме"
+          onClick={() => void relaunchRdp(tab.sessionId, { screenMode: 'fullscreen' })}
+        >
+          ⛶ Полный экран
         </button>
-        <button className="btn" onClick={() => void closeTab(tab.sessionId, true)}>
-          Закрыть вкладку
-        </button>
+      </div>
+      <div className="rdp-stage" ref={paneRef}>
+        <div className="rdp-icon">🖥</div>
+        <div className="rdp-title">Remote Desktop подключён</div>
+        <div className="rdp-text">Рабочий стол открыт прямо во вкладке.</div>
+        <div className="rdp-actions">
+          <button className="btn btn--primary" onClick={() => void reconnectTab(tab.sessionId)}>
+            Запустить заново
+          </button>
+          <button className="btn" onClick={() => void closeTab(tab.sessionId, true)}>
+            Закрыть вкладку
+          </button>
+        </div>
       </div>
     </div>
   );

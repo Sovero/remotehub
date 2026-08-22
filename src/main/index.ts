@@ -592,6 +592,64 @@ function createWindow(rdp: RdpManager): void {
             });
           return;
         }
+        // Управление разрешением встроенной RDP-сессии прямо из вкладки:
+        // окно → «Полный экран» → «Встроить во вкладку» → смена разрешения.
+        if (process.env.RH_SMOKE_RDP_RESOLUTION === '1') {
+          await mainWindow?.webContents
+            .executeJavaScript(`
+              (async () => {
+                const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+                const deadline = Date.now() + 90000;
+                const until = async (pred) => {
+                  while (Date.now() < deadline) {
+                    const v = pred();
+                    if (v) return v;
+                    await wait(200);
+                  }
+                  return null;
+                };
+                const host = document.querySelector('.tree-host');
+                if (!host) return 'no-host';
+                host.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+                if (!(await until(() => (document.querySelector('.rdp-pane--embedded') ? true : null)))) return 'no-embedded';
+                // 1. Полный экран: сессия перезапускается, вкладка уходит в фолбэк.
+                const fsBtn = [...document.querySelectorAll('.rdp-toolbar .btn')].find((b) =>
+                  (b.textContent || '').includes('Полный экран')
+                );
+                if (!fsBtn) return 'no-fs-btn';
+                fsBtn.click();
+                if (!(await until(() => (document.querySelector('.rdp-pane--fallback') ? true : null)))) return 'no-fallback';
+                // 2. Обратно во вкладку.
+                const embedBtn = [...document.querySelectorAll('.rdp-pane--fallback .btn')].find((b) =>
+                  (b.textContent || '').includes('Встроить во вкладку')
+                );
+                if (!embedBtn) return 'no-embed-btn';
+                embedBtn.click();
+                if (!(await until(() => (document.querySelector('.rdp-pane--embedded') ? true : null)))) return 'no-reembedded';
+                // 3. Смена разрешения: сессия переподключается с новым desktopwidth/height.
+                const sel = document.querySelector('.rdp-toolbar select');
+                if (!sel) return 'no-res-select';
+                const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
+                setter.call(sel, '1024×768');
+                sel.dispatchEvent(new Event('change', { bubbles: true }));
+                if (!(await until(() => (document.querySelector('.rdp-pane--embedded') ? true : null)))) return 'no-res-reconnect';
+                await wait(300);
+                const res = document.querySelector('.rdp-toolbar select')?.value || '';
+                return 'ok:res=' + res;
+              })()
+            `)
+            .then((res) => {
+              clearTimeout(watchdog);
+              if (typeof res === 'string' && res.startsWith('ok:')) {
+                console.log(`[smoke] rdp resolution OK — окно → полный экран → окно, разрешение ${String(res).slice(3)}`);
+                app.exit(0);
+              } else {
+                console.error(`[smoke] rdp resolution flow failed: ${String(res)}`);
+                app.exit(1);
+              }
+            });
+          return;
+        }
         if (process.env.RH_SMOKE_CRED === '1') {
           await mainWindow?.webContents
             .executeJavaScript(`

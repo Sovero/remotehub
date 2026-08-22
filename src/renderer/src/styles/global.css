@@ -1145,6 +1145,7 @@ textarea.input {
 
 .rdp-pane {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1154,10 +1155,73 @@ textarea.input {
   text-align: center;
 }
 
-/* Встроенный режим: подложка ровно в размер рабочей области — поверх неё ложится окно mstsc. */
+/* Встроенный режим: тулбар сверху, ниже — сцена, поверх которой ложится окно mstsc. */
 .rdp-pane--embedded {
   padding: 0;
   gap: 0;
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+.rdp-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.rdp-toolbar .rdp-control-label {
+  display: none;
+}
+
+.rdp-toolbar .rdp-control {
+  margin-right: auto;
+}
+
+.rdp-toolbar select {
+  width: 130px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+/* Сцена встроенного режима: ровно в её прямоугольник main кладёт окно mstsc. */
+.rdp-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.rdp-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.rdp-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rdp-control-label {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.rdp-control select {
+  width: 130px;
+  padding: 5px 8px;
+  font-size: 12.5px;
 }
 
 .rdp-icon {

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { nanoid } from 'nanoid';
-import type { Group, Host, Settings, Snippet, TreeNode } from '@shared/types';
+import type { Group, Host, RdpOptions, Settings, Snippet, TreeNode } from '@shared/types';
 import { createGroup, createHost } from '@shared/types';
 import type { SessionState, UpdateStatus } from '@shared/ipc-contract';
 import {
@@ -100,6 +100,11 @@ interface AppState {
   openAdHoc: (host: Host) => Promise<void>;
   openRdp: (host: Host) => Promise<void>;
   applyRdpOutcome: (sessionId: string, outcome: { ok: boolean; error?: string }) => void;
+  /**
+   * Меняет опции RDP у профиля (разрешение/режим), сохраняет в дерево и
+   * переподключает сессию с новыми настройками.
+   */
+  relaunchRdp: (sessionId: string, rdpPatch: Partial<RdpOptions>) => Promise<void>;
   openVnc: (host: Host) => Promise<void>;
   openSftp: (host: Host) => Promise<void>;
   reconnectTab: (sessionId: string) => Promise<void>;
@@ -481,6 +486,19 @@ export const useApp = create<AppState>((set, get) => ({
           : t
       )
     }));
+  },
+
+  relaunchRdp: async (sessionId, rdpPatch) => {
+    const { tabs, tree } = get();
+    const tab = tabs.find((t) => t.sessionId === sessionId);
+    if (!tab || tab.kind !== 'rdp') return;
+    const node = tab.hostId ? findNode(tree, tab.hostId) : null;
+    if (!node || node.kind !== 'host') return;
+    const host = createHost({ ...node, rdp: { ...node.rdp, ...rdpPatch } });
+    const next = replaceNode(tree, host.id, host);
+    await window.api.saveProfiles(next);
+    set({ tree: next });
+    await get().reconnectTab(sessionId);
   },
 
   reconnectTab: async (sessionId) => {

@@ -5,7 +5,7 @@ import type { Sealer } from '../store/crypto-format';
 import { resolveAuth } from '../sessions/config';
 import { createEmbedEngine, type EmbedRect, type RdpEmbedEngine } from './embed';
 import { rdpOptionsFromHost, type RdpFileOptions } from './generator';
-import { launchRdp, spawnRdp, type RdpSpawn } from './launcher';
+import { spawnRdp, type RdpSpawn } from './launcher';
 
 const WINDOW_FIND_TIMEOUT = 15000;
 const WATCHDOG_INTERVAL = 2000;
@@ -40,7 +40,6 @@ export interface RdpManagerDeps {
   engine?: RdpEmbedEngine;
   /** Внедряемые зависимости для тестов: реальные используются по умолчанию. */
   spawn?: (opts: RdpFileOptions, password: string | null) => Promise<RdpSpawn>;
-  legacyLaunch?: typeof launchRdp;
   /** Период сторожа в мс (тесты ставят меньше). */
   watchdogInterval?: number;
   /**
@@ -60,7 +59,6 @@ export class RdpManager {
   private readonly active = new Map<string, ActiveRdp>();
   private readonly engine: RdpEmbedEngine;
   private readonly spawnImpl: (opts: RdpFileOptions, password: string | null) => Promise<RdpSpawn>;
-  private readonly legacyLaunch: typeof launchRdp;
   private readonly watchdog: NodeJS.Timeout;
   /** Модальный диалог/онбординг открыт — встроенные окна временно скрыты. */
   private overlayHidden = false;
@@ -70,7 +68,6 @@ export class RdpManager {
   constructor(private readonly deps: RdpManagerDeps) {
     this.engine = deps.engine ?? createEmbedEngine();
     this.spawnImpl = deps.spawn ?? spawnRdp;
-    this.legacyLaunch = deps.legacyLaunch ?? launchRdp;
     this.autoAcceptCert = deps.autoAcceptCert ?? true;
     this.watchdog = setInterval(() => this.tick(), deps.watchdogInterval ?? WATCHDOG_INTERVAL);
     this.watchdog.unref?.();
@@ -107,19 +104,37 @@ export class RdpManager {
     }
 
     if (!embeddable) {
-      const result = this.legacyLaunch(opts, password, (outcome) => {
-        this.active.delete(sessionId);
-        this.deps.send('rdp:exited', { sessionId, code: outcome.code, error: outcome.error });
-      });
-      if (!result.ok) {
-        this.deps.send('rdp:exited', { sessionId, code: null, error: result.error });
-        return { ok: false, error: result.error };
-      }
-      this.active.set(sessionId, this.fresh({ mode: 'window', visible: true }));
-      return { ok: true, mode: 'window' };
+      return this.launchWindowed(opts, password, sessionId);
     }
 
     return this.launchEmbedded(opts, password, sessionId);
+  }
+
+  /**
+   * Полноэкранный/multiMonitor профиль: mstsc в отдельном окне. Процесс
+   * отслеживается так же, как при встраивании, — чтобы закрытие вкладки
+   * или переключение «в окно» гарантированно закрывало и его.
+   */
+  private async launchWindowed(
+    opts: RdpFileOptions,
+    password: string | null,
+    sessionId: string
+  ): Promise<RdpLaunchOutcome> {
+    const spawned = await this.spawnImpl(opts, password);
+    if (!spawned.ok || !spawned.child) {
+      spawned.cleanup();
+      this.deps.send('rdp:exited', {
+        sessionId,
+        code: null,
+        error: spawned.error ?? 'Не удалось запустить mstsc'
+      });
+      return { ok: false, error: spawned.error ?? 'Не удалось запустить mstsc' };
+    }
+
+    const active = this.fresh({ mode: 'window', visible: true });
+    this.active.set(sessionId, active);
+    this.trackChild(sessionId, active, spawned);
+    return { ok: true, mode: 'window' };
   }
 
   private async launchEmbedded(
@@ -139,10 +154,20 @@ export class RdpManager {
     }
 
     const active = this.fresh({ mode: 'embedded', visible: true });
-    active.child = spawned.child;
     this.active.set(sessionId, active);
+    this.trackChild(sessionId, active, spawned);
 
-    spawned.child.on('error', (err) => {
+    void this.attachWindow(sessionId, active);
+    return { ok: true, mode: 'embedded' };
+  }
+
+  /**
+   * Обработчики процесса mstsc: очистка временных файлов, снятие сессии
+   * из карты и уведомление рендерера (если сессия не закрывалась вручную).
+   */
+  private trackChild(sessionId: string, active: ActiveRdp, spawned: RdpSpawn): void {
+    active.child = spawned.child ?? null;
+    spawned.child?.on('error', (err) => {
       spawned.cleanup();
       const stillTracked = this.active.get(sessionId) === active;
       if (stillTracked) this.active.delete(sessionId);
@@ -154,7 +179,7 @@ export class RdpManager {
         });
       }
     });
-    spawned.child.on('exit', (code) => {
+    spawned.child?.on('exit', (code) => {
       spawned.cleanup();
       if (active.killTimer) {
         clearTimeout(active.killTimer);
@@ -167,9 +192,6 @@ export class RdpManager {
         this.deps.send('rdp:exited', { sessionId, code });
       }
     });
-
-    void this.attachWindow(sessionId, active);
-    return { ok: true, mode: 'embedded' };
   }
 
   /** Находит окно mstsc по PID и встраивает в окно приложения. */
@@ -286,8 +308,13 @@ export class RdpManager {
       this.engine.hide(active.hwnd);
     }
     if (active.child) {
-      active.killTimer = setTimeout(() => this.killChild(active), KILL_GRACE_MS);
-      active.killTimer.unref?.();
+      if (active.mode === 'window') {
+        // Полноэкранный mstsc не встроен — WM_CLOSE недоступен, убиваем сразу.
+        this.killChild(active);
+      } else {
+        active.killTimer = setTimeout(() => this.killChild(active), KILL_GRACE_MS);
+        active.killTimer.unref?.();
+      }
     }
   }
 
