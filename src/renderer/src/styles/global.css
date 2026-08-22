@@ -505,21 +505,22 @@ textarea.input {
   font-weight: 600;
 }
 
-.chevron {
+.tree-chevron {
   display: inline-flex;
   width: 14px;
   justify-content: center;
   color: var(--text-muted);
-  font-size: 11px;
   transition: transform 0.12s ease;
   flex-shrink: 0;
 }
 
-.chevron--closed {
+.tree-chevron--closed {
   transform: rotate(-90deg);
-} .tree-folder {
+}
+
+.tree-folder {
+  display: inline-flex;
   color: var(--warn);
-  font-size: 13px;
   flex-shrink: 0;
 }
 

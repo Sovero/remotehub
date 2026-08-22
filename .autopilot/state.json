@@ -1,15 +1,15 @@
 {
-  "slug": "ui-contrast",
-  "title": "Контраст иконок и видимость кнопок-иконок",
+  "slug": "tree-node-icons",
+  "title": "Иконки узлов дерева профилей (группы, папки, развёрнутые узлы)",
   "mode": "full",
   "depth": "deep",
   "tier": "T0",
-  "startedAt": "2026-08-22T17:30:00+03:00",
-  "updatedAt": "2026-08-22T17:50:00+03:00",
-  "finishedAt": "2026-08-22T17:50:00+03:00",
+  "startedAt": "2026-08-22T18:00:00+03:00",
+  "updatedAt": "2026-08-22T18:20:00+03:00",
+  "finishedAt": "2026-08-22T18:20:00+03:00",
   "requirements": {
-    "total": 7,
-    "done": 7,
+    "total": 6,
+    "done": 6,
     "inTicket": 0,
     "inSpec": 0,
     "placeholder": 0,
@@ -19,18 +19,18 @@
   "tickets": [
     {
       "id": "01",
-      "title": "Контраст иконок и видимость кнопок-иконок",
-      "requirements": ["R01", "R02", "R03", "R04", "A01", "A02", "A03"],
+      "title": "Иконки узлов дерева профилей",
+      "requirements": ["R01", "R02", "R03", "R04", "A01", "A02"],
       "blockedBy": [],
       "wave": 1,
       "status": "done",
-      "startedAt": "2026-08-22T17:31:00+03:00",
-      "finishedAt": "2026-08-22T17:48:00+03:00",
+      "startedAt": "2026-08-22T18:01:00+03:00",
+      "finishedAt": "2026-08-22T18:18:00+03:00",
       "retries": 0,
       "files": [
-        "src/renderer/src/App.tsx",
+        "src/renderer/src/components/ProtocolIcon.tsx",
+        "src/renderer/src/components/TreeView.tsx",
         "src/renderer/src/styles/global.css",
-        "src/renderer/src/main.tsx",
         "src/main/index.ts"
       ]
     }

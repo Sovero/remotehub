@@ -660,6 +660,24 @@ function createWindow(rdp: RdpManager): void {
                 if (footer.some((s) => !s || s.w < 8 || s.h < 8)) return 'bad-footer:' + JSON.stringify(footer);
                 const tabbarNew = check('.tabbar-new');
                 if (tabbarNew.some((s) => !s || s.w < 8)) return 'bad-tabbar:' + JSON.stringify(tabbarNew);
+                // Группа дерева: иконка папки + шеврон; клик сворачивает —
+                // шеврон поворачивается, папка меняется на закрытую (1 path) и обратно (2 path).
+                const group = document.querySelector('.tree-group');
+                if (!group) return 'no-group';
+                const gFolder = group.querySelector('.tree-folder svg');
+                const gChev = group.querySelector('.tree-chevron');
+                if (!gFolder || gFolder.getBoundingClientRect().width < 8) return 'bad-group-folder';
+                if (!gChev) return 'no-chevron';
+                if (gChev.classList.contains('tree-chevron--closed')) return 'bad-open-chevron';
+                if (gFolder.querySelectorAll('path').length !== 2) return 'bad-open-folder';
+                group.click();
+                await wait(150);
+                const gChev2 = group.querySelector('.tree-chevron');
+                const gFolder2 = group.querySelector('.tree-folder svg');
+                if (!gChev2 || !gChev2.classList.contains('tree-chevron--closed')) return 'no-closed-chevron';
+                if (!gFolder2 || gFolder2.querySelectorAll('path').length !== 1) return 'no-closed-folder';
+                group.click(); // развернуть обратно
+                await wait(120);
                 // Спиннер на кнопке массовой проверки: idle → refresh без вращения,
                 // во время проверки → иконка с классом .icon-spin, после остановки → снова refresh.
                 const bulkBtn = document.querySelector('.sidebar-header .btn');
@@ -706,7 +724,7 @@ function createWindow(rdp: RdpManager): void {
                 const actions = check('.modal-actions .btn');
                 if (!modalSvg || modalSvg.getBoundingClientRect().width < 8) return 'bad-modal-close';
                 if (actions.some((s) => !s || s.w < 8)) return 'bad-actions:' + JSON.stringify(actions);
-                return 'ok:footer=' + footer.length + ':ctx=' + ctxIcons.length + ':actions=' + actions.length + ':spinner=1';
+                return 'ok:footer=' + footer.length + ':ctx=' + ctxIcons.length + ':actions=' + actions.length + ':spinner=1:group=1';
               })()
             `)
             .then((res) => {
@@ -821,6 +839,8 @@ function createWindow(rdp: RdpManager): void {
                   document.querySelectorAll('.ctxmenu-item').forEach((el, i) => add(el, 'ctxmenu:' + i, 3));
                   document.querySelectorAll('.ctxmenu-icon').forEach((el, i) => add(el, 'ctxmenu-icon:' + i, 3));
                   document.querySelectorAll('.tree-tag').forEach((el, i) => add(el, 'tree-tag:' + i, 3));
+                  document.querySelectorAll('.tree-folder').forEach((el, i) => add(el, 'tree-folder:' + i, 3));
+                  document.querySelectorAll('.tree-chevron').forEach((el, i) => add(el, 'tree-chevron:' + i, 3));
                   document.querySelectorAll('.seg-btn--active').forEach((el, i) => add(el, 'seg-active:' + i, 3));
                   document.querySelectorAll('.sidebar-footer .btn--active').forEach((el, i) => add(el, 'footer-active:' + i, 3));
                   document.querySelectorAll('.btn--primary').forEach((el, i) => add(el, 'btn-primary:' + i, 3));

@@ -7,13 +7,56 @@ const COLORS: Record<Protocol, string> = {
   vnc: '#c678dd'
 };
 
+/**
+ * Иконки дерева профилей и вкладок.
+ * - protocol-иконки (ssh/telnet/rdp/vnc) — цветные, как раньше;
+ * - protocol="group" — папка группы: открытая (развёрнутый узел) или закрытая,
+ *   рисуется currentColor, чтобы цвет задавала тема (var(--warn) в дереве).
+ */
 export default function ProtocolIcon({
   protocol,
-  size = 14
+  size = 14,
+  open
 }: {
-  protocol: Protocol;
+  protocol: Protocol | 'group';
   size?: number;
+  /** Для групп: true — развёрнутый узел (открытая папка), false/undefined — свёрнутый. */
+  open?: boolean;
 }): React.JSX.Element {
+  if (protocol === 'group') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 14 14" fill="none" aria-label={open ? 'Группа (открыта)' : 'Группа'}>
+        {open ? (
+          <>
+            {/* Открытая папка: поднятая крышка + основание. */}
+            <path
+              d="M1.9 3.7h3.4l1.3 1.5h5.5l-.55 2a.95.95 0 0 1-.9.65H3.4a.95.95 0 0 1-.9-.65l-1-3.5z"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M2.35 7.6h9.3a.95.95 0 0 1 .9 1.3l-.85 2.4a.95.95 0 0 1-.9.6H3.2a.95.95 0 0 1-.9-.6l-.85-2.4a.95.95 0 0 1 .9-1.3z"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </>
+        ) : (
+          <path
+            d="M1.9 3.7h3.4l1.3 1.5h5.4a1 1 0 0 1 1 1v4.9a1 1 0 0 1-1 1H2.9a1 1 0 0 1-1-1V3.7z"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        )}
+      </svg>
+    );
+  }
+
   const color = COLORS[protocol];
   return (
     <svg width={size} height={size} viewBox="0 0 14 14" fill="none" aria-label={protocol}>

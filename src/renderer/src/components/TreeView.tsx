@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Group, Host, TreeNode } from '@shared/types';
 import { countHosts } from '@shared/tree';
 import { useApp } from '../store';
+import Icon from './Icon';
 import ProtocolIcon from './ProtocolIcon';
 
 export interface MenuRequest {
@@ -128,8 +129,12 @@ function GroupRow({
         }}
         title="Перетащите, чтобы переместить"
       >
-        <span className={`chevron${group.collapsed ? ' chevron--closed' : ''}`}>▸</span>
-        <span className="tree-folder">▣</span>
+        <span className={`tree-chevron${group.collapsed ? ' tree-chevron--closed' : ''}`}>
+          <Icon name="chevron-down" size={10} />
+        </span>
+        <span className="tree-folder">
+          <ProtocolIcon protocol="group" open={!group.collapsed} size={13} />
+        </span>
         <span className="tree-label">{group.name}</span>
         {hostCount > 0 && <span className="tree-count">{hostCount}</span>}
       </div>
