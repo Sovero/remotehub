@@ -34,6 +34,11 @@ const MOCK_CSS = `
 .m-white{fill:#fff}
 .m-frame{fill:var(--bg-raised);stroke:var(--border);stroke-width:1}
 .m-line{stroke:var(--border);stroke-width:1}
+.m-stroke-muted{stroke:var(--text-muted)}
+.m-stroke-text{stroke:var(--text)}
+.m-stroke-accent{stroke:var(--accent)}
+.m-stroke-warn{stroke:var(--warn)}
+.m-stroke-white{stroke:#fff}
 `;
 
 function MockStyle(): React.JSX.Element {
@@ -110,6 +115,53 @@ function Shot({ src, label }: { src: string; label: string }): React.JSX.Element
     </figure>
   );
 }
+
+/**
+ * Иконка из набора приложения (16×16), встроенная в SVG-схему.
+ * d — path-данные из Icon.tsx/ProtocolIcon.tsx; цвета — через m-stroke-* классы.
+ */
+function IconPath({
+  x,
+  y,
+  d,
+  className = 'm-stroke-muted',
+  w = 1.4
+}: {
+  x: number;
+  y: number;
+  d: string | readonly string[];
+  className?: string;
+  w?: number;
+}): React.JSX.Element {
+  const paths = Array.isArray(d) ? d : [d];
+  return (
+    <g transform={`translate(${x} ${y})`} fill="none">
+      {paths.map((p, i) => (
+        <path
+          key={i}
+          d={p}
+          className={className}
+          strokeWidth={w}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ))}
+    </g>
+  );
+}
+
+/* path-данные иконок набора (совпадают с Icon.tsx). */
+const ICON = {
+  'chevron-up': 'M4.6 9.6 8 6.2l3.4 3.4',
+  'chevron-down': 'M4.6 6.4 8 9.8l3.4-3.4',
+  'arrow-down': 'M8 3.2v9.6M4.6 9.4 8 12.8l3.4-3.4',
+  check: 'M3 8.4l3.3 3.3L13 4.6',
+  folder: 'M2.2 4.2h3.9l1.5 1.7h6.2a1.1 1.1 0 0 1 1.1 1.1v5.6a1.1 1.1 0 0 1-1.1 1.1H3.3a1.1 1.1 0 0 1-1.1-1.1V4.2z',
+  file: ['M3.2 2.4h6.3l3.1 3.1v8.1a1 1 0 0 1-1 1H3.2a1 1 0 0 1-1-1V3.4a1 1 0 0 1 1-1z', 'M9.5 2.4v3.1h3.1'],
+  upload: 'M8 9.6V4M5.4 6.6 8 4l2.6 2.6M2.4 12.4v.6a1 1 0 0 0 1 1h9.2a1 1 0 0 0 1-1v-.6',
+  download: 'M8 2.6v5.8M5.4 6 8 8.6 10.6 6M2.4 12.4v.6a1 1 0 0 0 1 1h9.2a1 1 0 0 0 1-1v-.6',
+  expand: 'M2.6 6V2.6H6M9.6 2.6H13.4V6.4M13.4 10v3.4H9.6M6.4 13.4H2.6V9.6'
+} as const;
 
 /* ---------- контентные помощники ---------- */
 
@@ -218,9 +270,9 @@ function TerminalMock(): React.JSX.Element {
       <rect className="m-active" x="300" y="30" width="290" height="34" rx="6" stroke="var(--accent)" strokeWidth="1" />
       <T x={312} y={52} size={11}>nginx</T>
       <rect className="m-bg" x="548" y="36" width="16" height="16" rx="3" stroke="var(--border)" strokeWidth="1" />
-      <T x={556} y={48} className="m-muted" size={9}>↑</T>
+      <IconPath x={549} y={37} d={ICON['chevron-up']} className="m-stroke-muted" />
       <rect className="m-bg" x="568" y="36" width="16" height="16" rx="3" stroke="var(--border)" strokeWidth="1" />
-      <T x={576} y={48} className="m-muted" size={9}>↓</T>
+      <IconPath x={569} y={37} d={ICON['chevron-down']} className="m-stroke-muted" />
 
       <T x={40} y={200} className="m-text" mono size={11}>Ctrl+F — поиск · правая кнопка — вставить из буфера</T>
       <T x={40} y={220} className="m-muted" mono size={11}>Ctrl+Shift+C — копировать · Ctrl+Shift+V — вставить</T>
@@ -249,20 +301,28 @@ function SessionsMock(): React.JSX.Element {
       <rect className="m-bg" x={268} y={120} width="104" height="60" rx="4" stroke="var(--border)" strokeWidth="1" />
       <T x={286} y={156} className="m-muted" size={10}>рабочий стол</T>
       <rect className="m-active" x={240} y={248} width={160} height={20} rx="4" />
-      <T x={252} y={262} size={9}>⛶ Полный экран</T>
+      <IconPath x={252} y={248} d={ICON.expand} className="m-stroke-text" w={1.2} />
+      <T x={268} y={262} size={9}>Полный экран</T>
 
       {/* SFTP */}
       <rect className="m-raised" x="428" y="20" width="192" height="260" rx="6" />
       <T x={444} y={52} weight={600} size={12}>SFTP</T>
       <rect className="m-bg" x="436" y="60" width="86" height="190" rx="4" stroke="var(--border)" strokeWidth="1" />
       <T x={444} y={78} className="m-muted" size={9}>Локально</T>
-      <T x={444} y={96} size={10}>▸ папка/</T>
-      <T x={444} y={112} size={10}>▢ файл.txt</T>
+      <IconPath x={444} y={80} d={ICON.folder} className="m-stroke-warn" w={1.2} />
+      <T x={462} y={96} size={10}>папка/</T>
+      <IconPath x={444} y={96} d={ICON.file} className="m-stroke-muted" w={1.2} />
+      <T x={462} y={112} size={10}>файл.txt</T>
       <rect className="m-bg" x="526" y="60" width="86" height="190" rx="4" stroke="var(--accent)" strokeWidth="1" />
       <T x={534} y={78} className="m-muted" size={9}>Сервер</T>
-      <T x={534} y={96} size={10}>▸ var/</T>
-      <T x={534} y={112} size={10}>▢ app.log</T>
-      <T x={444} y={270} className="m-muted" size={10}>↑ загрузка · ↓ скачивание</T>
+      <IconPath x={534} y={80} d={ICON.folder} className="m-stroke-warn" w={1.2} />
+      <T x={552} y={96} size={10}>var/</T>
+      <IconPath x={534} y={96} d={ICON.file} className="m-stroke-muted" w={1.2} />
+      <T x={552} y={112} size={10}>app.log</T>
+      <IconPath x={444} y={254} d={ICON.upload} className="m-stroke-muted" w={1.2} />
+      <T x={462} y={270} className="m-muted" size={10}>загрузка ·</T>
+      <IconPath x={514} y={254} d={ICON.download} className="m-stroke-muted" w={1.2} />
+      <T x={532} y={270} className="m-muted" size={10}>скачивание</T>
     </Mock>
   );
 }
@@ -310,15 +370,16 @@ function DiagnosticsMock(): React.JSX.Element {
     <Mock label="Диагностика подключения: порядок проверок" w={640} h={380}>
       {row(30, '1. Хост отвечает? (ping)')}
       {branch(48, 'нет → адрес, VPN, сеть')}
-      <T x={164} y={94} className="m-muted" size={13}>↓</T>
+      <IconPath x={156} y={84} d={ICON['arrow-down']} className="m-stroke-muted" w={1.3} />
       {row(100, '2. Порт открыт? (TCP)')}
       {branch(118, 'нет → порт, фаервол')}
-      <T x={164} y={164} className="m-muted" size={13}>↓</T>
+      <IconPath x={156} y={154} d={ICON['arrow-down']} className="m-stroke-muted" w={1.3} />
       {row(170, '3. Логин и пароль верны?')}
       {branch(188, 'нет → учётные данные')}
-      <T x={164} y={234} className="m-muted" size={13}>↓</T>
+      <IconPath x={156} y={224} d={ICON['arrow-down']} className="m-stroke-muted" w={1.3} />
       <rect className="m-ok" x="40" y="240" width="260" height="36" rx="6" />
-      <T x={52} y={263} className="m-white" size={11.5} weight={600}>4. Сессия открыта ✓</T>
+      <T x={52} y={263} className="m-white" size={11.5} weight={600}>4. Сессия открыта</T>
+      <IconPath x={150} y={251} d={ICON.check} className="m-stroke-white" w={1.3} />
       <T x={40} y={310} className="m-muted" size={11}>«Проверить доступность» и ↻ выполняют шаги 1–2 автоматически.</T>
       <T x={40} y={330} className="m-muted" size={11}>Жёлтая точка на вкладке означает шаг 3 — нужен пароль.</T>
     </Mock>

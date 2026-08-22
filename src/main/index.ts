@@ -739,13 +739,49 @@ function createWindow(rdp: RdpManager): void {
                 return 'ok:footer=' + footer.length + ':ctx=' + ctxIcons.length + ':actions=' + actions.length + ':spinner=1:group=1:drag=1';
               })()
             `)
-            .then((res) => {
+            .then(async (res) => {
               clearTimeout(watchdog);
-              if (typeof res === 'string' && res.startsWith('ok:')) {
-                console.log(`[smoke] icons flow OK — ${String(res).slice(3)}`);
+              if (typeof res !== 'string' || !res.startsWith('ok:')) {
+                console.error(`[smoke] icons flow failed: ${String(res)}`);
+                app.exit(1);
+                return;
+              }
+              // Справка: моки должны рисовать SVG-иконки набора (path с m-stroke-*),
+              // текстовых глифов ▸▢↑↓✓ в справке не осталось.
+              mainWindow?.webContents.send('menu:command', 'help');
+              const helpRes = await mainWindow?.webContents.executeJavaScript(`
+                (async () => {
+                  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+                  const deadline = Date.now() + 8000;
+                  let h = null;
+                  while (Date.now() < deadline) {
+                    h = document.querySelector('.help');
+                    if (h && (h.textContent || '').includes('Справка Remote Hub')) break;
+                    await wait(100);
+                  }
+                  if (!h) return 'no-help';
+                  for (const sec of ['Терминал', 'RDP, VNC и SFTP', 'Частые вопросы']) {
+                    const item = [...document.querySelectorAll('.help-nav-item')].find((b) =>
+                      (b.textContent || '').includes(sec)
+                    );
+                    if (!item) return 'no-nav:' + sec;
+                    item.click();
+                    await wait(250);
+                    const mocks = [...document.querySelectorAll('.help-mock')];
+                    if (mocks.length === 0) return 'no-mocks:' + sec;
+                    const icons = mocks.reduce((n, m) => n + m.querySelectorAll('path[class*="m-stroke-"]').length, 0);
+                    if (icons < 2) return 'few-icons:' + sec + ':' + icons;
+                    const art = document.querySelector('.help-content');
+                    if (art && /[▸▢↑↓✓]/.test(art.textContent || '')) return 'glyphs:' + sec;
+                  }
+                  return 'ok';
+                })()
+              `);
+              if (helpRes === 'ok') {
+                console.log(`[smoke] icons flow OK — ${String(res).slice(3)}:help=1`);
                 app.exit(0);
               } else {
-                console.error(`[smoke] icons flow failed: ${String(res)}`);
+                console.error(`[smoke] icons flow failed: help check ${String(helpRes)}`);
                 app.exit(1);
               }
             });
