@@ -15,12 +15,18 @@ export interface VncOpenResult {
 export class VncManager {
   private readonly bridges = new Map<string, BridgeHandle>();
 
-  constructor(private readonly sealer: Sealer) {}
+  constructor(
+    private readonly sealer: Sealer,
+    /** Ошибка рукопожатия VNC (сервер молчит / не-RFB / неподдерживаемое шифрование). */
+    private readonly onHandshakeError?: (sessionId: string, message: string) => void
+  ) {}
 
   async open(host: Host, credential: CredentialSet | null, sessionId: string): Promise<VncOpenResult> {
     const port = host.port ?? 5900;
     try {
-      const bridge = await startBridge(host.host, port);
+      const bridge = await startBridge(host.host, port, (message) => {
+        this.onHandshakeError?.(sessionId, message);
+      });
       this.bridges.set(sessionId, bridge);
 
       // Пароль VNC нужен клиенту для RFB-рукопожатия (noVNC шифрует

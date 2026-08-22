@@ -539,6 +539,11 @@ function createWindow(rdp: RdpManager): void {
                         }
                         colored = nonBlack;
                         if (nonBlack > 0) {
+                          // Кадр есть — но вкладка не должна при этом лежать в оверлее ошибки
+                          // (регрессия: rfb.connect() раньше ронял состояние в error).
+                          if (document.querySelector('.session-overlay')) {
+                            return 'overlay-despite-canvas:' + (document.querySelector('.session-overlay-message')?.textContent || '');
+                          }
                           return 'ok:canvas=' + canvas.width + 'x' + canvas.height + ':colored=' + nonBlack;
                         }
                       }
@@ -558,6 +563,39 @@ function createWindow(rdp: RdpManager): void {
                 app.exit(0);
               } else {
                 console.error(`[smoke] vnc flow failed: ${String(res)}`);
+                app.exit(1);
+              }
+            });
+          return;
+        }
+        // Ошибка рукопожатия VNC: сервер молчит → вкладка показывает понятный оверлей.
+        if (process.env.RH_SMOKE_VNC_ERROR === '1') {
+          await mainWindow?.webContents
+            .executeJavaScript(`
+              (async () => {
+                const el = document.querySelector('.tree-host');
+                if (!el) return 'no-host';
+                el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+                const deadline = Date.now() + 20000;
+                while (Date.now() < deadline) {
+                  const overlay = document.querySelector('.session-overlay-message');
+                  if (overlay) {
+                    const msg = overlay.textContent || '';
+                    if (msg.includes('не отвечает на рукопожатие')) return 'ok:' + msg;
+                    return 'other:' + msg;
+                  }
+                  await new Promise((r) => setTimeout(r, 200));
+                }
+                return 'no-overlay';
+              })()
+            `)
+            .then((res) => {
+              clearTimeout(watchdog);
+              if (typeof res === 'string' && res.startsWith('ok:')) {
+                console.log(`[smoke] vnc error flow OK — ${String(res).slice(3)}`);
+                app.exit(0);
+              } else {
+                console.error(`[smoke] vnc error flow failed: ${String(res)}`);
                 app.exit(1);
               }
             });
@@ -1091,7 +1129,9 @@ if (!gotLock) {
       getParentHwnd,
       autoAcceptCert: store.loadSettings().data.rdpAutoAcceptCert
     });
-    const vnc = new VncManager(dpapiSealer);
+    const vnc = new VncManager(dpapiSealer, (sessionId, message) => {
+      broadcast('vnc:error', { sessionId, message });
+    });
     const sftp = new SftpManager(dpapiSealer);
     const tunnels = new TunnelManager(dpapiSealer);
     const updater = new Updater(broadcast);

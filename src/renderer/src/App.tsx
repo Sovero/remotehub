@@ -78,6 +78,11 @@ export default function App(): React.JSX.Element {
         : { phase: 'closed', reason: `Сессия RDP завершена (код ${payload.code ?? '?'})` };
       useApp.getState().applySessionState(payload.sessionId, state);
     });
+    const offVncErr = window.api.onVncError((payload) => {
+      useApp
+        .getState()
+        .applySessionState(payload.sessionId, { phase: 'error', message: payload.message });
+    });
     const offNotify = window.api.onNotify((message) => {
       useApp.getState().pushToast(message);
     });
@@ -100,6 +105,7 @@ export default function App(): React.JSX.Element {
       offData();
       offState();
       offRdp();
+      offVncErr();
       offNotify();
       offMenu();
       offUpdate();

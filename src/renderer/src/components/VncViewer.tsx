@@ -11,6 +11,8 @@ export default function VncViewer({ tab }: { tab: SessionTab }): React.JSX.Eleme
     const container = containerRef.current;
     if (!vnc || !container) return;
 
+    // noVNC 1.7 сам начинает подключение в конструкторе — публичного
+    // метода connect() у RFB нет, вызывать его не нужно (и нельзя).
     const rfb = new RFB(container, `ws://127.0.0.1:${vnc.port}`, {
       credentials: vnc.password ? { password: vnc.password } : undefined
     });
@@ -48,13 +50,25 @@ export default function VncViewer({ tab }: { tab: SessionTab }): React.JSX.Eleme
       });
     });
 
-    try {
-      rfb.connect();
-    } catch (err) {
-      applySessionState(tab.sessionId, { phase: 'error', message: (err as Error).message });
-    }
+    // Страховка: если рукопожатие RFB так и не завершилось (сервер молчит
+    // или завис после версии), не держим вкладку в «Подключение…» вечно.
+    // Точную причину чаще успевает назвать мост (vnc:error) — тогда
+    // состояние уже error, и этот таймер её не перезапишет.
+    const handshakeTimer = setTimeout(() => {
+      const tabNow = useApp
+        .getState()
+        .tabs.find((t) => t.sessionId === tab.sessionId);
+      if (tabNow?.state.phase === 'connecting') {
+        applySessionState(tab.sessionId, {
+          phase: 'error',
+          message:
+            'VNC-сервер не завершил рукопожатие. Проверьте адрес и порт (по умолчанию 5900), а также настройки шифрования на сервере.'
+        });
+      }
+    }, 15000);
 
     return () => {
+      clearTimeout(handshakeTimer);
       try {
         rfb.disconnect();
       } catch {

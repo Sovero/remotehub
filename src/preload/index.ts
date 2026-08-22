@@ -20,7 +20,8 @@ import {
   type TunnelAddRequest,
   type TunnelAddResult,
   type TunnelInfo,
-  type UpdateStatus
+  type UpdateStatus,
+  type VncErrorPayload
 } from '../shared/ipc-contract';
 import type { Settings, TreeNode } from '../shared/types';
 
@@ -83,6 +84,12 @@ const api = {
   }): Promise<{ ok: boolean; port?: number; password?: string; error?: string }> =>
     ipcRenderer.invoke(IPC.vncOpen, req),
   vncClose: (sessionId: string): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.vncClose, sessionId),
+  /** Ошибка рукопожатия VNC (сервер молчит / не-RFB / неподдерживаемое шифрование). */
+  onVncError: (cb: (payload: VncErrorPayload) => void): (() => void) => {
+    const listener = (_e: unknown, payload: VncErrorPayload): void => cb(payload);
+    ipcRenderer.on(IPC.vncError, listener);
+    return () => ipcRenderer.removeListener(IPC.vncError, listener);
+  },
   sftpOpen: (req: SftpOpenRequest): Promise<SftpOpenResult> => ipcRenderer.invoke(IPC.sftpOpen, req),
   sftpClose: (sessionId: string): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.sftpClose, sessionId),
   sftpList: (sessionId: string, path: string): Promise<{ ok: boolean; entries?: SftpEntry[]; error?: string }> =>

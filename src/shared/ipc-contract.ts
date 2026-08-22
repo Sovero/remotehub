@@ -23,6 +23,7 @@ export const IPC = {
   sessionState: 'session:state',
   vncOpen: 'vnc:open',
   vncClose: 'vnc:close',
+  vncError: 'vnc:error',
   sftpOpen: 'sftp:open',
   sftpClose: 'sftp:close',
   sftpList: 'sftp:list',
@@ -208,6 +209,12 @@ export interface VncOpenResult {
   port?: number;
   password?: string;
   error?: string;
+}
+
+/** Ошибка рукопожатия VNC, распознанная мостом в main (сервер молчит / не-RFB / шифрование). */
+export interface VncErrorPayload {
+  sessionId: string;
+  message: string;
 }
 
 export interface SftpEntry {

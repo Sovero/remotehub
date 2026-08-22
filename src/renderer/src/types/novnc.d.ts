@@ -11,7 +11,6 @@ declare module '@novnc/novnc' {
     viewOnly: boolean;
     qualityLevel: number;
     compressionLevel: number;
-    connect(): void;
     disconnect(): void;
     requestFullscreen(): void;
     focus(): void;
