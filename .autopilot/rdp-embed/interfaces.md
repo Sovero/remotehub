@@ -26,3 +26,11 @@
 - Упаковка: koffi в `dependencies`, в `asarUnpack` добавлены `node_modules/koffi/**` и `node_modules/@koromix/**` (бинарник koffi 3.x лежит в `@koromix/koffi-win32-x64/win32_x64/koffi.node`).
 - Тесты: `tests/rdp-embed.test.ts` (9) — фейковый движок/ребёнок; полный прогон 98.
 - Смоук: `RH_SMOKE_RDP_EMBED=1` (без RH_SMOKE!) — реальный mstsc на мёртвый порт, проверка встраивания из main, exit 0.
+
+## Из тикета 02 — встраивание RDP (renderer)
+
+- preload API: `rdpSetRect(sessionId, rectCssPx)` (send), `rdpActivate(sessionId)` (send), `rdpOverlay(active)` (send); `rdpLaunch` возвращает `{ ok, mode: 'embedded'|'window', error? }`.
+- Вкладка RDP: `SessionTab.rdpMode?: 'embedded' | 'window'` — ставится в `applyRdpOutcome`.
+- `RdpPane` (App.tsx): при `connected` + `rdpMode!=='window'` рендерит подложку `rdp-pane rdp-pane--embedded` (поверх ложится окно mstsc), шлёт rect панели (CSS-пиксели) при монтировании/ресайзе/активации; при `rdpMode==='window'` — честный статус фолбэка.
+- store: `openDialog`/`closeDialog` и `openOnboarding`/`closeOnboarding` шлют `rdpOverlay(true/false)`; `switchTab` шлёт `rdpActivate` для RDP-вкладок.
+- Смоук-инфраструктура: `RH_SMOKE=1` — общий гейт для всех `RH_SMOKE_*` (кроме `RH_SMOKE_RDP_EMBED`); хост-строки в DOM теперь ждутся до 8 с (дерево рендерится после IPC-инициализации).
