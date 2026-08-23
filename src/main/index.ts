@@ -94,7 +94,7 @@ function createWindow(rdp: RdpManager): void {
     minHeight: MIN_HEIGHT,
     show: false,
     backgroundColor: settings.theme === 'light' ? '#f4f4f6' : '#17181c',
-    title: 'Remote Hub',
+    title: `Remote Hub v${app.getVersion()}`,
     icon: APP_ICON,
     autoHideMenuBar: false,
     webPreferences: {
@@ -106,6 +106,9 @@ function createWindow(rdp: RdpManager): void {
   });
 
   mainWindow.once('ready-to-show', () => mainWindow?.show());
+
+  // Заголовок окна содержит версию; HTML-тег <title> не должен его перезаписывать.
+  mainWindow.on('page-title-updated', (e) => e.preventDefault());
 
   // RH_SMOKE_RDP_EMBED: реальный mstsc против живого/мёртвого порта (RH_RDP_PORT).
   // Проверяем: окно найдено и встроено, а предупреждение безопасности сертификата
@@ -285,6 +288,14 @@ function createWindow(rdp: RdpManager): void {
         console.log(
           `[smoke] OK — React mounted, profiles: ${store.loadProfiles().data.length}, host rows in DOM: ${String(hostRows)}`
         );
+
+        // Заголовок окна содержит версию: «Remote Hub vX.Y.Z» (не перезаписан HTML-тегом).
+        const winTitle = mainWindow?.getTitle() ?? '';
+        if (!/^Remote Hub v\d+\.\d+\.\d+$/.test(winTitle)) {
+          console.error(`[smoke] window title без версии: ${JSON.stringify(winTitle)}`);
+          app.exit(1);
+          return;
+        }
 
         // Скриншот заданной темы/акцента (RH_SHOT_DIR, RH_SHOT_THEME, RH_SHOT_ACCENT).
         if (process.env.RH_SHOT_DIR) {

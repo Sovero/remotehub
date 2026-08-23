@@ -1,15 +1,15 @@
 {
-  "slug": "auto-update",
-  "title": "Автообновление: ручная проверка, release notes, смоук",
+  "slug": "window-title-version",
+  "title": "Версия в заголовке окна",
   "mode": "full",
   "depth": "deep",
   "tier": "T0",
-  "startedAt": "2026-08-23T08:45:00+03:00",
-  "updatedAt": "2026-08-23T09:00:00+03:00",
-  "finishedAt": "2026-08-23T09:00:00+03:00",
+  "startedAt": "2026-08-23T09:01:00+03:00",
+  "updatedAt": "2026-08-23T09:08:00+03:00",
+  "finishedAt": "2026-08-23T09:08:00+03:00",
   "requirements": {
-    "total": 5,
-    "done": 5,
+    "total": 3,
+    "done": 3,
     "inTicket": 0,
     "inSpec": 0,
     "placeholder": 0,
@@ -19,21 +19,17 @@
   "tickets": [
     {
       "id": "01",
-      "title": "Автообновление: ручная проверка, release notes, смоук",
-      "requirements": ["R01", "R02", "R03", "R04", "R05"],
+      "title": "Версия в заголовке окна",
+      "requirements": ["R01", "R02", "R03"],
       "blockedBy": [],
       "wave": 1,
       "status": "done",
-      "startedAt": "2026-08-23T08:46:00+03:00",
-      "finishedAt": "2026-08-23T08:59:00+03:00",
+      "startedAt": "2026-08-23T09:02:00+03:00",
+      "finishedAt": "2026-08-23T09:07:00+03:00",
       "retries": 0,
       "files": [
-        "src/renderer/src/components/dialogs/AboutDialog.tsx",
-        "src/renderer/src/components/UpdateBar.tsx",
-        "src/renderer/src/styles/global.css",
         "src/main/index.ts",
-        "CHANGELOG.md",
-        "package.json"
+        "CHANGELOG.md"
       ]
     }
   ],
