@@ -1,12 +1,9 @@
 /**
  * Реализация RdpEmbedEngine на koffi (N-API FFI, user32.dll).
  *
- * koffi — нативный модуль; он грузится только внутри createWin32Engine()
- * (на Windows и при реальном использовании), чтобы модуль можно было
- * импортировать в тестах и вне Windows без падений.
- *
- * Синтаксис вызовов проверен против реального mstsc.exe: поиск окна по PID,
- * SetParent, снятие рамки, позиционирование, show/hide, close.
+ * HWND в 64-битных Windows — BigInt-значения, которые не помещаются в Number
+ * (BigInt > 2⁵³). Движок работает с BigInt от getNativeWindowHandle до
+ * SetParent, чтобы SetParent получал точный указатель, а не обрезанный Number.
  */
 import type KoffiDefault from 'koffi';
 import type { EmbedRect, RdpEmbedEngine } from './embed';
@@ -20,7 +17,6 @@ export function createWin32Engine(): RdpEmbedEngine {
   const koffi = getKoffi();
   const user32 = koffi.load('user32.dll');
 
-  const BOOL = koffi.alias('BOOL', 'int32_t');
   const DWORD = koffi.alias('DWORD', 'uint32_t');
   const HANDLE = koffi.pointer('HANDLE', koffi.opaque());
   const HWND = koffi.alias('HWND', HANDLE);
@@ -74,6 +70,14 @@ export function createWin32Engine(): RdpEmbedEngine {
   const SWP_NOACTIVATE = 0x0010;
   const SWP_FRAMECHANGED = 0x0020;
 
+  /** HWND из koffi — BigInt; используем как есть без toNum. */
+  const hwndValue = (v: unknown): bigint | null => {
+    if (v === null || v === undefined) return null;
+    if (typeof v === 'bigint') return v;
+    if (typeof v === 'number') return BigInt(v);
+    return null;
+  };
+
   /** Текст окна (заголовок / текст кнопки). */
   const windowText = (hwnd: unknown): string => {
     const buf = Buffer.allocUnsafe(4096);
@@ -81,7 +85,7 @@ export function createWin32Engine(): RdpEmbedEngine {
     return n > 0 ? buf.subarray(0, n * 2).toString('utf16le') : '';
   };
 
-  /** Имя Win32-класса окна. Диалог mstsc обычно имеет класс #32770. */
+  /** Имя Win32-класса окна. */
   const windowClass = (hwnd: unknown): string => {
     const buf = Buffer.allocUnsafe(512);
     const n = GetClassNameW(hwnd, buf, 256);
@@ -98,11 +102,16 @@ export function createWin32Engine(): RdpEmbedEngine {
     return parts.filter(Boolean).join('\n');
   };
 
+  /** Идентификатор процесса окна (BigInt -> pid). */
+  const pidOf = (hwnd: unknown): number | null => {
+    const pidRef: (number | null)[] = [null];
+    GetWindowThreadProcessId(hwnd, pidRef);
+    return pidRef[0];
+  };
+
   /**
    * Отличает предупреждение сертификата от основного окна mstsc.
-   * Заголовок «Remote Desktop Connection» встречается у обоих окон на
-   * английской Windows, поэтому одного заголовка недостаточно: требуем
-   * стандартный класс диалога и текст предупреждения/пары кнопок решения.
+   * Требуем стандартный класс диалога + текст предупреждения.
    */
   const isWarningDialog = (hwnd: unknown): boolean => {
     const klass = windowClass(hwnd);
@@ -128,38 +137,24 @@ export function createWin32Engine(): RdpEmbedEngine {
     return hasWarningText || (hasRemoteTitle && (hasConnectCancel || hasYesNo));
   };
 
-  /** Ищет диалог предупреждения сертификата у процесса, включая скрытый. */
-  const findSecurityWarning = (pid: number): number | null => {
-    let found: number | null = null;
+  const findSecurityWarning = (pid: number): bigint | null => {
+    let found: bigint | null = null;
     EnumWindows((hwnd: unknown) => {
       if (hwnd === null || found !== null) return 1;
-      const pidRef: (number | null)[] = [null];
-      GetWindowThreadProcessId(hwnd, pidRef);
-      if (pidRef[0] !== pid || !isWarningDialog(hwnd)) return 1;
-      found = toNum(hwnd as number | bigint);
+      if (pidOf(hwnd) !== pid || !isWarningDialog(hwnd)) return 1;
+      const h = hwndValue(hwnd);
+      if (h !== null) found = h;
       return 0;
     }, 0);
     return found;
   };
 
-  /**
-   * Если у процесса pid открыт диалог предупреждения безопасности mstsc
-   * («Подключить»/«Отмена» для непроверенного сертификата), подтверждаем его
-   * кликом по «Подключить». Возвращает true, если клик выполнен.
-   *
-   * mstsc в новых Windows не запоминает принятый сертификат (CertHash не
-   * пишется даже после ручного принятия), поэтому предупреждение всплывает
-   * при каждом подключении — его нужно гасить автоматически.
-   */
   const confirmSecurityWarning = (pid: number): boolean => {
     let clicked = false;
     EnumWindows((hwnd: unknown) => {
       if (hwnd === null) return 1;
-      const pidRef: (number | null)[] = [null];
-      GetWindowThreadProcessId(hwnd, pidRef);
-      if (pidRef[0] !== pid) return 1;
+      if (pidOf(hwnd) !== pid) return 1;
       if (!isWarningDialog(hwnd)) return 1;
-      // В диалоге ищем кнопку «Подключить» (с мнемоникой & и без).
       EnumChildWindows(hwnd, (child: unknown) => {
         if (child === null || clicked) return 1;
         const t = windowText(child).replace(/&/g, '').trim().toLocaleLowerCase();
@@ -182,14 +177,11 @@ export function createWin32Engine(): RdpEmbedEngine {
     return clicked;
   };
 
-  /** Нажимает кнопку «Отмена» и закрывает предупреждение безопасности. */
   const rejectSecurityWarning = (pid: number): boolean => {
     let clicked = false;
     EnumWindows((hwnd: unknown) => {
       if (hwnd === null || clicked) return 1;
-      const pidRef: (number | null)[] = [null];
-      GetWindowThreadProcessId(hwnd, pidRef);
-      if (pidRef[0] !== pid || !isWarningDialog(hwnd)) return 1;
+      if (pidOf(hwnd) !== pid || !isWarningDialog(hwnd)) return 1;
       EnumChildWindows(hwnd, (child: unknown) => {
         if (child === null || clicked) return 1;
         const t = windowText(child).replace(/&/g, '').trim().toLocaleLowerCase();
@@ -205,38 +197,25 @@ export function createWin32Engine(): RdpEmbedEngine {
     return clicked;
   };
 
-  /** Пропускаем диалог предупреждения при выборе окна для встраивания. */
-  const isSkipWindow = (hwnd: unknown): boolean => isWarningDialog(hwnd);
-
-  /** koffi 3.x возвращает указатели BigInt'ами; внутри движка работаем с Number. */
-  const toNum = (v: bigint | number | null | undefined): number =>
-    typeof v === 'bigint' ? Number(v) : (v as number) ?? 0;
-
   return {
-    async findWindowByPid(pid: number, timeoutMs = 15000, intervalMs = 120): Promise<number | null> {
+    async findWindowByPid(pid: number, timeoutMs = 15000, intervalMs = 120): Promise<bigint | null> {
       const deadline = Date.now() + timeoutMs;
-      const scan = (): number | null => {
-        // Предупреждение безопасности здесь не гасим: авто-подтверждение —
-        // настройка пользователя, и ей управляет менеджер (attachWindow/tick).
-        // Сам диалог исключаем из кандидатов на встраивание (isSkipWindow).
-        let first: number | null = null;
-        let visible: number | null = null;
+      const scan = (): bigint | null => {
+        let first: bigint | null = null;
+        let visible: bigint | null = null;
         EnumWindows((hwnd: unknown) => {
           if (hwnd === null) return 1;
-          const pidRef: (number | null)[] = [null];
-          GetWindowThreadProcessId(hwnd, pidRef);
-          if (pidRef[0] !== pid) return 1;
-          if (isSkipWindow(hwnd)) return 1;
+          if (pidOf(hwnd) !== pid) return 1;
+          // Диалог предупреждения не кандидат на встраивание.
+          if (isWarningDialog(hwnd)) return 1;
           const wasVisible = IsWindowVisible(hwnd) !== 0;
-          const h = toNum(hwnd as number | bigint);
-          // Скрываем найденный top-level HWND прямо в native-скане, до
-          // возврата управления в JS. Это исключает внешний «всплеск» окна
-          // между EnumWindows и SetParent.
+          const h = hwndValue(hwnd);
+          // Скрываем top-level HWND до SetParent — исключаем внешний «всплеск».
           ShowWindow(hwnd, SW_HIDE);
           if (first === null) first = h;
-          if (wasVisible) {
+          if (wasVisible && h !== null) {
             visible = h;
-            return 0; // нашли видимое окно процесса — стоп
+            return 0;
           }
           return 1;
         }, 0);
@@ -255,11 +234,11 @@ export function createWin32Engine(): RdpEmbedEngine {
       });
     },
 
-    isWindow(hwnd: number): boolean {
+    isWindow(hwnd: bigint): boolean {
       return IsWindow(hwnd) !== 0;
     },
 
-    findSecurityWarning(pid: number): number | null {
+    findSecurityWarning(pid: number): bigint | null {
       return findSecurityWarning(pid);
     },
 
@@ -271,28 +250,26 @@ export function createWin32Engine(): RdpEmbedEngine {
       return rejectSecurityWarning(pid);
     },
 
-    embed(hwnd: number, parentHwnd: number): void {
+    embed(hwnd: bigint, parentHwnd: bigint): void {
       ShowWindow(hwnd, SW_HIDE);
       SetParent(hwnd, parentHwnd);
-      const actualParent = toNum(GetParent(hwnd));
-      if (actualParent !== toNum(parentHwnd)) {
+      const actualParent = GetParent(hwnd);
+      if (actualParent !== parentHwnd) {
         throw new Error('Win32 SetParent не привязал окно mstsc к окну приложения');
       }
-      const style = toNum(GetWindowLongPtrW(hwnd, GWL_STYLE));
-      // Дочернее окно без рамки/заголовка/кнопок; видимостью рулит show/hide.
+      const style = Number(GetWindowLongPtrW(hwnd, GWL_STYLE));
       const next =
         (style | WS_CHILD) &
         ~(WS_POPUP | WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU);
       SetWindowLongPtrW(hwnd, GWL_STYLE, next);
-      const ex = toNum(GetWindowLongPtrW(hwnd, GWL_EXSTYLE));
-      // Убрать кнопку из панели задач, пометить как окно-инструмент.
+      const ex = Number(GetWindowLongPtrW(hwnd, GWL_EXSTYLE));
       SetWindowLongPtrW(hwnd, GWL_EXSTYLE, (ex & ~WS_EX_APPWINDOW) | WS_EX_TOOLWINDOW);
     },
 
-    setRect(hwnd: number, rect: EmbedRect): void {
+    setRect(hwnd: bigint, rect: EmbedRect): void {
       SetWindowPos(
         hwnd,
-        0, // HWND_TOP
+        0,
         rect.x,
         rect.y,
         Math.max(1, rect.width),
@@ -301,19 +278,19 @@ export function createWin32Engine(): RdpEmbedEngine {
       );
     },
 
-    show(hwnd: number): void {
+    show(hwnd: bigint): void {
       ShowWindow(hwnd, SW_SHOW);
     },
 
-    hide(hwnd: number): void {
+    hide(hwnd: bigint): void {
       ShowWindow(hwnd, SW_HIDE);
     },
 
-    setForeground(hwnd: number): void {
+    setForeground(hwnd: bigint): void {
       SetForegroundWindow(hwnd);
     },
 
-    close(hwnd: number): void {
+    close(hwnd: bigint): void {
       PostMessageW(hwnd, WM_CLOSE, 0, 0);
     }
   };

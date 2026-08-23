@@ -23,7 +23,7 @@ class FakeChild extends EventEmitter {
 }
 
 interface FakeWindow {
-  hwnd: number;
+  hwnd: bigint;
   visible: boolean;
 }
 
@@ -34,9 +34,9 @@ class FakeEngine implements RdpEmbedEngine {
   /** Сколько раз findWindowByPid вернул null до первого результата. */
   findDelay = 0;
   alive = true;
-  warningByPid = new Map<number, number>();
+  warningByPid = new Map<number, bigint>();
 
-  async findWindowByPid(pid: number): Promise<number | null> {
+  async findWindowByPid(pid: number): Promise<bigint | null> {
     this.calls.push(`find:${pid}`);
     if (this.findDelay > 0) {
       this.findDelay--;
@@ -45,11 +45,11 @@ class FakeEngine implements RdpEmbedEngine {
     const w = this.hwndByPid.get(pid);
     return w ? w.hwnd : null;
   }
-  isWindow(hwnd: number): boolean {
+  isWindow(hwnd: bigint): boolean {
     this.calls.push(`isWindow:${hwnd}`);
     return this.alive && [...this.hwndByPid.values()].some((w) => w.hwnd === hwnd);
   }
-  findSecurityWarning(pid: number): number | null {
+  findSecurityWarning(pid: number): bigint | null {
     this.calls.push(`find-warning:${pid}`);
     return this.warningByPid.get(pid) ?? null;
   }
@@ -62,22 +62,22 @@ class FakeEngine implements RdpEmbedEngine {
     this.calls.push(`reject:${pid}`);
     return true;
   }
-  embed(hwnd: number, parentHwnd: number): void {
+  embed(hwnd: bigint, parentHwnd: bigint): void {
     this.calls.push(`embed:${hwnd}->${parentHwnd}`);
   }
-  setRect(hwnd: number, rect: EmbedRect): void {
+  setRect(hwnd: bigint, rect: EmbedRect): void {
     this.calls.push(`rect:${hwnd}:${rect.x},${rect.y},${rect.width},${rect.height}`);
   }
-  show(hwnd: number): void {
+  show(hwnd: bigint): void {
     this.calls.push(`show:${hwnd}`);
   }
-  hide(hwnd: number): void {
+  hide(hwnd: bigint): void {
     this.calls.push(`hide:${hwnd}`);
   }
-  setForeground(hwnd: number): void {
+  setForeground(hwnd: bigint): void {
     this.calls.push(`foreground:${hwnd}`);
   }
-  close(hwnd: number): void {
+  close(hwnd: bigint): void {
     this.calls.push(`close:${hwnd}`);
   }
 }
@@ -116,7 +116,7 @@ function makeManager(opts: {
   const manager = new RdpManager({
     sealer: {} as never,
     send: (c, p) => sends.push({ channel: c, payload: p }),
-    getParentHwnd: () => 111,
+    getParentHwnd: () => 111n,
     engine,
     spawn: async () => {
       if (opts.spawnResult) return opts.spawnResult();
@@ -134,7 +134,7 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 describe('RdpManager: встраивание', () => {
   it('встраивает окно mstsc: поиск по PID → embed → позиционирование', async () => {
     const { manager, engine, child } = makeManager({});
-    engine.hwndByPid.set(child.pid, { hwnd: 777, visible: true });
+    engine.hwndByPid.set(child.pid, { hwnd: 777n, visible: true });
 
     const res = await manager.launch(rdpHost(), null, 's1');
     expect(res).toEqual({ ok: true });
@@ -164,12 +164,12 @@ describe('RdpManager: встраивание', () => {
     const exited = sends.find((s) => s.channel === 'rdp:exited');
     expect(exited).toBeDefined();
     expect((exited?.payload as { error?: string }).error).toContain('Не удалось найти окно');
-    expect(engine.isWindow(777)).toBe(false);
+    expect(engine.isWindow(777n)).toBe(false);
   });
 
   it('fullscreen-профиль всё равно встраивается во вкладку', async () => {
     const { manager, engine, child } = makeManager({});
-    engine.hwndByPid.set(child.pid, { hwnd: 778, visible: true });
+    engine.hwndByPid.set(child.pid, { hwnd: 778n, visible: true });
     const res = await manager.launch(
       rdpHost({ rdp: { domain: '', screenMode: 'fullscreen', width: 1280, height: 800, multiMonitor: false, promptForCreds: false } }),
       null,
@@ -183,7 +183,7 @@ describe('RdpManager: встраивание', () => {
 
   it('multiMonitor-профиль адаптируется к одной встроенной сцене', async () => {
     const { manager, engine, child } = makeManager({});
-    engine.hwndByPid.set(child.pid, { hwnd: 779, visible: true });
+    engine.hwndByPid.set(child.pid, { hwnd: 779n, visible: true });
     const res = await manager.launch(
       rdpHost({ rdp: { domain: '', screenMode: 'window', width: 1280, height: 800, multiMonitor: true, promptForCreds: false } }),
       null,
@@ -197,7 +197,7 @@ describe('RdpManager: встраивание', () => {
 
   it('embedded fullscreen mstsc закрывается вместе с вкладкой', async () => {
     const { manager, engine, child } = makeManager({});
-    engine.hwndByPid.set(child.pid, { hwnd: 780, visible: true });
+    engine.hwndByPid.set(child.pid, { hwnd: 780n, visible: true });
     const res = await manager.launch(
       rdpHost({ rdp: { domain: '', screenMode: 'fullscreen', width: 1280, height: 800, multiMonitor: false, promptForCreds: false } }),
       null,
@@ -215,8 +215,8 @@ describe('RdpManager: встраивание', () => {
   it('activate показывает активную и прячет остальные', async () => {
     const engine = new FakeEngine();
     const children = [new FakeChild(4242), new FakeChild(4243)];
-    engine.hwndByPid.set(4242, { hwnd: 1, visible: true });
-    engine.hwndByPid.set(4243, { hwnd: 2, visible: true });
+    engine.hwndByPid.set(4242, { hwnd: 1n, visible: true });
+    engine.hwndByPid.set(4243, { hwnd: 2n, visible: true });
     const spawns: { ok: true; child: FakeChild; cleanup: () => void }[] = children.map((child) => ({
       ok: true,
       child,
@@ -225,7 +225,7 @@ describe('RdpManager: встраивание', () => {
     const manager = new RdpManager({
       sealer: {} as never,
       send: () => undefined,
-      getParentHwnd: () => 111,
+      getParentHwnd: () => 111n,
       engine,
       spawn: async () => spawns.shift()!,
       watchdogInterval: 50
@@ -244,7 +244,7 @@ describe('RdpManager: встраивание', () => {
 
   it('overlay прячет все встроенные окна и возвращает активное', async () => {
     const { manager, engine, child } = makeManager({});
-    engine.hwndByPid.set(child.pid, { hwnd: 5, visible: true });
+    engine.hwndByPid.set(child.pid, { hwnd: 5n, visible: true });
     await manager.launch(rdpHost(), null, 's1');
     await sleep(20);
     manager.setRect('s1', RECT);
@@ -258,7 +258,7 @@ describe('RdpManager: встраивание', () => {
 
   it('stop закрывает окно (WM_CLOSE) и убивает процесс, если тот не вышел', async () => {
     const { manager, engine, child, sends } = makeManager({});
-    engine.hwndByPid.set(child.pid, { hwnd: 9, visible: true });
+    engine.hwndByPid.set(child.pid, { hwnd: 9n, visible: true });
     await manager.launch(rdpHost(), null, 's1');
     await sleep(20);
     expect(engine.calls).toContain('embed:9->111');
@@ -273,7 +273,7 @@ describe('RdpManager: встраивание', () => {
 
   it('сторож гасит предупреждение безопасности mstsc на каждом тике', async () => {
     const { manager, engine, child } = makeManager({ watchdogInterval: 5 });
-    engine.hwndByPid.set(child.pid, { hwnd: 21, visible: true });
+    engine.hwndByPid.set(child.pid, { hwnd: 21n, visible: true });
     await manager.launch(rdpHost(), null, 's1');
     await sleep(30);
     // findWindowByPid не зовёт confirm (это делает менеджер); проверяем вызовы
@@ -282,8 +282,8 @@ describe('RdpManager: встраивание', () => {
 
   it('выключенное авто-подтверждение переносит предупреждение во вкладку', async () => {
     const { manager, engine, child, sends } = makeManager({ watchdogInterval: 5, autoAcceptCert: false });
-    engine.hwndByPid.set(child.pid, { hwnd: 21, visible: true });
-    engine.warningByPid.set(child.pid, 91);
+    engine.hwndByPid.set(child.pid, { hwnd: 21n, visible: true });
+    engine.warningByPid.set(child.pid, 91n);
     await manager.launch(rdpHost(), null, 's1');
     await sleep(30);
     expect(engine.calls).toContain('embed:21->111');
@@ -298,8 +298,8 @@ describe('RdpManager: встраивание', () => {
 
   it('отмена сертификата закрывает только текущую RDP-вкладку', async () => {
     const { manager, engine, child, sends } = makeManager({ watchdogInterval: 5, autoAcceptCert: false });
-    engine.hwndByPid.set(child.pid, { hwnd: 23, visible: true });
-    engine.warningByPid.set(child.pid, 93);
+    engine.hwndByPid.set(child.pid, { hwnd: 23n, visible: true });
+    engine.warningByPid.set(child.pid, 93n);
     await manager.launch(rdpHost(), null, 's1');
     await sleep(20);
     manager.rejectCertificate('s1');
@@ -317,21 +317,21 @@ describe('RdpManager: встраивание', () => {
 
   it('пересозданное окно перевстраивается сторожем', async () => {
     const { manager, engine, child } = makeManager({ watchdogInterval: 5 });
-    engine.hwndByPid.set(child.pid, { hwnd: 21, visible: true });
+    engine.hwndByPid.set(child.pid, { hwnd: 21n, visible: true });
     await manager.launch(rdpHost(), null, 's1');
     await sleep(30);
     expect(engine.calls).toContain('embed:21->111');
 
     // окно «пересоздано»: старый HWND мёртв, у PID новый
     engine.hwndByPid.delete(child.pid);
-    engine.hwndByPid.set(child.pid, { hwnd: 22, visible: true });
+    engine.hwndByPid.set(child.pid, { hwnd: 22n, visible: true });
     await sleep(60); // дожидаемся тика сторожа
     expect(engine.calls).toContain('embed:22->111');
   });
 
   it('выход mstsc без закрытия вкладки шлёт rdp:exited', async () => {
     const { manager, engine, child, sends } = makeManager({});
-    engine.hwndByPid.set(child.pid, { hwnd: 31, visible: true }); // сессия живёт
+    engine.hwndByPid.set(child.pid, { hwnd: 31n, visible: true }); // сессия живёт
     await manager.launch(rdpHost(), null, 's1');
     await sleep(20);
     child.emit('exit', 0);

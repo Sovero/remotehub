@@ -1858,14 +1858,14 @@ if (!gotLock) {
       }
     };
     const sessions = new SessionManager(dpapiSealer, broadcast as (c: 'session:data' | 'session:state', p: unknown) => void);
-    const getParentHwnd = (): number | null => {
+    const getParentHwnd = (): bigint | null => {
       if (!mainWindow || mainWindow.isDestroyed()) return null;
       try {
         const handle = mainWindow.getNativeWindowHandle();
         if (handle.length >= 8 && typeof handle.readBigUInt64LE === 'function') {
-          return Number(handle.readBigUInt64LE(0));
+          return handle.readBigUInt64LE(0);
         }
-        return handle.readUInt32LE(0);
+        return BigInt(handle.readUInt32LE(0));
       } catch {
         return null;
       }

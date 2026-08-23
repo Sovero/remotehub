@@ -22,7 +22,7 @@ export interface RdpLaunchOutcome {
 
 interface ActiveRdp {
   child: ChildProcess | null;
-  hwnd: number | null;
+  hwnd: bigint | null;
   rect: EmbedRect | null;
   /** HWND уже прикреплён к родителю Electron; до этого он не считается embedded. */
   embedded: boolean;
@@ -40,8 +40,8 @@ interface ActiveRdp {
 export interface RdpManagerDeps {
   sealer: Sealer;
   send: (channel: 'rdp:exited' | 'rdp:certificate', payload: unknown) => void;
-  /** HWND окна Electron, в которое встраиваем mstsc. */
-  getParentHwnd: () => number | null;
+  /** HWND окна Electron, в которое встраиваем mstsc. BigInt — 64-битный указатель. */
+  getParentHwnd: () => bigint | null;
   engine?: RdpEmbedEngine;
   /** Внедряемые зависимости для тестов: реальные используются по умолчанию. */
   spawn?: (opts: RdpFileOptions, password: string | null) => Promise<RdpSpawn>;

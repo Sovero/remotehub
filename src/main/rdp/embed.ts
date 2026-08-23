@@ -19,11 +19,12 @@ export interface RdpEmbedEngine {
   /**
    * Ищет верхнеуровневое окно процесса pid. Предпочитает видимое окно —
    * у mstsc бывают скрытые служебные окна того же PID.
+   * HWND — 64-битный указатель, BigInt во избежание потери точности.
    */
-  findWindowByPid(pid: number, timeoutMs?: number, intervalMs?: number): Promise<number | null>;
-  isWindow(hwnd: number): boolean;
+  findWindowByPid(pid: number, timeoutMs?: number, intervalMs?: number): Promise<bigint | null>;
+  isWindow(hwnd: bigint): boolean;
   /** Ищет видимый или скрытый диалог предупреждения сертификата у pid. */
-  findSecurityWarning(pid: number): number | null;
+  findSecurityWarning(pid: number): bigint | null;
   confirmSecurityWarning(pid: number): boolean;
   /** Нажимает «Отмена» у предупреждения сертификата. */
   rejectSecurityWarning(pid: number): boolean;
@@ -31,14 +32,14 @@ export interface RdpEmbedEngine {
    * Делает hwnd дочерним окном parentHwnd, снимает заголовок/рамку/кнопки
    * минимизации и убирает окно из панели задач. Видимостью управляет show/hide.
    */
-  embed(hwnd: number, parentHwnd: number): void;
+  embed(hwnd: bigint, parentHwnd: bigint): void;
   /** Позиционирует встроенное окно в rect (SWP_FRAMECHANGED, без активации). */
-  setRect(hwnd: number, rect: EmbedRect): void;
-  show(hwnd: number): void;
-  hide(hwnd: number): void;
-  setForeground(hwnd: number): void;
+  setRect(hwnd: bigint, rect: EmbedRect): void;
+  show(hwnd: bigint): void;
+  hide(hwnd: bigint): void;
+  setForeground(hwnd: bigint): void;
   /** Best-effort закрытие (WM_CLOSE). Надёжный путь — TerminateProcess у менеджера. */
-  close(hwnd: number): void;
+  close(hwnd: bigint): void;
 }
 
 const noopEngine: RdpEmbedEngine = {
