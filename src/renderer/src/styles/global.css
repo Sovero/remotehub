@@ -360,7 +360,8 @@ body {
   gap: 12px;
 }
 
-.about-head {
+.about-head,
+.whatsnew-head {
   display: flex;
   align-items: center;
   gap: 12px;

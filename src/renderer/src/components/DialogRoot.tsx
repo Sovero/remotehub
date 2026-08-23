@@ -11,6 +11,7 @@ import NewSessionDialog from './dialogs/NewSessionDialog';
 import PasswordDialog from './dialogs/PasswordDialog';
 import SnippetsDialog from './dialogs/SnippetsDialog';
 import TunnelsDialog from './dialogs/TunnelsDialog';
+import WhatsNewDialog from './dialogs/WhatsNewDialog';
 
 export default function DialogRoot(): React.JSX.Element | null {
   const dialog = useApp((s) => s.dialog);
@@ -45,6 +46,8 @@ export default function DialogRoot(): React.JSX.Element | null {
       return <HotkeysDialog onClose={closeDialog} />;
     case 'about':
       return <AboutDialog onClose={closeDialog} />;
+    case 'whats-new':
+      return <WhatsNewDialog onClose={closeDialog} />;
     case 'help':
       return <HelpDialog sectionId={dialog.sectionId} onClose={closeDialog} />;
     case 'password':

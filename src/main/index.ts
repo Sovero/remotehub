@@ -898,13 +898,61 @@ function createWindow(rdp: RdpManager): void {
                   return 'ok';
                 })()
               `);
-              if (uiVerRes === 'ok') {
+              if (uiVerRes !== 'ok') {
+                console.error(`[smoke] icons flow failed: ui-version check ${String(uiVerRes)}`);
+                app.exit(1);
+                return;
+              }
+              // «Что нового» после обновления: при старой lastSeenVersion
+              // диалог открывается автоматически с changelog, версия запоминается.
+              const wnRes = await mainWindow?.webContents.executeJavaScript(`
+                (async () => {
+                  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+                  const store = window.__RH_STORE__;
+                  if (!store) return 'no-store-hook';
+                  const appVer = store.getState().appInfo?.version;
+                  if (!appVer) return 'no-app-version';
+                  // Сценарий обновления: запомнена старая версия.
+                  await store.getState().patchSettings({ lastSeenVersion: '0.0.1' });
+                  await wait(150);
+                  await store.getState().maybeShowWhatsNew();
+                  await wait(250);
+                  const m = document.querySelector('.modal');
+                  if (!m) return 'no-whatsnew-modal';
+                  const text = m.textContent || '';
+                  if (!text.includes('Что нового')) return 'no-whatsnew-title';
+                  if (!text.includes('обновлён')) return 'no-whatsnew-subtitle';
+                  const items = m.querySelectorAll('.about-changelog-section li');
+                  if (items.length === 0) return 'no-whatsnew-items';
+                  // Версия запомнена после показа — повторно не откроется.
+                  if (store.getState().settings.lastSeenVersion !== appVer)
+                    return 'last-seen-not-saved:' + store.getState().settings.lastSeenVersion;
+                  // Закрыть и убедиться, что повторный вызов ничего не открывает.
+                  m.querySelector('.modal-close')?.click();
+                  await wait(150);
+                  await store.getState().maybeShowWhatsNew();
+                  await wait(150);
+                  if (document.querySelector('.modal')) return 'whatsnew-reopened';
+                  // Чистый первый запуск: онбординг не пройден, версии нет — без диалога.
+                  await store.getState().patchSettings({ lastSeenVersion: null, onboardingDone: false });
+                  await wait(150);
+                  await store.getState().maybeShowWhatsNew();
+                  await wait(150);
+                  if (document.querySelector('.modal')) return 'whatsnew-on-fresh';
+                  if (store.getState().settings.lastSeenVersion !== appVer)
+                    return 'fresh-not-recorded:' + store.getState().settings.lastSeenVersion;
+                  // Вернуть сид-состояние для последующих смоуков.
+                  await store.getState().patchSettings({ onboardingDone: true });
+                  return 'ok';
+                })()
+              `);
+              if (wnRes === 'ok') {
                 console.log(
-                  `[smoke] icons flow OK — ${String(res).slice(3)}:help=1:about=1:ui-version=1 (${String(aboutRes).slice(3)})`
+                  `[smoke] icons flow OK — ${String(res).slice(3)}:help=1:about=1:ui-version=1:whatsnew=1 (${String(aboutRes).slice(3)})`
                 );
                 app.exit(0);
               } else {
-                console.error(`[smoke] icons flow failed: ui-version check ${String(uiVerRes)}`);
+                console.error(`[smoke] icons flow failed: whatsnew check ${String(wnRes)}`);
                 app.exit(1);
               }
             });

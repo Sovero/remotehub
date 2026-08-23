@@ -50,6 +50,7 @@ export type DialogState =
   | { type: 'snippets' }
   | { type: 'hotkeys' }
   | { type: 'about' }
+  | { type: 'whats-new' }
   | { type: 'help'; sectionId?: string }
   | { type: 'tunnels'; sessionId: string; title: string; host: Host }
   | null;
@@ -67,6 +68,8 @@ interface AppState {
   update: UpdateStatus;
   init: () => Promise<void>;
   applyUpdateState: (state: UpdateStatus) => void;
+  /** «Что нового»: открыть один раз после обновления версии (сравнение lastSeenVersion). */
+  maybeShowWhatsNew: () => Promise<void>;
   checkUpdates: () => Promise<void>;
   downloadUpdate: () => Promise<void>;
   installUpdate: () => Promise<void>;
@@ -133,7 +136,8 @@ export const useApp = create<AppState>((set, get) => ({
     openTabs: [],
     snippets: [],
     onboardingDone: false,
-    helpErrorShown: false
+    helpErrorShown: false,
+    lastSeenVersion: null
   },
   appInfo: null,
   ready: false,
@@ -144,6 +148,26 @@ export const useApp = create<AppState>((set, get) => ({
   update: { status: 'idle' },
 
   applyUpdateState: (update) => set({ update }),
+
+  maybeShowWhatsNew: async () => {
+    const { appInfo, settings, dialog, onboardingOpen } = get();
+    if (!appInfo) return;
+    // Чистый первый запуск (онбординг ещё не пройден и версия не записана) —
+    // ничего не показываем, просто запоминаем текущую версию.
+    const freshInstall = settings.lastSeenVersion === null && !settings.onboardingDone;
+    if (freshInstall) {
+      await get().patchSettings({ lastSeenVersion: appInfo.version });
+      return;
+    }
+    // Версия не менялась — «Что нового» для неё уже показывали.
+    if (settings.lastSeenVersion === appInfo.version) return;
+    // Поверх другого диалога/онбординга не открываем, но версию запоминаем,
+    // чтобы не спрашивать на каждом следующем старте.
+    if (dialog === null && !onboardingOpen) {
+      get().openDialog({ type: 'whats-new' });
+    }
+    await get().patchSettings({ lastSeenVersion: appInfo.version });
+  },
 
   checkUpdates: async () => {
     await window.api.checkForUpdates();
@@ -212,6 +236,8 @@ export const useApp = create<AppState>((set, get) => ({
     if (settings.recovered) {
       get().pushToast('Файл настроек был повреждён — применены настройки по умолчанию');
     }
+    // «Что нового» после обновления: сравнение сохранённой и текущей версии.
+    await get().maybeShowWhatsNew();
   },
 
   saveTree: async (tree) => {

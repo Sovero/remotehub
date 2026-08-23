@@ -95,6 +95,8 @@ export interface Settings {
   onboardingDone: boolean;
   /** Справка об ошибке подключения уже открывалась автоматически (один раз). */
   helpErrorShown: boolean;
+  /** Версия, в которой пользователь уже видел «Что нового»; null — ещё никогда. */
+  lastSeenVersion: string | null;
 }
 
 export interface ProfilesFile {
@@ -126,7 +128,8 @@ export const DEFAULT_SETTINGS: Settings = {
   openTabs: [],
   snippets: [],
   onboardingDone: false,
-  helpErrorShown: false
+  helpErrorShown: false,
+  lastSeenVersion: null
 };
 
 export const DEFAULT_SSH: SshOptions = { keepalive: 30, agent: false, timeout: 10 };
