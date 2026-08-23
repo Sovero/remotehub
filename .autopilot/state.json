@@ -1,12 +1,12 @@
 {
-  "slug": "statusbar-live-hint",
-  "title": "Живая подсказка активной вкладки в статусбаре",
+  "slug": "version-bump-rules",
+  "title": "Правила версионирования билдов",
   "mode": "full",
   "depth": "deep",
   "tier": "T0",
-  "startedAt": "2026-08-22T18:45:00+03:00",
-  "updatedAt": "2026-08-22T18:58:00+03:00",
-  "finishedAt": "2026-08-22T18:58:00+03:00",
+  "startedAt": "2026-08-23T09:10:00+03:00",
+  "updatedAt": "2026-08-23T09:25:00+03:00",
+  "finishedAt": "2026-08-23T09:25:00+03:00",
   "requirements": {
     "total": 4,
     "done": 4,
@@ -19,17 +19,17 @@
   "tickets": [
     {
       "id": "01",
-      "title": "Живая подсказка активной вкладки в статусбаре",
-      "requirements": ["R01", "R02", "R03", "A01"],
+      "title": "Правила версионирования билдов",
+      "requirements": ["R01", "R02", "R03", "R04"],
       "blockedBy": [],
       "wave": 1,
       "status": "done",
-      "startedAt": "2026-08-22T18:46:00+03:00",
-      "finishedAt": "2026-08-22T18:57:00+03:00",
+      "startedAt": "2026-08-23T09:11:00+03:00",
+      "finishedAt": "2026-08-23T09:24:00+03:00",
       "retries": 0,
       "files": [
-        "src/renderer/src/components/StatusBar.tsx",
-        "src/main/index.ts"
+        "scripts/bump-version.mjs",
+        "package.json"
       ]
     }
   ],
