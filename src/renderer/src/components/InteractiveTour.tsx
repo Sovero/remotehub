@@ -117,6 +117,7 @@ export default function InteractiveTour(): React.JSX.Element {
   const [step, setStep] = useState(0);
   const finishOnboarding = useApp((s) => s.finishOnboarding);
   const closeOnboarding = useApp((s) => s.closeOnboarding);
+  const appInfo = useApp((s) => s.appInfo);
   const [winSize, setWinSize] = useState({ w: window.innerWidth, h: window.innerHeight });
   const [spotlight, setSpotlight] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [tooltipStyle, setTooltipStyle] = useState<React.CSSProperties>({ visibility: 'hidden' });
@@ -266,6 +267,11 @@ export default function InteractiveTour(): React.JSX.Element {
           <button className="btn btn--ghost btn--sm" onClick={closeOnboarding}>
             <Icon name="close" size={12} /> Пропустить
           </button>
+          {appInfo && (
+            <span className="tour-tooltip-version" title="Версия приложения">
+              v{appInfo.version}
+            </span>
+          )}
           <span className="tour-tooltip-spacer" />
           {!isFirst && (
             <button className="btn btn--sm" onClick={() => goTo(step - 1)}>

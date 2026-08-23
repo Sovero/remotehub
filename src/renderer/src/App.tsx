@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SessionState } from '@shared/ipc-contract';
 import { findNode } from '@shared/tree';
 import { useApp } from './store';
@@ -161,11 +161,7 @@ export default function App(): React.JSX.Element {
   }, []);
 
   if (!ready) {
-    return (
-      <div className="app app--loading">
-        <div className="loading">Загрузка…</div>
-      </div>
-    );
+    return <LoadingSplash />;
   }
 
   return (
@@ -212,6 +208,44 @@ export default function App(): React.JSX.Element {
       <Toasts />
       <DialogRoot />
       {onboardingOpen && <InteractiveTour />}
+    </div>
+  );
+}
+
+/** Заставка при старте: логотип, имя и версия приложения (до готовности). */
+function LoadingSplash(): React.JSX.Element {
+  const [version, setVersion] = useState<string | null>(null);
+  const appInfo = useApp((s) => s.appInfo);
+
+  useEffect(() => {
+    if (appInfo) {
+      setVersion(appInfo.version);
+      return;
+    }
+    let alive = true;
+    void window.api
+      .appInfo()
+      .then((info) => {
+        if (alive) setVersion(info.version);
+      })
+      .catch(() => {
+        if (alive) setVersion(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [appInfo]);
+
+  return (
+    <div className="app app--loading">
+      <div className="loading">
+        <div className="loading-logo">
+          <Icon name="window" size={34} />
+        </div>
+        <div className="loading-name">Remote Hub</div>
+        {version && <div className="loading-version">Версия {version}</div>}
+        <div className="loading-progress">Загрузка…</div>
+      </div>
     </div>
   );
 }

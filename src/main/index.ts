@@ -864,11 +864,47 @@ function createWindow(rdp: RdpManager): void {
                   return 'ok:items=' + items.length;
                 })()
               `);
-              if (typeof aboutRes === 'string' && aboutRes.startsWith('ok:')) {
-                console.log(`[smoke] icons flow OK — ${String(res).slice(3)}:help=1:about=1 (${String(aboutRes).slice(3)})`);
+              if (typeof aboutRes !== 'string' || !aboutRes.startsWith('ok:')) {
+                console.error(`[smoke] icons flow failed: about check ${String(aboutRes)}`);
+                app.exit(1);
+                return;
+              }
+              // Заставка и онбординг: версия приложения видна до готовности
+              // (loading-version) и в тултипе тура (tour-tooltip-version).
+              const uiVerRes = await mainWindow?.webContents.executeJavaScript(`
+                (async () => {
+                  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+                  const store = window.__RH_STORE__;
+                  if (!store) return 'no-store-hook';
+                  // Заставка: показываем !ready, версия должна быть на экране.
+                  store.setState({ ready: false });
+                  await wait(200);
+                  const splash = document.querySelector('.loading');
+                  if (!splash) return 'no-splash';
+                  const splashVer = (splash.querySelector('.loading-version')?.textContent || '').trim();
+                  if (!/^Версия \\d+\\.\\d+\\.\\d+$/.test(splashVer)) return 'bad-splash-version:' + splashVer;
+                  store.setState({ ready: true });
+                  await wait(200);
+                  // Онбординг: тултип тура показывает версию.
+                  store.getState().openOnboarding();
+                  await wait(250);
+                  const tip = document.querySelector('.tour-tooltip');
+                  if (!tip) return 'no-tour';
+                  const tipVer = (tip.querySelector('.tour-tooltip-version')?.textContent || '').trim();
+                  if (!/^v\\d+\\.\\d+\\.\\d+$/.test(tipVer)) return 'bad-tour-version:' + tipVer;
+                  store.getState().closeOnboarding();
+                  await wait(150);
+                  if (document.querySelector('.tour-overlay')) return 'tour-stuck';
+                  return 'ok';
+                })()
+              `);
+              if (uiVerRes === 'ok') {
+                console.log(
+                  `[smoke] icons flow OK — ${String(res).slice(3)}:help=1:about=1:ui-version=1 (${String(aboutRes).slice(3)})`
+                );
                 app.exit(0);
               } else {
-                console.error(`[smoke] icons flow failed: about check ${String(aboutRes)}`);
+                console.error(`[smoke] icons flow failed: ui-version check ${String(uiVerRes)}`);
                 app.exit(1);
               }
             });
