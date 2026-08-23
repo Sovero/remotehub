@@ -6,6 +6,10 @@ import Modal from './Modal';
 
 export default function AboutDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
   const appInfo = useApp((s) => s.appInfo);
+  const update = useApp((s) => s.update);
+  const checkUpdates = useApp((s) => s.checkUpdates);
+  const downloadUpdate = useApp((s) => s.downloadUpdate);
+  const installUpdate = useApp((s) => s.installUpdate);
   const [entries, setEntries] = useState<ChangelogEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -65,6 +69,66 @@ export default function AboutDialog({ onClose }: { onClose: () => void }): React
             ))}
           </div>
         )}
+
+        <div className="about-section-title">Обновления</div>
+        <div className="about-update">
+          {update.status === 'checking' && (
+            <div className="about-update__row">
+              <Icon name="spinner" size={12} className="icon-spin" /> Проверка обновлений…
+            </div>
+          )}
+          {update.status === 'available' && (
+            <>
+              <div className="about-update__row">
+                <Icon name="download" size={12} /> Доступна версия <strong>{update.version}</strong>
+              </div>
+              {update.releaseNotes && (
+                <div className="about-update__notes">{update.releaseNotes}</div>
+              )}
+              <div className="about-update__actions">
+                <button className="btn btn--primary btn--sm" onClick={() => void downloadUpdate()}>
+                  <Icon name="download" size={12} /> Скачать
+                </button>
+              </div>
+            </>
+          )}
+          {update.status === 'downloading' && (
+            <div className="about-update__row">
+              <Icon name="spinner" size={12} className="icon-spin" /> Скачивание обновления…{' '}
+              {Math.max(0, Math.min(100, update.percent))}%
+            </div>
+          )}
+          {update.status === 'downloaded' && (
+            <div className="about-update__row">
+              <Icon name="check" size={12} /> Версия <strong>{update.version}</strong> готова к установке
+            </div>
+          )}
+          {update.status === 'error' && (
+            <div className="about-update__row about-update__row--error" title={update.message}>
+              <Icon name="warning" size={12} /> Ошибка обновления: {update.message}
+            </div>
+          )}
+          {update.status === 'idle' && (
+            <div className="about-update__row about-update__muted">Проверка обновлений ещё не запускалась.</div>
+          )}
+          {update.status === 'not-available' && (
+            <div className="about-update__row">
+              <Icon name="check" size={12} /> Установлена последняя версия
+            </div>
+          )}
+          <div className="about-update__actions">
+            {(update.status === 'idle' || update.status === 'not-available' || update.status === 'error') && (
+              <button className="btn btn--sm" onClick={() => void checkUpdates()}>
+                <Icon name="refresh" size={12} /> Проверить обновления
+              </button>
+            )}
+            {update.status === 'downloaded' && (
+              <button className="btn btn--primary btn--sm" onClick={() => void installUpdate()}>
+                <Icon name="power" size={12} /> Перезапустить и установить
+              </button>
+            )}
+          </div>
+        </div>
 
         <div className="about-footer">
           <Icon name="key" size={11} /> MIT License · исходный код на GitHub

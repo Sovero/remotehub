@@ -346,8 +346,7 @@ function createWindow(rdp: RdpManager): void {
             {
               name: 'overview',
               js: `(async () => { ${waitProbe} const deadline = Date.now() + 6000; while (Date.now() < deadline) { const t = document.querySelector('.tour-overlay'); if (!t) return 'ok'; const skip = t.querySelector('.btn--ghost'); if (skip) skip.click(); await wait(100); } return document.querySelector('.tour-overlay') ? 'tour-open' : 'ok'; })()`
-            },
-            {
+            },            {
               name: 'settings',
               js: `(async () => { ${waitProbe} const btn = document.querySelector('.sidebar-footer [title="Настройки"]'); if (!btn) return 'no-btn'; btn.click(); const deadline = Date.now() + 6000; while (Date.now() < deadline) { if (document.querySelector('.sidebar-settings-sheet')) return 'ok'; await wait(100); } return 'no-panel'; })()`,
               close: `(() => { const btn = document.querySelector('.sidebar-footer [title="Настройки"]'); if (btn) btn.click(); return 'ok'; })()`
@@ -859,6 +858,122 @@ function createWindow(rdp: RdpManager): void {
                 app.exit(0);
               } else {
                 console.error(`[smoke] icons flow failed: about check ${String(aboutRes)}`);
+                app.exit(1);
+              }
+            });
+          return;
+        }
+        // Автообновление: баннер UpdateBar отображает все состояния,
+        // release notes раскрываются, а «Проверить обновления» в «О программе»
+        // вызывает checkUpdates из стора.
+        if (process.env.RH_SMOKE_UPDATE === '1') {
+          await mainWindow?.webContents
+            .executeJavaScript(`
+              (async () => {
+                const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+                const store = window.__RH_STORE__;
+                if (!store) return 'no-store-hook';
+                const setUpdate = (u) => store.setState({ update: u });
+                const bar = () => document.querySelector('.update-bar');
+                const barText = () => (bar() ? (bar().textContent || '').replace(/\\s+/g, ' ').trim() : '');
+
+                // checking
+                setUpdate({ status: 'checking' });
+                await wait(120);
+                if (!bar()) return 'no-bar-checking';
+                if (!bar().querySelector('svg.icon-spin')) return 'no-spin-checking';
+                if (!barText().includes('Проверка обновлений')) return 'bad-text-checking:' + barText();
+
+                // available + release notes раскрываются по клику
+                setUpdate({ status: 'available', version: '9.9.9', releaseNotes: 'Исправлено всё\\nДобавлено новое' });
+                await wait(120);
+                if (!barText().includes('Доступна версия')) return 'bad-text-available:' + barText();
+                if (!barText().includes('9.9.9')) return 'no-version-available';
+                const toggle = bar().querySelector('.update-bar__notes-toggle');
+                if (!toggle) return 'no-notes-toggle';
+                if (bar().querySelector('.update-bar__notes')) return 'notes-open-by-default';
+                toggle.click();
+                await wait(120);
+                const notes = bar().querySelector('.update-bar__notes');
+                if (!notes) return 'no-notes-after-click';
+                if (!notes.textContent.includes('Исправлено всё')) return 'bad-notes:' + notes.textContent;
+                const dlBtn = [...bar().querySelectorAll('button')].find((b) => (b.textContent || '').includes('Скачать'));
+                if (!dlBtn) return 'no-download-btn';
+
+                // downloading
+                setUpdate({ status: 'downloading', percent: 42, bytesPerSecond: 1000 });
+                await wait(120);
+                if (!barText().includes('42%')) return 'bad-downloading:' + barText();
+                if (!bar().querySelector('.update-bar__progress-fill')) return 'no-progress';
+
+                // downloaded
+                setUpdate({ status: 'downloaded', version: '9.9.9' });
+                await wait(120);
+                if (!barText().includes('готова к установке')) return 'bad-downloaded:' + barText();
+                const installBtn = [...bar().querySelectorAll('button')].find((b) =>
+                  (b.textContent || '').includes('Перезапустить')
+                );
+                if (!installBtn) return 'no-install-btn';
+
+                // error → повторная проверка вызывает checkUpdates
+                let checkCalls = 0;
+                const origCheck = store.getState().checkUpdates;
+                store.setState({ checkUpdates: async () => { checkCalls++; } });
+                setUpdate({ status: 'error', message: 'net down' });
+                await wait(120);
+                if (!barText().includes('Ошибка обновления')) return 'bad-error:' + barText();
+                const retryBtn = [...bar().querySelectorAll('button')].find((b) => (b.textContent || '').includes('Повторить'));
+                if (!retryBtn) return 'no-retry-btn';
+                retryBtn.click();
+                await wait(120);
+                if (checkCalls !== 1) return 'retry-no-check:' + checkCalls;
+                store.setState({ checkUpdates: origCheck });
+
+                // not-available и idle — баннер скрыт
+                setUpdate({ status: 'not-available' });
+                await wait(120);
+                if (bar()) return 'bar-visible-not-available';
+                setUpdate({ status: 'idle' });
+                await wait(120);
+                if (bar()) return 'bar-visible-idle';
+
+                // «О программе»: секция обновлений + кнопка «Проверить обновления»
+                setUpdate({ status: 'idle' });
+                const verBtn = document.querySelector('.statusbar-version');
+                if (!verBtn) return 'no-version-btn';
+                verBtn.click();
+                const deadline = Date.now() + 8000;
+                let m = null;
+                while (Date.now() < deadline) {
+                  m = document.querySelector('.modal');
+                  if (m && (m.textContent || '').includes('О программе')) break;
+                  await wait(100);
+                }
+                if (!m) return 'no-about-modal';
+                const aboutText = m.textContent || '';
+                if (!aboutText.includes('Обновления')) return 'no-about-update-section';
+                let aboutCalls = 0;
+                const origAboutCheck = store.getState().checkUpdates;
+                store.setState({ checkUpdates: async () => { aboutCalls++; } });
+                await wait(150); // перерисовка с новой функцией из стора
+                const aboutCheckBtn = [...m.querySelectorAll('button')].find((b) =>
+                  (b.textContent || '').includes('Проверить обновления')
+                );
+                if (!aboutCheckBtn) return 'no-about-check-btn';
+                aboutCheckBtn.click();
+                await wait(150);
+                if (aboutCalls !== 1) return 'about-btn-no-check:' + aboutCalls;
+                store.setState({ checkUpdates: origAboutCheck });
+                return 'ok:states=checking+available+downloading+downloaded+error+about';
+              })()
+            `)
+            .then((res) => {
+              clearTimeout(watchdog);
+              if (typeof res === 'string' && res.startsWith('ok:')) {
+                console.log(`[smoke] update flow OK — ${String(res).slice(3)}`);
+                app.exit(0);
+              } else {
+                console.error(`[smoke] update flow failed: ${String(res)}`);
                 app.exit(1);
               }
             });

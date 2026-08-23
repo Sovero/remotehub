@@ -402,6 +402,45 @@ body {
   padding-top: 10px;
 }
 
+/* Обновления в «О программе». */
+.about-update {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+.about-update__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+}
+
+.about-update__row--error {
+  color: var(--danger);
+}
+
+.about-update__muted {
+  color: var(--text-muted);
+}
+
+.about-update__notes {
+  max-height: 120px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 8px 10px;
+  background: var(--bg-hover);
+  border-radius: 6px;
+}
+
+.about-update__actions {
+  display: flex;
+  gap: 8px;
+}
+
 /* ---------- welcome ---------- */
 
 .welcome {
@@ -530,6 +569,7 @@ body {
 
 .update-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   padding: 7px 12px;
@@ -587,6 +627,38 @@ body {
 .update-bar__x:hover {
   color: var(--text);
   background: var(--bg-hover);
+}
+
+/* Переключатель «Что нового» и блок release notes в баннере. */
+.update-bar__notes-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.update-bar__notes-toggle:hover {
+  text-decoration: underline;
+}
+
+.update-bar__notes {
+  flex-basis: 100%;
+  max-height: 160px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 8px 10px;
+  background: var(--bg-hover);
+  border-radius: 6px;
 }
 
 /* ---------- tree ---------- */

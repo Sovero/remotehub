@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useApp } from '../store';
 import Icon from './Icon';
 
@@ -8,6 +9,7 @@ export default function UpdateBar(): React.JSX.Element | null {
   const downloadUpdate = useApp((s) => s.downloadUpdate);
   const installUpdate = useApp((s) => s.installUpdate);
   const dismissUpdate = useApp((s) => s.dismissUpdate);
+  const [notesOpen, setNotesOpen] = useState(false);
 
   if (update.status === 'idle' || update.status === 'not-available') return null;
 
@@ -29,6 +31,16 @@ export default function UpdateBar(): React.JSX.Element | null {
       <div className="update-bar update-bar--info">
         <span className="update-bar__text">
           Доступна версия <strong>{update.version}</strong>
+          {update.releaseNotes && (
+            <button
+              className="update-bar__notes-toggle"
+              onClick={() => setNotesOpen((o) => !o)}
+              title={notesOpen ? 'Скрыть изменения' : 'Показать, что нового'}
+            >
+              <Icon name={notesOpen ? 'chevron-up' : 'chevron-down'} size={11} />
+              {notesOpen ? 'Скрыть' : 'Что нового'}
+            </button>
+          )}
         </span>
         <button className="btn btn--primary btn--sm" onClick={() => void downloadUpdate()}>
           <Icon name="download" size={12} /> Скачать
@@ -36,6 +48,9 @@ export default function UpdateBar(): React.JSX.Element | null {
         <button className="update-bar__x" onClick={dismissUpdate} title="Скрыть" aria-label="Скрыть">
           <Icon name="close" size={10} />
         </button>
+        {notesOpen && update.releaseNotes && (
+          <div className="update-bar__notes">{update.releaseNotes}</div>
+        )}
       </div>
     );
   }

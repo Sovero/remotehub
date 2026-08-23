@@ -3,6 +3,13 @@
 Все заметные изменения проекта. Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 версионирование — семантическое (MAJOR.MINOR.PATCH).
 
+## [0.1.3] — 2026-08-23
+
+### Добавлено
+- Автообновление через electron-updater: проверка при старте и по расписанию,
+  ручная проверка из меню и из «О программе», баннер с уведомлением о новой
+  версии и release notes.
+
 ## [0.1.2] — 2026-08-23
 
 ### Добавлено
@@ -42,6 +49,7 @@
 - Анимация папки группы при перетаскивании хоста: подсветка и «приоткрытая» папка.
 - SFTP: иконки файлов/папок, направления передач, галочки завершения.
 
+[0.1.3]: https://github.com/Sovero/remotehub/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/Sovero/remotehub/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/Sovero/remotehub/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Sovero/remotehub/releases/tag/v0.1.0
