@@ -17,6 +17,7 @@ export function createWin32Engine(): RdpEmbedEngine {
   const koffi = getKoffi();
   const user32 = koffi.load('user32.dll');
 
+  const BOOL = koffi.alias('BOOL', 'int32');
   const DWORD = koffi.alias('DWORD', 'uint32_t');
   const HANDLE = koffi.pointer('HANDLE', koffi.opaque());
   const HWND = koffi.alias('HWND', HANDLE);

@@ -21,6 +21,8 @@
   "build": {
     "appId": "com.remotehub.app",
     "productName": "Remote Hub",
+    "electronDist": "node_modules/electron/dist",
+    "electronVersion": "43.4.0",
     "directories": {
       "output": "release"
     },
