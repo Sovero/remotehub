@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, Menu, shell } from 'electron';
 import { writeFileSync, mkdirSync } from 'fs';
 import { dirname, join } from 'path';
+import { pathToFileURL } from 'url';
 import { registerIpc } from './ipc';
 import { RdpManager } from './rdp/manager';
 import { SessionManager } from './sessions/manager';
@@ -110,6 +111,34 @@ function createWindow(rdp: RdpManager): void {
   // Заголовок окна содержит версию; HTML-тег <title> не должен его перезаписывать.
   mainWindow.on('page-title-updated', (e) => e.preventDefault());
 
+  // Remote Hub не создаёт popup-окна и не позволяет remote-сценам увести
+  // рабочее окно на внешний URL. В dev разрешён только origin renderer-сервера,
+  // в packaged — локальный file:// документ.
+  const rendererUrl = process.env['ELECTRON_RENDERER_URL'];
+  const rendererFileUrl = pathToFileURL(join(__dirname, '../renderer/index.html')).href;
+  let rendererOrigin: string | null = null;
+  try {
+    rendererOrigin = rendererUrl ? new URL(rendererUrl).origin : null;
+  } catch {
+    rendererOrigin = null;
+  }
+  const isAllowedRendererUrl = (url: string): boolean => {
+    if (url === rendererFileUrl) return true;
+    if (!rendererOrigin) return false;
+    try {
+      return new URL(url).origin === rendererOrigin;
+    } catch {
+      return false;
+    }
+  };
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!isAllowedRendererUrl(url)) event.preventDefault();
+  });
+  mainWindow.webContents.on('will-redirect', (event, url) => {
+    if (!isAllowedRendererUrl(url)) event.preventDefault();
+  });
+
   // RH_SMOKE_RDP_EMBED: реальный mstsc против живого/мёртвого порта (RH_RDP_PORT).
   // Проверяем: окно найдено и встроено, а предупреждение безопасности сертификата
   // автоматически подтверждено (mstsc не запоминает сертификат в новых Windows).
@@ -165,10 +194,10 @@ function createWindow(rdp: RdpManager): void {
         username: 'smoke',
         rdp: {
           domain: '',
-          screenMode: 'window',
+          screenMode: process.env.RH_RDP_SCREEN_MODE === 'fullscreen' ? 'fullscreen' : 'window',
           width: 800,
           height: 600,
-          multiMonitor: false,
+          multiMonitor: process.env.RH_RDP_MULTIMON === '1',
           promptForCreds: false
         }
       });
@@ -1343,8 +1372,8 @@ function createWindow(rdp: RdpManager): void {
             });
           return;
         }
-        // Управление разрешением встроенной RDP-сессии прямо из вкладки:
-        // окно → «Полный экран» → «Встроить во вкладку» → смена разрешения.
+        // Управление разрешением и режимом встроенной RDP-сессии прямо из вкладки:
+        // embedded window → immersive workspace → embedded window → смена разрешения.
         if (process.env.RH_SMOKE_RDP_RESOLUTION === '1') {
           await mainWindow?.webContents
             .executeJavaScript(`
@@ -1363,20 +1392,21 @@ function createWindow(rdp: RdpManager): void {
                 if (!host) return 'no-host';
                 host.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
                 if (!(await until(() => (document.querySelector('.rdp-pane--embedded') ? true : null)))) return 'no-embedded';
-                // 1. Полный экран: сессия перезапускается, вкладка уходит в фолбэк.
+                // 1. Полный экран остаётся режимом той же вкладки, без fallback.
                 const fsBtn = [...document.querySelectorAll('.rdp-toolbar .btn')].find((b) =>
-                  (b.textContent || '').includes('Полный экран')
+                  (b.textContent || '').includes('На весь рабочий экран')
                 );
                 if (!fsBtn) return 'no-fs-btn';
                 fsBtn.click();
-                if (!(await until(() => (document.querySelector('.rdp-pane--fallback') ? true : null)))) return 'no-fallback';
-                // 2. Обратно во вкладку.
-                const embedBtn = [...document.querySelectorAll('.rdp-pane--fallback .btn')].find((b) =>
-                  (b.textContent || '').includes('Встроить во вкладку')
+                if (!(await until(() => (document.querySelector('.rdp-pane--immersive') ? true : null)))) return 'no-immersive';
+                if (document.querySelector('.rdp-pane--fallback')) return 'external-fallback';
+                // 2. Возврат в оконный режим остаётся внутри той же вкладки.
+                const windowBtn = [...document.querySelectorAll('.rdp-pane--immersive .btn')].find((b) =>
+                  (b.textContent || '').includes('Оконный режим')
                 );
-                if (!embedBtn) return 'no-embed-btn';
-                embedBtn.click();
-                if (!(await until(() => (document.querySelector('.rdp-pane--embedded') ? true : null)))) return 'no-reembedded';
+                if (!windowBtn) return 'no-window-btn';
+                windowBtn.click();
+                if (!(await until(() => (!document.querySelector('.rdp-pane--immersive') && document.querySelector('.rdp-pane--embedded') ? true : null)))) return 'no-window-mode';
                 // 3. Смена разрешения: сессия переподключается с новым desktopwidth/height.
                 const sel = document.querySelector('.rdp-toolbar select');
                 if (!sel) return 'no-res-select';
@@ -1392,7 +1422,7 @@ function createWindow(rdp: RdpManager): void {
             .then((res) => {
               clearTimeout(watchdog);
               if (typeof res === 'string' && res.startsWith('ok:')) {
-                console.log(`[smoke] rdp resolution OK — окно → полный экран → окно, разрешение ${String(res).slice(3)}`);
+                console.log(`[smoke] rdp resolution OK — embedded window → immersive → embedded window, разрешение ${String(res).slice(3)}`);
                 app.exit(0);
               } else {
                 console.error(`[smoke] rdp resolution flow failed: ${String(res)}`);
@@ -1831,14 +1861,18 @@ if (!gotLock) {
     const getParentHwnd = (): number | null => {
       if (!mainWindow || mainWindow.isDestroyed()) return null;
       try {
-        return mainWindow.getNativeWindowHandle().readUInt32LE(0);
+        const handle = mainWindow.getNativeWindowHandle();
+        if (handle.length >= 8 && typeof handle.readBigUInt64LE === 'function') {
+          return Number(handle.readBigUInt64LE(0));
+        }
+        return handle.readUInt32LE(0);
       } catch {
         return null;
       }
     };
     const rdp = new RdpManager({
       sealer: dpapiSealer,
-      send: broadcast as (c: 'rdp:exited', p: unknown) => void,
+      send: broadcast as (c: 'rdp:exited' | 'rdp:certificate', p: unknown) => void,
       getParentHwnd,
       autoAcceptCert: store.loadSettings().data.rdpAutoAcceptCert
     });

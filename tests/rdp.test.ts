@@ -57,7 +57,7 @@ describe('buildRdpFile', () => {
     expect(rdp).toContain('\r\n');
   });
 
-  it('полный экран без разрешения, с доменом и мультимонитором', () => {
+  it('полный экран и мультимониторный профиль нормализуются к одной встроенной сцене', () => {
     const rdp = buildRdpFile({
       host: 'win.corp.local',
       port: 3389,
@@ -69,9 +69,10 @@ describe('buildRdpFile', () => {
       multiMonitor: true,
       promptForCreds: false
     });
-    expect(rdp).toContain('screen mode id:i:1');
-    expect(rdp).toContain('use multimon:i:1');
-    expect(rdp).not.toContain('desktopwidth');
+    expect(rdp).toContain('screen mode id:i:2');
+    expect(rdp).toContain('use multimon:i:0');
+    expect(rdp).toContain('desktopwidth:i:1280');
+    expect(rdp).toContain('desktopheight:i:800');
     expect(rdp).toContain('domain:s:CORP');
     expect(rdp).toContain('full address:s:win.corp.local');
   });

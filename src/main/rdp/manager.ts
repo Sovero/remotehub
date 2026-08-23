@@ -9,14 +9,14 @@ import { spawnRdp, type RdpSpawn } from './launcher';
 
 const WINDOW_FIND_TIMEOUT = 15000;
 const WATCHDOG_INTERVAL = 2000;
+/** Предупреждение mstsc может появиться сразу после основного HWND. */
+const CERTIFICATE_POLL_INTERVAL = 100;
 /** После WM_CLOSE даём mstsc столько на вежливый выход, затем TerminateProcess. */
 const KILL_GRACE_MS = 3000;
 
-export type RdpMode = 'embedded' | 'window';
-
+/** Результат RDP не содержит внешнего/window-режима: сессия всегда embedded. */
 export interface RdpLaunchOutcome {
   ok: boolean;
-  mode?: RdpMode;
   error?: string;
 }
 
@@ -24,17 +24,22 @@ interface ActiveRdp {
   child: ChildProcess | null;
   hwnd: number | null;
   rect: EmbedRect | null;
+  /** HWND уже прикреплён к родителю Electron; до этого он не считается embedded. */
+  embedded: boolean;
   /** Вкладка сессии — текущая активная (встроенное окно видно). */
   visible: boolean;
-  mode: RdpMode;
   closing: boolean;
   killTimer: NodeJS.Timeout | null;
   searching: boolean;
+  certificatePending: boolean;
+  /** После ручного подтверждения не показываем тот же native-диалог повторно,
+   * пока mstsc не уберёт его; это предотвращает мерцание баннера. */
+  certificateAccepted: boolean;
 }
 
 export interface RdpManagerDeps {
   sealer: Sealer;
-  send: (channel: 'rdp:exited', payload: unknown) => void;
+  send: (channel: 'rdp:exited' | 'rdp:certificate', payload: unknown) => void;
   /** HWND окна Electron, в которое встраиваем mstsc. */
   getParentHwnd: () => number | null;
   engine?: RdpEmbedEngine;
@@ -42,6 +47,8 @@ export interface RdpManagerDeps {
   spawn?: (opts: RdpFileOptions, password: string | null) => Promise<RdpSpawn>;
   /** Период сторожа в мс (тесты ставят меньше). */
   watchdogInterval?: number;
+  /** Задержка аварийного завершения после WM_CLOSE (тесты сокращают). */
+  killGraceMs?: number;
   /**
    * Авто-подтверждать предупреждение безопасности mstsc (непроверенный
    * сертификат). По умолчанию true — диалог гасится кликом «Подключить».
@@ -51,15 +58,18 @@ export interface RdpManagerDeps {
 }
 
 /**
- * Управляет RDP-сессиями. Оконные профили встраиваются в окно приложения
- * (дочернее HWND mstsc поверх панели вкладки); fullscreen/multiMonitor —
- * фолбэк в отдельное окно mstsc.
+ * Управляет RDP-сессиями. mstsc используется только как дочернее HWND,
+ * прикреплённое к главному окну Electron поверх сцены активной вкладки.
+ * Полноэкранный и мультимониторный профиль адаптируются генератором к одной
+ * встроенной сцене, поэтому отдельного top-level RDP-окна не существует.
  */
 export class RdpManager {
   private readonly active = new Map<string, ActiveRdp>();
   private readonly engine: RdpEmbedEngine;
   private readonly spawnImpl: (opts: RdpFileOptions, password: string | null) => Promise<RdpSpawn>;
   private readonly watchdog: NodeJS.Timeout;
+  private readonly certificateWatchdog: NodeJS.Timeout;
+  private readonly killGraceMs: number;
   /** Модальный диалог/онбординг открыт — встроенные окна временно скрыты. */
   private overlayHidden = false;
   /** Авто-подтверждение предупреждения безопасности (настройка пользователя). */
@@ -69,8 +79,15 @@ export class RdpManager {
     this.engine = deps.engine ?? createEmbedEngine();
     this.spawnImpl = deps.spawn ?? spawnRdp;
     this.autoAcceptCert = deps.autoAcceptCert ?? true;
+    this.killGraceMs = deps.killGraceMs ?? KILL_GRACE_MS;
     this.watchdog = setInterval(() => this.tick(), deps.watchdogInterval ?? WATCHDOG_INTERVAL);
     this.watchdog.unref?.();
+    this.certificateWatchdog = setInterval(() => {
+      for (const [sessionId, active] of this.active) {
+        if (!active.closing) this.syncCertificateWarning(sessionId, active);
+      }
+    }, CERTIFICATE_POLL_INTERVAL);
+    this.certificateWatchdog.unref?.();
   }
 
   /** Настройка «авто-подтверждать сертификат RDP» (из IPC при сохранении настроек). */
@@ -84,7 +101,6 @@ export class RdpManager {
     sessionId: string
   ): Promise<RdpLaunchOutcome> | RdpLaunchOutcome {
     const opts = rdpOptionsFromHost(host);
-    const embeddable = !opts.multiMonitor && opts.screenMode !== 'fullscreen';
 
     // Пароль для cmdkey: только сохранённый, и только если не запрошен ввод.
     let password: string | null = null;
@@ -95,46 +111,16 @@ export class RdpManager {
 
     if (process.env.RH_FAKE_RDP === '1') {
       // Smoke-режим: не запускаем настоящий mstsc, имитируем короткую сессию.
-      this.active.set(sessionId, this.fresh({ mode: 'embedded', visible: true }));
+      this.active.set(sessionId, this.fresh({ visible: true }));
       setTimeout(() => {
         this.active.delete(sessionId);
         this.deps.send('rdp:exited', { sessionId, code: 0 });
       }, 1500);
-      return { ok: true, mode: 'embedded' };
+      return { ok: true };
     }
 
-    if (!embeddable) {
-      return this.launchWindowed(opts, password, sessionId);
-    }
-
+    // Даже fullscreen/multiMonitor идут через один и тот же embedded-путь.
     return this.launchEmbedded(opts, password, sessionId);
-  }
-
-  /**
-   * Полноэкранный/multiMonitor профиль: mstsc в отдельном окне. Процесс
-   * отслеживается так же, как при встраивании, — чтобы закрытие вкладки
-   * или переключение «в окно» гарантированно закрывало и его.
-   */
-  private async launchWindowed(
-    opts: RdpFileOptions,
-    password: string | null,
-    sessionId: string
-  ): Promise<RdpLaunchOutcome> {
-    const spawned = await this.spawnImpl(opts, password);
-    if (!spawned.ok || !spawned.child) {
-      spawned.cleanup();
-      this.deps.send('rdp:exited', {
-        sessionId,
-        code: null,
-        error: spawned.error ?? 'Не удалось запустить mstsc'
-      });
-      return { ok: false, error: spawned.error ?? 'Не удалось запустить mstsc' };
-    }
-
-    const active = this.fresh({ mode: 'window', visible: true });
-    this.active.set(sessionId, active);
-    this.trackChild(sessionId, active, spawned);
-    return { ok: true, mode: 'window' };
   }
 
   private async launchEmbedded(
@@ -153,12 +139,12 @@ export class RdpManager {
       return { ok: false, error: spawned.error ?? 'Не удалось запустить mstsc' };
     }
 
-    const active = this.fresh({ mode: 'embedded', visible: true });
+    const active = this.fresh({ visible: true });
     this.active.set(sessionId, active);
     this.trackChild(sessionId, active, spawned);
 
     void this.attachWindow(sessionId, active);
-    return { ok: true, mode: 'embedded' };
+    return { ok: true };
   }
 
   /**
@@ -200,11 +186,9 @@ export class RdpManager {
     if (active.child?.pid == null) return;
     active.searching = true;
     try {
-      // Предупреждение о недоверенном сертификате гасим как можно раньше,
-      // если настройка «авто-подтверждать» включена; иначе показываем его.
-      if (this.autoAcceptCert) {
-        this.engine.confirmSecurityWarning(active.child.pid);
-      }
+      // Системное предупреждение нельзя оставлять top-level окном: при ручном
+      // режиме оно скрывается, а его решение отображается во вкладке.
+      this.syncCertificateWarning(sessionId, active);
       const hwnd = await this.engine.findWindowByPid(active.child.pid, WINDOW_FIND_TIMEOUT);
       if (this.active.get(sessionId) !== active || active.closing) return;
       if (hwnd === null) {
@@ -221,11 +205,14 @@ export class RdpManager {
         return;
       }
       active.hwnd = hwnd;
-      const parentHwnd = this.deps.getParentHwnd();
-      if (parentHwnd == null) return; // окно приложения ещё не готово — дождёмся тика
-      this.engine.embed(hwnd, parentHwnd);
-      this.applyRect(active);
-      if (active.visible && !this.overlayHidden) this.engine.show(hwnd);
+      active.embedded = false;
+      // Скрываем найденный top-level HWND до SetParent. Если окно приложения
+      // ещё не готово, mstsc остаётся невидимым и не появляется снаружи.
+      this.engine.hide(hwnd);
+      // Главный HWND может стать доступен чуть позже (например, при раннем
+      // восстановлении вкладок). В этом случае тик повторит именно SetParent,
+      // а не оставит окно mstsc самостоятельным top-level окном.
+      this.embedWindow(sessionId, active);
     } finally {
       active.searching = false;
     }
@@ -238,16 +225,19 @@ export class RdpManager {
    */
   private tick(): void {
     for (const [sessionId, active] of this.active) {
-      if (active.mode !== 'embedded' || active.closing) continue;
-      // Гасим предупреждение безопасности mstsc (непроверенный сертификат):
-      // оно может всплыть и после встраивания окна. Только при включённой
-      // настройке — иначе пользователь сам решает в диалоге.
-      if (this.autoAcceptCert && active.child?.pid != null) {
-        this.engine.confirmSecurityWarning(active.child.pid);
-      }
+      if (active.closing) continue;
+      // Предупреждение может появиться после создания embedded HWND —
+      // обрабатываем его на каждом тике, пока пользователь не принял решение.
+      this.syncCertificateWarning(sessionId, active);
       if (active.hwnd !== null) {
         if (!this.engine.isWindow(active.hwnd)) {
           active.hwnd = null; // окно пересоздано — найдём заново
+          active.embedded = false;
+        } else if (!active.embedded) {
+          // Пока HWND не прикреплён, не считаем сессию встроенной и не
+          // оставляем native-клиент снаружи окна приложения.
+          this.embedWindow(sessionId, active);
+          continue;
         } else {
           if (active.visible && !this.overlayHidden && active.rect) {
             this.engine.setRect(active.hwnd, active.rect);
@@ -259,20 +249,118 @@ export class RdpManager {
     }
   }
 
+  /** Принять сертификат из встроенного предупреждения. */
+  acceptCertificate(sessionId: string): void {
+    const active = this.active.get(sessionId);
+    if (!active || active.closing || active.child?.pid == null) return;
+    this.engine.confirmSecurityWarning(active.child.pid);
+    active.certificatePending = false;
+    active.certificateAccepted = true;
+    this.deps.send('rdp:certificate', { sessionId, pending: false });
+  }
+
+  /** Отклонить сертификат и закрыть RDP-сессию внутри текущей вкладки. */
+  rejectCertificate(sessionId: string): void {
+    const active = this.active.get(sessionId);
+    if (!active || active.closing) return;
+    if (active.child?.pid != null) this.engine.rejectSecurityWarning(active.child.pid);
+    active.certificatePending = false;
+    active.certificateAccepted = false;
+    active.closing = true;
+    this.active.delete(sessionId);
+    this.killChild(active);
+    this.deps.send('rdp:certificate', { sessionId, pending: false });
+    this.deps.send('rdp:exited', {
+      sessionId,
+      code: null,
+      error: 'Подключение RDP отменено: сертификат хоста не подтверждён'
+    });
+  }
+
+  /**
+   * Держит системное предупреждение внутри UX вкладки: при авто-режиме
+   * нажимает «Подключить», при ручном — прячет native dialog и сообщает UI.
+   */
+  private syncCertificateWarning(sessionId: string, active: ActiveRdp): void {
+    const pid = active.child?.pid;
+    if (pid == null || active.closing) return;
+    const warning = this.engine.findSecurityWarning(pid);
+    if (this.autoAcceptCert) {
+      // Движок сам ищет warning; вызов без найденного окна безопасен и
+      // сохраняет повторную проверку для появившегося позднее диалога.
+      this.engine.confirmSecurityWarning(pid);
+      active.certificateAccepted = false;
+      if (active.certificatePending) {
+        active.certificatePending = false;
+        this.deps.send('rdp:certificate', { sessionId, pending: false });
+      }
+      return;
+    }
+    if (active.certificateAccepted) {
+      // BM_CLICK может закрывать диалог асинхронно. Держим его скрытым до
+      // исчезновения, но не возвращаем предупреждение в UI повторно.
+      if (warning === null) active.certificateAccepted = false;
+      else this.engine.hide(warning);
+      return;
+    }
+    if (active.certificatePending) {
+      if (warning !== null) this.engine.hide(warning);
+      return;
+    }
+    if (warning === null) return;
+    this.engine.hide(warning);
+    active.certificatePending = true;
+    this.deps.send('rdp:certificate', { sessionId, pending: true });
+  }
+
   /** Прямоугольник панели вкладки (физические пиксели) — из IPC. */
   setRect(sessionId: string, rect: EmbedRect): void {
     const active = this.active.get(sessionId);
-    if (!active || active.mode !== 'embedded') return;
+    if (!active) return;
     active.rect = rect;
-    this.applyRect(active);
+    // До SetParent окно остаётся скрытым; координаты и show применяем только
+    // после подтверждённого встраивания в HWND Electron.
+    if (active.embedded) this.applyRect(active);
+  }
+
+  /**
+   * Прикрепляет найденный HWND к главному окну Electron.
+   * Возвращает false, если окно приложения ещё не имеет native HWND.
+   */
+  private embedWindow(sessionId: string, active: ActiveRdp): boolean {
+    if (active.hwnd === null || active.embedded) return active.embedded;
+    const parentHwnd = this.deps.getParentHwnd();
+    if (parentHwnd == null) return false;
+    try {
+      this.engine.hide(active.hwnd);
+      this.engine.embed(active.hwnd, parentHwnd);
+      active.embedded = true;
+      this.applyRect(active);
+      if (active.visible && !this.overlayHidden) this.engine.show(active.hwnd);
+      return true;
+    } catch (err) {
+      active.closing = true;
+      this.active.delete(sessionId);
+      this.killChild(active);
+      this.deps.send('rdp:exited', {
+        sessionId,
+        code: null,
+        error: `Не удалось встроить Remote Desktop во вкладку: ${(err as Error).message}`
+      });
+      return false;
+    }
   }
 
   /** Переключение вкладок: показать окно активной сессии, спрятать остальные. */
   activate(sessionId: string): void {
     for (const [id, active] of this.active) {
-      if (active.mode !== 'embedded') continue;
+      if (active.closing) continue;
       active.visible = id === sessionId;
       if (active.hwnd === null) continue;
+      if (!active.embedded) {
+        this.engine.hide(active.hwnd);
+        continue;
+      }
       if (id === sessionId && !this.overlayHidden) {
         this.applyRect(active);
         this.engine.show(active.hwnd);
@@ -287,7 +375,11 @@ export class RdpManager {
   setOverlay(overlay: boolean): void {
     this.overlayHidden = overlay;
     for (const active of this.active.values()) {
-      if (active.mode !== 'embedded' || active.hwnd === null) continue;
+      if (active.hwnd === null) continue;
+      if (!active.embedded) {
+        this.engine.hide(active.hwnd);
+        continue;
+      }
       if (overlay) {
         this.engine.hide(active.hwnd);
       } else if (active.visible) {
@@ -303,18 +395,13 @@ export class RdpManager {
     if (!active) return;
     active.closing = true;
     this.active.delete(sessionId);
-    if (active.mode === 'embedded' && active.hwnd !== null) {
+    if (active.hwnd !== null) {
       this.engine.close(active.hwnd);
       this.engine.hide(active.hwnd);
     }
     if (active.child) {
-      if (active.mode === 'window') {
-        // Полноэкранный mstsc не встроен — WM_CLOSE недоступен, убиваем сразу.
-        this.killChild(active);
-      } else {
-        active.killTimer = setTimeout(() => this.killChild(active), KILL_GRACE_MS);
-        active.killTimer.unref?.();
-      }
+      active.killTimer = setTimeout(() => this.killChild(active), this.killGraceMs);
+      active.killTimer.unref?.();
     }
   }
 
@@ -326,16 +413,17 @@ export class RdpManager {
     }
     this.active.clear();
     clearInterval(this.watchdog);
+    clearInterval(this.certificateWatchdog);
   }
 
   /** Для смоука: встроилось ли окно сессии. */
   isEmbedded(sessionId: string): boolean {
     const active = this.active.get(sessionId);
-    return active !== undefined && active.mode === 'embedded' && active.hwnd !== null;
+    return active !== undefined && active.hwnd !== null && active.embedded;
   }
 
   private applyRect(active: ActiveRdp): void {
-    if (active.hwnd === null || active.rect === null) return;
+    if (!active.embedded || active.hwnd === null || active.rect === null) return;
     this.engine.setRect(active.hwnd, active.rect);
     if (active.visible && !this.overlayHidden) this.engine.show(active.hwnd);
   }
@@ -352,7 +440,18 @@ export class RdpManager {
     }
   }
 
-  private fresh(over: Pick<ActiveRdp, 'mode' | 'visible'>): ActiveRdp {
-    return { child: null, hwnd: null, rect: null, closing: false, killTimer: null, searching: false, ...over };
+  private fresh(over: Pick<ActiveRdp, 'visible'>): ActiveRdp {
+    return {
+      child: null,
+      hwnd: null,
+      rect: null,
+      embedded: false,
+      closing: false,
+      killTimer: null,
+      searching: false,
+      certificatePending: false,
+      certificateAccepted: false,
+      ...over
+    };
   }
 }

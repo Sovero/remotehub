@@ -29,8 +29,8 @@ export interface SessionTab {
   protocol: string;
   kind: 'terminal' | 'vnc' | 'rdp' | 'sftp';
   state: SessionState;
-  /** Как запущена RDP-сессия: встроена во вкладку или открыта отдельным окном (fullscreen). */
-  rdpMode?: 'embedded' | 'window';
+  /** Системное предупреждение RDP перенесено в UI вкладки, чтобы не было top-level окна. */
+  certificatePending?: boolean;
   adHocHost: Host | null;
   startedAt: number | null;
   /** Транзитная информация VNC-сессии (порт моста и пароль — только в памяти). */
@@ -104,6 +104,7 @@ interface AppState {
   openAdHoc: (host: Host) => Promise<void>;
   openRdp: (host: Host) => Promise<void>;
   applyRdpOutcome: (sessionId: string, outcome: { ok: boolean; error?: string }) => void;
+  applyRdpCertificate: (sessionId: string, pending: boolean) => void;
   /**
    * Меняет опции RDP у профиля (разрешение/режим), сохраняет в дерево и
    * переподключает сессию с новыми настройками.
@@ -498,7 +499,13 @@ export const useApp = create<AppState>((set, get) => ({
     get().persistTabs();
   },
 
-  applyRdpOutcome: (sessionId, outcome: { ok: boolean; mode?: 'embedded' | 'window'; error?: string }) => {
+  applyRdpCertificate: (sessionId, pending) => {
+    set((s) => ({
+      tabs: s.tabs.map((t) => (t.sessionId === sessionId ? { ...t, certificatePending: pending } : t))
+    }));
+  },
+
+  applyRdpOutcome: (sessionId, outcome: { ok: boolean; error?: string }) => {
     set((s) => ({
       tabs: s.tabs.map((t) =>
         t.sessionId === sessionId
@@ -506,7 +513,9 @@ export const useApp = create<AppState>((set, get) => ({
             ? {
                 ...t,
                 state: { phase: 'connected' },
-                rdpMode: outcome.mode ?? 'embedded',
+                // Событие rdp:certificate может прийти раньше результата IPC;
+                // не затираем pending, иначе ручное предупреждение исчезнет.
+                certificatePending: t.certificatePending ?? false,
                 startedAt: Date.now()
               }
             : { ...t, state: { phase: 'error', message: outcome.error ?? 'Не удалось запустить RDP' } }
@@ -545,7 +554,7 @@ export const useApp = create<AppState>((set, get) => ({
     if (tab.kind === 'rdp') {
       set((s) => ({
         tabs: s.tabs.map((t) =>
-          t.sessionId === sessionId ? { ...t, state: { phase: 'connecting' }, rdpMode: undefined } : t
+          t.sessionId === sessionId ? { ...t, state: { phase: 'connecting' }, certificatePending: false } : t
         )
       }));
       const res = await window.api.rdpLaunch({ sessionId, host });

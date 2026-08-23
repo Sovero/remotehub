@@ -34,6 +34,7 @@ export function createWin32Engine(): RdpEmbedEngine {
     'DWORD __stdcall GetWindowThreadProcessId(HWND hwnd, _Out_ DWORD *pid)'
   );
   const GetWindowTextW = user32.func('int __stdcall GetWindowTextW(HWND hwnd, _Out_ char16_t *buf, int max)');
+  const GetClassNameW = user32.func('int __stdcall GetClassNameW(HWND hwnd, _Out_ char16_t *buf, int max)');
   const SendMessageW = user32.func('intptr_t __stdcall SendMessageW(HWND hwnd, uint32_t msg, WPARAM wParam, LPARAM lParam)');
   const IsWindowVisible = user32.func('BOOL __stdcall IsWindowVisible(HWND hwnd)');
   const GetWindowLongPtrW = user32.func('intptr_t __stdcall GetWindowLongPtrW(HWND hwnd, int nIndex)');
@@ -41,6 +42,7 @@ export function createWin32Engine(): RdpEmbedEngine {
     'intptr_t __stdcall SetWindowLongPtrW(HWND hwnd, int nIndex, intptr_t dwNewLong)'
   );
   const SetParent = user32.func('HWND __stdcall SetParent(HWND hwndChild, HWND hwndNewParent)');
+  const GetParent = user32.func('HWND __stdcall GetParent(HWND hwnd)');
   const IsWindow = user32.func('BOOL __stdcall IsWindow(HWND hwnd)');
   const ShowWindow = user32.func('BOOL __stdcall ShowWindow(HWND hwnd, int nCmdShow)');
   const PostMessageW = user32.func(
@@ -79,13 +81,65 @@ export function createWin32Engine(): RdpEmbedEngine {
     return n > 0 ? buf.subarray(0, n * 2).toString('utf16le') : '';
   };
 
+  /** Имя Win32-класса окна. Диалог mstsc обычно имеет класс #32770. */
+  const windowClass = (hwnd: unknown): string => {
+    const buf = Buffer.allocUnsafe(512);
+    const n = GetClassNameW(hwnd, buf, 256);
+    return n > 0 ? buf.subarray(0, n * 2).toString('utf16le') : '';
+  };
+
+  /** Текст корневого окна и всех его дочерних контролов. */
+  const windowTreeText = (hwnd: unknown): string => {
+    const parts = [windowText(hwnd)];
+    EnumChildWindows(hwnd, (child: unknown) => {
+      if (child !== null) parts.push(windowText(child));
+      return 1;
+    }, 0);
+    return parts.filter(Boolean).join('\n');
+  };
+
+  /**
+   * Отличает предупреждение сертификата от основного окна mstsc.
+   * Заголовок «Remote Desktop Connection» встречается у обоих окон на
+   * английской Windows, поэтому одного заголовка недостаточно: требуем
+   * стандартный класс диалога и текст предупреждения/пары кнопок решения.
+   */
   const isWarningDialog = (hwnd: unknown): boolean => {
-    const t = windowText(hwnd);
-    return (
-      t.includes('Предупреждение системы безопасности') ||
-      t.includes('Remote Desktop Connection') ||
-      /security warning/i.test(t)
-    );
+    const klass = windowClass(hwnd);
+    const text = windowTreeText(hwnd).replace(/\s+/g, ' ').trim().toLocaleLowerCase();
+    const isDialogClass = klass === '#32770' || /(^|\.)dialog/i.test(klass);
+    if (!isDialogClass) return false;
+
+    const hasWarningText =
+      text.includes('security warning') ||
+      text.includes('предупреждение системы безопасности') ||
+      text.includes('identity of the remote computer') ||
+      text.includes('подлинность удаленного компьютера') ||
+      text.includes('не удается проверить') ||
+      text.includes('не удаётся проверить') ||
+      text.includes('certificate') ||
+      text.includes('сертификат');
+    const hasConnectCancel =
+      /(подключ|connect)/i.test(text) && /(отмена|cancel)/i.test(text);
+    const hasYesNo = /(^|\s)(да|yes)(?=\s|$)/i.test(text) && /(^|\s)(нет|no)(?=\s|$)/i.test(text);
+    const hasRemoteTitle =
+      text.includes('remote desktop') || text.includes('удаленн') || text.includes('удалённ') || text.includes('rdp');
+
+    return hasWarningText || (hasRemoteTitle && (hasConnectCancel || hasYesNo));
+  };
+
+  /** Ищет диалог предупреждения сертификата у процесса, включая скрытый. */
+  const findSecurityWarning = (pid: number): number | null => {
+    let found: number | null = null;
+    EnumWindows((hwnd: unknown) => {
+      if (hwnd === null || found !== null) return 1;
+      const pidRef: (number | null)[] = [null];
+      GetWindowThreadProcessId(hwnd, pidRef);
+      if (pidRef[0] !== pid || !isWarningDialog(hwnd)) return 1;
+      found = toNum(hwnd as number | bigint);
+      return 0;
+    }, 0);
+    return found;
   };
 
   /**
@@ -108,8 +162,38 @@ export function createWin32Engine(): RdpEmbedEngine {
       // В диалоге ищем кнопку «Подключить» (с мнемоникой & и без).
       EnumChildWindows(hwnd, (child: unknown) => {
         if (child === null || clicked) return 1;
-        const t = windowText(child).replace(/&/g, '');
-        if (t.includes('Подключить') || t.includes('Connect')) {
+        const t = windowText(child).replace(/&/g, '').trim().toLocaleLowerCase();
+        if (
+          t.includes('подключить') ||
+          t.includes('connect') ||
+          t === 'да' ||
+          t === 'yes' ||
+          t === 'ок' ||
+          t === 'ok'
+        ) {
+          SendMessageW(child, BM_CLICK, 0, 0);
+          clicked = true;
+          return 0;
+        }
+        return 1;
+      }, 0);
+      return 1;
+    }, 0);
+    return clicked;
+  };
+
+  /** Нажимает кнопку «Отмена» и закрывает предупреждение безопасности. */
+  const rejectSecurityWarning = (pid: number): boolean => {
+    let clicked = false;
+    EnumWindows((hwnd: unknown) => {
+      if (hwnd === null || clicked) return 1;
+      const pidRef: (number | null)[] = [null];
+      GetWindowThreadProcessId(hwnd, pidRef);
+      if (pidRef[0] !== pid || !isWarningDialog(hwnd)) return 1;
+      EnumChildWindows(hwnd, (child: unknown) => {
+        if (child === null || clicked) return 1;
+        const t = windowText(child).replace(/&/g, '').trim().toLocaleLowerCase();
+        if (t.includes('отмена') || t.includes('cancel') || t === 'нет' || t === 'no') {
           SendMessageW(child, BM_CLICK, 0, 0);
           clicked = true;
           return 0;
@@ -143,9 +227,14 @@ export function createWin32Engine(): RdpEmbedEngine {
           GetWindowThreadProcessId(hwnd, pidRef);
           if (pidRef[0] !== pid) return 1;
           if (isSkipWindow(hwnd)) return 1;
+          const wasVisible = IsWindowVisible(hwnd) !== 0;
           const h = toNum(hwnd as number | bigint);
+          // Скрываем найденный top-level HWND прямо в native-скане, до
+          // возврата управления в JS. Это исключает внешний «всплеск» окна
+          // между EnumWindows и SetParent.
+          ShowWindow(hwnd, SW_HIDE);
           if (first === null) first = h;
-          if (IsWindowVisible(hwnd) !== 0) {
+          if (wasVisible) {
             visible = h;
             return 0; // нашли видимое окно процесса — стоп
           }
@@ -170,13 +259,25 @@ export function createWin32Engine(): RdpEmbedEngine {
       return IsWindow(hwnd) !== 0;
     },
 
+    findSecurityWarning(pid: number): number | null {
+      return findSecurityWarning(pid);
+    },
+
     confirmSecurityWarning(pid: number): boolean {
       return confirmSecurityWarning(pid);
+    },
+
+    rejectSecurityWarning(pid: number): boolean {
+      return rejectSecurityWarning(pid);
     },
 
     embed(hwnd: number, parentHwnd: number): void {
       ShowWindow(hwnd, SW_HIDE);
       SetParent(hwnd, parentHwnd);
+      const actualParent = toNum(GetParent(hwnd));
+      if (actualParent !== toNum(parentHwnd)) {
+        throw new Error('Win32 SetParent не привязал окно mstsc к окну приложения');
+      }
       const style = toNum(GetWindowLongPtrW(hwnd, GWL_STYLE));
       // Дочернее окно без рамки/заголовка/кнопок; видимостью рулит show/hide.
       const next =

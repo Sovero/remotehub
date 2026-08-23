@@ -34,6 +34,7 @@ class FakeEngine implements RdpEmbedEngine {
   /** Сколько раз findWindowByPid вернул null до первого результата. */
   findDelay = 0;
   alive = true;
+  warningByPid = new Map<number, number>();
 
   async findWindowByPid(pid: number): Promise<number | null> {
     this.calls.push(`find:${pid}`);
@@ -48,8 +49,17 @@ class FakeEngine implements RdpEmbedEngine {
     this.calls.push(`isWindow:${hwnd}`);
     return this.alive && [...this.hwndByPid.values()].some((w) => w.hwnd === hwnd);
   }
+  findSecurityWarning(pid: number): number | null {
+    this.calls.push(`find-warning:${pid}`);
+    return this.warningByPid.get(pid) ?? null;
+  }
   confirmSecurityWarning(pid: number): boolean {
     this.calls.push(`confirm:${pid}`);
+    this.warningByPid.delete(pid);
+    return true;
+  }
+  rejectSecurityWarning(pid: number): boolean {
+    this.calls.push(`reject:${pid}`);
     return true;
   }
   embed(hwnd: number, parentHwnd: number): void {
@@ -91,6 +101,7 @@ function makeManager(opts: {
   engine?: FakeEngine;
   spawnResult?: () => { child: FakeChild; cleanup: () => void };
   watchdogInterval?: number;
+  killGraceMs?: number;
   autoAcceptCert?: boolean;
   send?: (c: string, p: unknown) => void;
 }): {
@@ -112,6 +123,7 @@ function makeManager(opts: {
       return { ok: true, child, cleanup: () => undefined };
     },
     watchdogInterval: opts.watchdogInterval ?? 50,
+    killGraceMs: opts.killGraceMs ?? 30,
     autoAcceptCert: opts.autoAcceptCert ?? true
   });
   return { manager, engine, sends, child };
@@ -125,12 +137,14 @@ describe('RdpManager: встраивание', () => {
     engine.hwndByPid.set(child.pid, { hwnd: 777, visible: true });
 
     const res = await manager.launch(rdpHost(), null, 's1');
-    expect(res).toEqual({ ok: true, mode: 'embedded' });
+    expect(res).toEqual({ ok: true });
 
     // ждём attachWindow (фейк находит сразу)
     await sleep(20);
     expect(engine.calls).toContain('find:4242');
+    expect(engine.calls).toContain('hide:777');
     expect(engine.calls).toContain('embed:777->111');
+    expect(engine.calls.indexOf('hide:777')).toBeLessThan(engine.calls.indexOf('embed:777->111'));
 
     // прямоугольник от рендерера → setRect
     manager.setRect('s1', RECT);
@@ -143,7 +157,7 @@ describe('RdpManager: встраивание', () => {
     // окна нет: findWindowByPid вернёт null сразу
 
     const res = await manager.launch(rdpHost(), null, 's1');
-    expect(res).toEqual({ ok: true, mode: 'embedded' });
+    expect(res).toEqual({ ok: true });
 
     await sleep(20);
     expect(child.killed).toBe(true);
@@ -153,39 +167,49 @@ describe('RdpManager: встраивание', () => {
     expect(engine.isWindow(777)).toBe(false);
   });
 
-  it('fullscreen-профиль → фолбэк в отдельное окно (mode=window)', async () => {
-    const { manager } = makeManager({});
+  it('fullscreen-профиль всё равно встраивается во вкладку', async () => {
+    const { manager, engine, child } = makeManager({});
+    engine.hwndByPid.set(child.pid, { hwnd: 778, visible: true });
     const res = await manager.launch(
-      rdpHost({ rdp: { domain: '', screenMode: 'fullscreen', width: 0, height: 0, multiMonitor: false, promptForCreds: false } }),
+      rdpHost({ rdp: { domain: '', screenMode: 'fullscreen', width: 1280, height: 800, multiMonitor: false, promptForCreds: false } }),
       null,
       's1'
     );
-    expect(res).toEqual({ ok: true, mode: 'window' });
+    expect(res).toEqual({ ok: true });
+    await sleep(20);
+    expect(engine.calls).toContain('embed:778->111');
+    expect(manager.isEmbedded('s1')).toBe(true);
   });
 
-  it('multiMonitor-профиль → фолбэк в отдельное окно', async () => {
-    const { manager } = makeManager({});
+  it('multiMonitor-профиль адаптируется к одной встроенной сцене', async () => {
+    const { manager, engine, child } = makeManager({});
+    engine.hwndByPid.set(child.pid, { hwnd: 779, visible: true });
     const res = await manager.launch(
       rdpHost({ rdp: { domain: '', screenMode: 'window', width: 1280, height: 800, multiMonitor: true, promptForCreds: false } }),
       null,
       's1'
     );
-    expect(res).toEqual({ ok: true, mode: 'window' });
+    expect(res).toEqual({ ok: true });
+    await sleep(20);
+    expect(engine.calls).toContain('embed:779->111');
+    expect(manager.isEmbedded('s1')).toBe(true);
   });
 
-  it('полноэкранный mstsc (mode=window) убивается при закрытии вкладки', async () => {
-    const { manager, child } = makeManager({});
+  it('embedded fullscreen mstsc закрывается вместе с вкладкой', async () => {
+    const { manager, engine, child } = makeManager({});
+    engine.hwndByPid.set(child.pid, { hwnd: 780, visible: true });
     const res = await manager.launch(
-      rdpHost({ rdp: { domain: '', screenMode: 'fullscreen', width: 0, height: 0, multiMonitor: false, promptForCreds: false } }),
+      rdpHost({ rdp: { domain: '', screenMode: 'fullscreen', width: 1280, height: 800, multiMonitor: false, promptForCreds: false } }),
       null,
       's1'
     );
-    expect(res).toEqual({ ok: true, mode: 'window' });
-    await sleep(10);
-    manager.stop('s1');
+    expect(res).toEqual({ ok: true });
     await sleep(20);
+    manager.stop('s1');
+    expect(engine.calls).toContain('close:780');
+    expect(engine.calls).toContain('hide:780');
+    await sleep(60);
     expect(child.killed).toBe(true);
-    // закрытие вкладки не шлёт rdp:exited
   });
 
   it('activate показывает активную и прячет остальные', async () => {
@@ -242,8 +266,8 @@ describe('RdpManager: встраивание', () => {
     manager.stop('s1');
     expect(engine.calls).toContain('close:9');
     expect(engine.calls).toContain('hide:9');
-    // mstsc проигнорировал WM_CLOSE — через KILL_GRACE_MS(3s в проде; здесь 50мс интервал не влияет)
-    // ждём фолбэк-таймер 3с: не ждём реально, а проверяем, что exited не ушёл
+    // mstsc проигнорировал WM_CLOSE — в тесте аварийная задержка сокращена.
+    // Закрытие вкладки не должно послать обычный rdp:exited.
     expect(sends).toHaveLength(0); // закрытие вкладки не шлёт rdp:exited
   });
 
@@ -256,19 +280,39 @@ describe('RdpManager: встраивание', () => {
     expect(engine.calls.some((c) => c.startsWith('confirm:4242'))).toBe(true);
   });
 
-  it('выключенный авто-подтверждение не гасит предупреждение (показывается пользователю)', async () => {
-    const { manager, engine, child } = makeManager({ watchdogInterval: 5, autoAcceptCert: false });
+  it('выключенное авто-подтверждение переносит предупреждение во вкладку', async () => {
+    const { manager, engine, child, sends } = makeManager({ watchdogInterval: 5, autoAcceptCert: false });
     engine.hwndByPid.set(child.pid, { hwnd: 21, visible: true });
+    engine.warningByPid.set(child.pid, 91);
     await manager.launch(rdpHost(), null, 's1');
     await sleep(30);
-    // окно встраивается, но ни один confirm не вызывается
     expect(engine.calls).toContain('embed:21->111');
+    expect(engine.calls).toContain('hide:91');
     expect(engine.calls.some((c) => c.startsWith('confirm:4242'))).toBe(false);
+    expect(sends).toContainEqual({ channel: 'rdp:certificate', payload: { sessionId: 's1', pending: true } });
 
-    // включаем настройку — следующий тик начинает гасить предупреждение
-    manager.setAutoAcceptCert(true);
+    manager.acceptCertificate('s1');
+    expect(engine.calls).toContain('confirm:4242');
+    expect(sends).toContainEqual({ channel: 'rdp:certificate', payload: { sessionId: 's1', pending: false } });
+  });
+
+  it('отмена сертификата закрывает только текущую RDP-вкладку', async () => {
+    const { manager, engine, child, sends } = makeManager({ watchdogInterval: 5, autoAcceptCert: false });
+    engine.hwndByPid.set(child.pid, { hwnd: 23, visible: true });
+    engine.warningByPid.set(child.pid, 93);
+    await manager.launch(rdpHost(), null, 's1');
     await sleep(20);
-    expect(engine.calls.some((c) => c.startsWith('confirm:4242'))).toBe(true);
+    manager.rejectCertificate('s1');
+    expect(engine.calls).toContain('reject:4242');
+    expect(child.killed).toBe(true);
+    expect(sends).toContainEqual({
+      channel: 'rdp:exited',
+      payload: {
+        sessionId: 's1',
+        code: null,
+        error: 'Подключение RDP отменено: сертификат хоста не подтверждён'
+      }
+    });
   });
 
   it('пересозданное окно перевстраивается сторожем', async () => {

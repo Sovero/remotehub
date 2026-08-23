@@ -84,6 +84,9 @@ export default function App(): React.JSX.Element {
         : { phase: 'closed', reason: `Сессия RDP завершена (код ${payload.code ?? '?'})` };
       useApp.getState().applySessionState(payload.sessionId, state);
     });
+    const offRdpCertificate = window.api.onRdpCertificate((payload) => {
+      useApp.getState().applyRdpCertificate(payload.sessionId, payload.pending);
+    });
     const offVncErr = window.api.onVncError((payload) => {
       useApp
         .getState()
@@ -111,6 +114,7 @@ export default function App(): React.JSX.Element {
       offData();
       offState();
       offRdp();
+      offRdpCertificate();
       offVncErr();
       offNotify();
       offMenu();
@@ -279,7 +283,7 @@ function RdpPane({
     hostId: string | null;
     title: string;
     state: { phase: string };
-    rdpMode?: 'embedded' | 'window';
+    certificatePending?: boolean;
   };
   active: boolean;
 }): React.JSX.Element {
@@ -294,9 +298,14 @@ function RdpPane({
     const node = findNode(tree, tab.hostId);
     return node && node.kind === 'host' ? node : null;
   }, [tree, tab.hostId]);
+  const [immersive, setImmersive] = useState(() => host?.rdp.screenMode === 'fullscreen');
 
-  // Встроенный режим: поверх сцены (stage) main кладёт живое окно mstsc.
-  // Тулбар — отдельная строка над сценой, чтобы его не перекрывало окно mstsc.
+  useEffect(() => {
+    setImmersive(host?.rdp.screenMode === 'fullscreen');
+  }, [host?.rdp.screenMode]);
+
+  // mstsc — дочернее окно stage, а fullscreen — режим самой RDP-вкладки.
+  // Ни один вариант профиля не создаёт отдельного окна Remote Desktop.
   const sendRect = (): void => {
     const el = paneRef.current;
     if (!el || !active) return;
@@ -345,43 +354,16 @@ function RdpPane({
     );
   }
 
-  // Полноэкранный/мультимониторный RDP встроить нельзя — окно открыто отдельно.
-  if (tab.rdpMode === 'window') {
-    return (
-      <div className="rdp-pane rdp-pane--fallback">
-        <div className="rdp-icon">🖥</div>
-        <div className="rdp-title">Remote Desktop открыт отдельным окном</div>
-        <div className="rdp-text">
-          {host?.rdp.multiMonitor
-            ? 'Профиль использует несколько мониторов — такой режим нельзя встроить во вкладку, поэтому окно Remote Desktop открыто отдельно.'
-            : 'Сессия работает в полноэкранном режиме. Верните её во вкладку или закройте.'}
-        </div>
-        <div className="rdp-controls">
-          <label className="rdp-control">
-            <span className="rdp-control-label">Разрешение</span>
-            <select className="input" value={currentRes} onChange={(e) => setResolution(e.target.value)}>
-              {resOptions.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-          </label>
-          {!host?.rdp.multiMonitor && (
-            <button className="btn btn--primary" onClick={() => void relaunchRdp(tab.sessionId, { screenMode: 'window' })}>
-              <Icon name="window" size={13} /> Встроить во вкладку
-            </button>
-          )}
-          <button className="btn" onClick={() => void closeTab(tab.sessionId, true)}>
-            <Icon name="close" size={13} /> Закрыть вкладку
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const toggleImmersive = (): void => {
+    if (!host) return;
+    const next = !immersive;
+    setImmersive(next);
+    // Сохраняем выбор в профиле и переподключаемся тем же embedded-путём.
+    void relaunchRdp(tab.sessionId, { screenMode: next ? 'fullscreen' : 'window' });
+  };
 
   return (
-    <div className="rdp-pane rdp-pane--embedded">
+    <div className={`rdp-pane rdp-pane--embedded${immersive ? ' rdp-pane--immersive' : ''}`}>
       <div className="rdp-toolbar">
         <label className="rdp-control">
           <span className="rdp-control-label">Разрешение</span>
@@ -393,18 +375,38 @@ function RdpPane({
             ))}
           </select>
         </label>
+        {host?.rdp.multiMonitor && (
+          <span className="rdp-mode-note" title="Режим всех мониторов адаптирован к одной встроенной сцене">
+            <Icon name="window" size={12} /> Все мониторы · внутри вкладки
+          </span>
+        )}
+        {tab.certificatePending && (
+          <div className="rdp-cert-banner" role="alert">
+            <Icon name="warning" size={13} />
+            <span>Сертификат RDP не доверен. Подтвердить подключение?</span>
+            <button className="btn btn--primary btn--sm" onClick={() => window.api.rdpAcceptCertificate(tab.sessionId)}>
+              <Icon name="check" size={12} /> Подключить
+            </button>
+            <button className="btn btn--sm" onClick={() => window.api.rdpRejectCertificate(tab.sessionId)}>
+              <Icon name="close" size={12} /> Отмена
+            </button>
+          </div>
+        )}
         <button
           className="btn btn--sm"
-          title="Открыть сессию в полноэкранном режиме"
-          onClick={() => void relaunchRdp(tab.sessionId, { screenMode: 'fullscreen' })}
+          title={immersive ? 'Вернуть оконный режим внутри приложения' : 'Развернуть RDP на рабочую область приложения'}
+          onClick={toggleImmersive}
         >
-          <Icon name="expand" size={13} /> Полный экран
+          <Icon name={immersive ? 'window' : 'expand'} size={13} />
+          {immersive ? 'Оконный режим' : 'На весь рабочий экран'}
         </button>
       </div>
       <div className="rdp-stage" ref={paneRef}>
         <div className="rdp-icon">🖥</div>
         <div className="rdp-title">Remote Desktop подключён</div>
-        <div className="rdp-text">Рабочий стол открыт прямо во вкладке.</div>
+        <div className="rdp-text">
+          Рабочий стол открыт прямо во вкладке{immersive ? ' и развёрнут на рабочую область приложения.' : '.'}
+        </div>
         <div className="rdp-actions">
           <button className="btn btn--primary" onClick={() => void reconnectTab(tab.sessionId)}>
             <Icon name="refresh" size={13} /> Запустить заново

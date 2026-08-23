@@ -260,6 +260,14 @@ export function registerIpc(
     rdp.activate(sessionId);
   });
 
+  ipcMain.on(IPC.rdpCertificateAccept, (_e, sessionId: string) => {
+    rdp.acceptCertificate(sessionId);
+  });
+
+  ipcMain.on(IPC.rdpCertificateReject, (_e, sessionId: string) => {
+    rdp.rejectCertificate(sessionId);
+  });
+
   // Открытие/закрытие модального диалога: встроенные окна временно прячутся.
   ipcMain.on(IPC.rdpOverlay, (_e, overlay: boolean) => {
     rdp.setOverlay(overlay);

@@ -3,6 +3,15 @@
 Все заметные изменения проекта. Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 версионирование — семантическое (MAJOR.MINOR.PATCH).
 
+## [0.1.6] — 2026-08-23
+
+### Исправлено
+- Все remote-сессии остаются внутри главного окна: RDP fullscreen и multi-monitor
+  проходят через единый embedded-путь без `mode=window` и внешнего fallback.
+- Системное предупреждение сертификата RDP скрывается у `mstsc` и переносится
+  в баннер вкладки при отключённом авто-подтверждении.
+- Внешние popup-окна и навигация из renderer блокируются.
+
 ## [0.1.5] — 2026-08-23
 
 ### Добавлено
@@ -64,6 +73,7 @@
 - Анимация папки группы при перетаскивании хоста: подсветка и «приоткрытая» папка.
 - SFTP: иконки файлов/папок, направления передач, галочки завершения.
 
+[0.1.6]: https://github.com/Sovero/remotehub/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/Sovero/remotehub/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/Sovero/remotehub/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/Sovero/remotehub/compare/v0.1.2...v0.1.3

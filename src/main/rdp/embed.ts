@@ -22,13 +22,11 @@ export interface RdpEmbedEngine {
    */
   findWindowByPid(pid: number, timeoutMs?: number, intervalMs?: number): Promise<number | null>;
   isWindow(hwnd: number): boolean;
-  /**
-   * Подтверждает предупреждение безопасности mstsc (клик «Подключить»),
-   * если оно открыто у процесса pid. Возвращает true, если клик выполнен.
-   * Нужно, потому что mstsc в новых Windows не запоминает принятый сертификат
-   * и показывает диалог при каждом подключении.
-   */
+  /** Ищет видимый или скрытый диалог предупреждения сертификата у pid. */
+  findSecurityWarning(pid: number): number | null;
   confirmSecurityWarning(pid: number): boolean;
+  /** Нажимает «Отмена» у предупреждения сертификата. */
+  rejectSecurityWarning(pid: number): boolean;
   /**
    * Делает hwnd дочерним окном parentHwnd, снимает заголовок/рамку/кнопки
    * минимизации и убирает окно из панели задач. Видимостью управляет show/hide.
@@ -46,7 +44,9 @@ export interface RdpEmbedEngine {
 const noopEngine: RdpEmbedEngine = {
   findWindowByPid: async () => null,
   isWindow: () => false,
+  findSecurityWarning: () => null,
   confirmSecurityWarning: () => false,
+  rejectSecurityWarning: () => false,
   embed: () => undefined,
   setRect: () => undefined,
   show: () => undefined,

@@ -1535,6 +1535,24 @@ textarea.input {
   padding: 6px 10px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.rdp-cert-banner {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid color-mix(in srgb, var(--warn) 55%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--warn) 12%, var(--bg-raised));
+  color: var(--text);
+}
+
+.rdp-cert-banner > span {
+  flex: 1;
+  min-width: 180px;
 }
 
 .rdp-toolbar .rdp-control-label {
@@ -1545,10 +1563,36 @@ textarea.input {
   margin-right: auto;
 }
 
+.rdp-toolbar .rdp-mode-note + .btn {
+  margin-left: 0;
+}
+
 .rdp-toolbar select {
   width: 130px;
   padding: 4px 8px;
   font-size: 12px;
+}
+
+/* Полноэкранный режим остаётся внутри области приложения, включая тулбар и вкладку. */
+.rdp-pane--immersive {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: var(--bg);
+}
+
+.rdp-pane--immersive .rdp-toolbar {
+  padding: 8px 12px;
+  background: var(--bg-raised);
+}
+
+.rdp-mode-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  margin-left: auto;
 }
 
 /* Сцена встроенного режима: ровно в её прямоугольник main кладёт окно mstsc. */

@@ -43,6 +43,9 @@ export const IPC = {
   tunnelsList: 'tunnels:list',
   rdpLaunch: 'rdp:launch',
   rdpExited: 'rdp:exited',
+  rdpCertificate: 'rdp:certificate',
+  rdpCertificateAccept: 'rdp:certificate-accept',
+  rdpCertificateReject: 'rdp:certificate-reject',
   rdpRect: 'rdp:rect',
   rdpActivate: 'rdp:activate',
   rdpOverlay: 'rdp:overlay',
@@ -173,10 +176,14 @@ export interface RdpExitedPayload {
   error?: string;
 }
 
-/** Результат запуска RDP: mode сообщает, встроена ли сессия или открыта отдельным окном. */
+export interface RdpCertificatePayload {
+  sessionId: string;
+  pending: boolean;
+}
+
+/** Результат запуска RDP: отдельного window-режима не существует. */
 export interface RdpLaunchResult {
   ok: boolean;
-  mode?: 'embedded' | 'window';
   error?: string;
 }
 

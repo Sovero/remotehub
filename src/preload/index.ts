@@ -21,7 +21,8 @@ import {
   type TunnelAddResult,
   type TunnelInfo,
   type UpdateStatus,
-  type VncErrorPayload
+  type VncErrorPayload,
+  type RdpCertificatePayload
 } from '../shared/ipc-contract';
 import type { ChangelogEntry } from '../shared/changelog';
 import type { Settings, TreeNode } from '../shared/types';
@@ -74,7 +75,6 @@ const api = {
     ipcRenderer.invoke(IPC.sessionAuth, { sessionId, password }),
   rdpLaunch: (req: { sessionId: string; host: import('../shared/types').Host }): Promise<{
     ok: boolean;
-    mode?: 'embedded' | 'window';
     error?: string;
   }> => ipcRenderer.invoke(IPC.rdpLaunch, req),
   /** Прямоугольник панели RDP-вкладки (CSS-пиксели) — main переведёт в физические. */
@@ -84,6 +84,13 @@ const api = {
   rdpActivate: (sessionId: string): void => ipcRenderer.send(IPC.rdpActivate, sessionId),
   /** Модальный диалог открыт/закрыт: встроенные окна временно прячутся. */
   rdpOverlay: (active: boolean): void => ipcRenderer.send(IPC.rdpOverlay, active),
+  rdpAcceptCertificate: (sessionId: string): void => ipcRenderer.send(IPC.rdpCertificateAccept, sessionId),
+  rdpRejectCertificate: (sessionId: string): void => ipcRenderer.send(IPC.rdpCertificateReject, sessionId),
+  onRdpCertificate: (cb: (payload: RdpCertificatePayload) => void): (() => void) => {
+    const listener = (_e: unknown, payload: RdpCertificatePayload): void => cb(payload);
+    ipcRenderer.on(IPC.rdpCertificate, listener);
+    return () => ipcRenderer.removeListener(IPC.rdpCertificate, listener);
+  },
   vncOpen: (req: {
     sessionId: string;
     host: import('../shared/types').Host;

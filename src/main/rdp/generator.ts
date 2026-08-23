@@ -5,9 +5,11 @@ export interface RdpFileOptions {
   port: number;
   username: string;
   domain: string;
+  /** Профильный режим; фактический запуск всегда нормализуется для embed. */
   screenMode: 'window' | 'fullscreen';
   width: number;
   height: number;
+  /** Профильная настройка; несколько top-level окон в embedded-режиме запрещены. */
   multiMonitor: boolean;
   promptForCreds: boolean;
 }
@@ -26,25 +28,42 @@ export function rdpOptionsFromHost(host: Host): RdpFileOptions {
   };
 }
 
-/** Генерирует содержимое .rdp-файла по настройкам профиля. */
-export function buildRdpFile(opts: RdpFileOptions): string {
-  const lines: string[] = [];
-  const fullscreen = opts.multiMonitor || opts.screenMode === 'fullscreen';
+/**
+ * Преобразует профильные display-настройки в параметры одной embedded-сцены.
+ * mstsc с screen mode id=1/use multimon создаёт top-level окно или несколько
+ * окон, поэтому эти два флага нельзя передавать во встроенный клиент.
+ */
+export function toEmbeddedRdpOptions(opts: RdpFileOptions): RdpFileOptions {
+  const width = Number.isFinite(opts.width) ? Math.round(opts.width) : 1280;
+  const height = Number.isFinite(opts.height) ? Math.round(opts.height) : 800;
+  return {
+    ...opts,
+    screenMode: 'window',
+    multiMonitor: false,
+    width: Math.max(320, width),
+    height: Math.max(200, height)
+  };
+}
 
-  lines.push(`screen mode id:i:${fullscreen ? 1 : 2}`);
-  lines.push(`use multimon:i:${opts.multiMonitor ? 1 : 0}`);
-  if (!fullscreen) {
-    lines.push(`desktopwidth:i:${opts.width}`);
-    lines.push(`desktopheight:i:${opts.height}`);
-  }
+/** Генерирует embedded-safe содержимое .rdp-файла по настройкам профиля. */
+export function buildRdpFile(opts: RdpFileOptions): string {
+  const embedded = toEmbeddedRdpOptions(opts);
+  const lines: string[] = [];
+
+  // Всегда одна оконная сцена: полноэкранность и multi-monitor реализуются
+  // оболочкой вкладки, а не отдельным окном mstsc.
+  lines.push('screen mode id:i:2');
+  lines.push('use multimon:i:0');
+  lines.push(`desktopwidth:i:${embedded.width}`);
+  lines.push(`desktopheight:i:${embedded.height}`);
   lines.push('session bpp:i:32');
   lines.push('winposstr:s:0,1,0,0,800,600');
-  lines.push(`full address:s:${opts.host}`);
-  lines.push(`server port:i:${opts.port}`);
-  if (opts.username) lines.push(`username:s:${opts.username}`);
-  if (opts.domain) lines.push(`domain:s:${opts.domain}`);
+  lines.push(`full address:s:${embedded.host}`);
+  lines.push(`server port:i:${embedded.port}`);
+  if (embedded.username) lines.push(`username:s:${embedded.username}`);
+  if (embedded.domain) lines.push(`domain:s:${embedded.domain}`);
   lines.push('authentication level:i:0');
-  lines.push(`prompt for credentials on client:i:${opts.promptForCreds ? 1 : 0}`);
+  lines.push(`prompt for credentials on client:i:${embedded.promptForCreds ? 1 : 0}`);
   lines.push('redirectclipboard:i:1');
   lines.push('redirect printers:i:0');
   lines.push('redirectcomports:i:0');
