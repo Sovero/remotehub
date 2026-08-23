@@ -276,6 +276,132 @@ body {
   color: var(--warn);
 }
 
+/* Версия в статусбаре — кнопка «О программе». */
+.statusbar-version {
+  border: 0;
+  padding: 2px 4px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.statusbar-version:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.statusbar-version:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ---------- about dialog ---------- */
+
+.about {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.about-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.about-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  flex: none;
+}
+
+.about-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.about-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.about-section-title {
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 600;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.about-changelog {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.about-changelog-version {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.about-changelog-section {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.about-changelog-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.about-changelog-section ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.about-changelog-section li {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 3px;
+}
+
+.about-error {
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.about-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.about-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
 /* ---------- welcome ---------- */
 
 .welcome {

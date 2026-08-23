@@ -23,6 +23,7 @@ import {
   type UpdateStatus,
   type VncErrorPayload
 } from '../shared/ipc-contract';
+import type { ChangelogEntry } from '../shared/changelog';
 import type { Settings, TreeNode } from '../shared/types';
 
 const api = {
@@ -46,6 +47,11 @@ const api = {
     ipcRenderer.invoke(IPC.dialogPickFile),
   appInfo: (): Promise<{ version: string; electron: string; arch: string }> =>
     ipcRenderer.invoke(IPC.appInfo),
+  getChangelog: (): Promise<{
+    ok: boolean;
+    entries?: ChangelogEntry[];
+    error?: string;
+  }> => ipcRenderer.invoke(IPC.appChangelog),
   onNotify: (cb: (message: string) => void): (() => void) => {
     const listener = (_e: unknown, message: string): void => cb(message);
     ipcRenderer.on(IPC.notify, listener);

@@ -4,6 +4,7 @@ import CredentialsDialog from './dialogs/CredentialsDialog';
 import GroupDialog from './dialogs/GroupDialog';
 import HostDialog from './dialogs/HostDialog';
 import HelpDialog from './dialogs/HelpDialog';
+import AboutDialog from './dialogs/AboutDialog';
 import HotkeysDialog from './dialogs/HotkeysDialog';
 import ImportDialog from './dialogs/ImportDialog';
 import NewSessionDialog from './dialogs/NewSessionDialog';
@@ -42,6 +43,8 @@ export default function DialogRoot(): React.JSX.Element | null {
       return <SnippetsDialog onClose={closeDialog} />;
     case 'hotkeys':
       return <HotkeysDialog onClose={closeDialog} />;
+    case 'about':
+      return <AboutDialog onClose={closeDialog} />;
     case 'help':
       return <HelpDialog sectionId={dialog.sectionId} onClose={closeDialog} />;
     case 'password':

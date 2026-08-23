@@ -12,6 +12,7 @@ export const IPC = {
   settingsGet: 'settings:get',
   settingsSet: 'settings:set',
   appInfo: 'app:info',
+  appChangelog: 'app:changelog',
   notify: 'app:notify',
   menuCommand: 'menu:command',
   sessionOpen: 'session:open',

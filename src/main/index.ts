@@ -818,11 +818,47 @@ function createWindow(rdp: RdpManager): void {
                   return 'ok';
                 })()
               `);
-              if (helpRes === 'ok') {
-                console.log(`[smoke] icons flow OK — ${String(res).slice(3)}:help=1`);
+              if (helpRes !== 'ok') {
+                console.error(`[smoke] icons flow failed: help check ${String(helpRes)}`);
+                app.exit(1);
+                return;
+              }
+              // О программе: клик по версии в статусбаре открывает диалог,
+              // в котором есть версия приложения и changelog последнего релиза.
+              const aboutRes = await mainWindow?.webContents.executeJavaScript(`
+                (async () => {
+                  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+                  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+                  await wait(150);
+                  const ver = document.querySelector('.statusbar-version');
+                  if (!ver) return 'no-version-btn';
+                  if (!ver.querySelector('svg')) return 'no-version-icon';
+                  ver.click();
+                  const deadline = Date.now() + 8000;
+                  let m = null;
+                  while (Date.now() < deadline) {
+                    m = document.querySelector('.modal');
+                    if (m && (m.textContent || '').includes('О программе')) break;
+                    await wait(100);
+                  }
+                  if (!m) return 'no-about-dialog';
+                  const text = m.textContent || '';
+                  if (!/v\\d+\\.\\d+\\.\\d+/.test(text)) return 'no-about-version';
+                  if (!text.includes('Что нового')) return 'no-about-changelog-title';
+                  if (!text.includes('Версия ')) return 'no-about-changelog-version';
+                  const items = m.querySelectorAll('.about-changelog-section li');
+                  if (items.length === 0) return 'no-about-changelog-items';
+                  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+                  await wait(150);
+                  if (document.querySelector('.modal')) return 'about-stuck';
+                  return 'ok:items=' + items.length;
+                })()
+              `);
+              if (typeof aboutRes === 'string' && aboutRes.startsWith('ok:')) {
+                console.log(`[smoke] icons flow OK — ${String(res).slice(3)}:help=1:about=1 (${String(aboutRes).slice(3)})`);
                 app.exit(0);
               } else {
-                console.error(`[smoke] icons flow failed: help check ${String(helpRes)}`);
+                console.error(`[smoke] icons flow failed: about check ${String(aboutRes)}`);
                 app.exit(1);
               }
             });

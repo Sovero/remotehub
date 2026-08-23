@@ -1,6 +1,6 @@
 {
   "name": "remote-hub",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Remote Hub — Termius-подобное приложение для Windows: SSH, Telnet, RDP, VNC, SFTP",
   "repository": "https://github.com/Sovero/remotehub.git",
   "main": "./out/main/index.js",
@@ -27,7 +27,8 @@
     "files": [
       "out/**/*",
       "build/icon.ico",
-      "package.json"
+      "package.json",
+      "CHANGELOG.md"
     ],
     "asarUnpack": [
       "node_modules/koffi/**",

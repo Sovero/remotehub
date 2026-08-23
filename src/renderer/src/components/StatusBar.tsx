@@ -33,6 +33,7 @@ function StateIcon({ phase }: { phase: string }): React.JSX.Element {
 
 export default function StatusBar(): React.JSX.Element {
   const appInfo = useApp((s) => s.appInfo);
+  const openDialog = useApp((s) => s.openDialog);
   const tabs = useApp((s) => s.tabs);
   const activeTabId = useApp((s) => s.activeTabId);
   const tree = useApp((s) => s.tree);
@@ -118,9 +119,14 @@ export default function StatusBar(): React.JSX.Element {
       )}
       <span className="statusbar-spacer" />
       {appInfo && (
-        <span className="statusbar-item statusbar-muted">
-          Remote Hub v{appInfo.version} · Electron {appInfo.electron} · {appInfo.arch}
-        </span>
+        <button
+          className="statusbar-item statusbar-version"
+          title="О программе — версия и список изменений"
+          onClick={() => openDialog({ type: 'about' })}
+        >
+          <Icon name="window" size={11} />
+          v{appInfo.version} · Electron {appInfo.electron} · {appInfo.arch}
+        </button>
       )}
     </footer>
   );

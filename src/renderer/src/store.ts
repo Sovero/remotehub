@@ -49,6 +49,7 @@ export type DialogState =
   | { type: 'credentials' }
   | { type: 'snippets' }
   | { type: 'hotkeys' }
+  | { type: 'about' }
   | { type: 'help'; sectionId?: string }
   | { type: 'tunnels'; sessionId: string; title: string; host: Host }
   | null;

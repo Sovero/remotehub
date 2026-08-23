@@ -22,6 +22,7 @@ import {
   type VncOpenRequest
 } from '../shared/ipc-contract';
 import type { CredentialSet, Settings, TreeNode } from '../shared/types';
+import { parseChangelog } from '../shared/changelog';
 import { buildExport, parseProfileExport } from '../shared/tree';
 import { checkPort, pingHost } from './availability';
 import {
@@ -176,6 +177,19 @@ export function registerIpc(
     // process.platform всегда 'win32' даже на 64-битной Windows; показываем реальную разрядность.
     arch: process.arch
   }));
+
+  // Записи changelog: читаются из CHANGELOG.md. Путь от __dirname (out/main):
+  // в dev и смоуке — ../../CHANGELOG.md (корень проекта), в asar-сборке —
+  // app.asar/CHANGELOG.md (файл включён в files electron-builder).
+  ipcMain.handle(IPC.appChangelog, async () => {
+    try {
+      const changelogPath = join(__dirname, '..', '..', 'CHANGELOG.md');
+      const markdown = await readFile(changelogPath, 'utf8');
+      return { ok: true, entries: parseChangelog(markdown) };
+    } catch (err) {
+      return { ok: false, error: `Не удалось прочитать CHANGELOG.md: ${(err as Error).message}` };
+    }
+  });
 
   // ---- уведомления из главного процесса ----
   ipcMain.on(IPC.notify, (_e, message: string) => {
