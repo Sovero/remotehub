@@ -113,6 +113,8 @@ interface AppState {
    * переподключает сессию с новыми настройками.
    */
   relaunchRdp: (sessionId: string, rdpPatch: Partial<RdpOptions>) => Promise<void>;
+  /** Сохраняет разрешение RDP в профиль без переподключения сессии. */
+  saveRdpResolution: (sessionId: string, width: number, height: number) => Promise<void>;
   openVnc: (host: Host) => Promise<void>;
   openSftp: (host: Host) => Promise<void>;
   reconnectTab: (sessionId: string) => Promise<void>;
@@ -609,6 +611,18 @@ export const useApp = create<AppState>((set, get) => ({
     await window.api.saveProfiles(next);
     set({ tree: next });
     await get().reconnectTab(sessionId);
+  },
+
+  saveRdpResolution: async (sessionId, width, height) => {
+    const { tabs, tree } = get();
+    const tab = tabs.find((t) => t.sessionId === sessionId);
+    if (!tab || tab.kind !== 'rdp') return;
+    const node = tab.hostId ? findNode(tree, tab.hostId) : null;
+    if (!node || node.kind !== 'host') return;
+    const host = createHost({ ...node, rdp: { ...node.rdp, width, height } });
+    const next = replaceNode(tree, host.id, host);
+    await window.api.saveProfiles(next);
+    set({ tree: next });
   },
 
   reconnectTab: async (sessionId) => {

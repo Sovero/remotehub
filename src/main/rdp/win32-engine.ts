@@ -207,6 +207,7 @@ export function createWin32Engine(): RdpEmbedEngine {
     async findWindowByPid(pid: number, timeoutMs = 15000, intervalMs = 120): Promise<bigint | null> {
       const deadline = Date.now() + timeoutMs;
       const scan = (): bigint | null => {
+        let shell: bigint | null = null;
         let first: bigint | null = null;
         let visible: bigint | null = null;
         EnumWindows((hwnd: unknown) => {
@@ -214,18 +215,38 @@ export function createWin32Engine(): RdpEmbedEngine {
           if (pidOf(hwnd) !== pid) return 1;
           // Диалог предупреждения не кандидат на встраивание.
           if (isWarningDialog(hwnd)) return 1;
+          const klass = windowClass(hwnd);
           const wasVisible = IsWindowVisible(hwnd) !== 0;
           const h = hwndValue(hwnd);
-          // Скрываем top-level HWND до SetParent — исключаем внешний «всплеск».
+          // Вспомогательные окна mstsc — НЕ кандидаты: прогресс подключения
+          // (TSC_POPUP_PARENT_WNDCLASS), звук (RDPSoundDVCWnd), буфер обмена
+          // (RdpClipRdrWindowClass), IME-окна. Если встроить попап прогресса,
+          // реальная сессия останется отдельным top-level окном.
+          if (
+            klass === 'TSC_POPUP_PARENT_WNDCLASS' ||
+            klass === 'RDPSoundDVCWnd' ||
+            klass === 'RdpClipRdrWindowClass' ||
+            /IME|MSCTF/i.test(klass)
+          ) {
+            return 1;
+          }
+          // Настоящая сессия mstsc (TscShellContainerClass, в старых версиях
+          // UIMainClass) — приоритет. Во время подключения она скрыта, поэтому
+          // выбираем её даже если не видна.
+          if (klass === 'TscShellContainerClass' || /Tsc|UIMainClass/i.test(klass)) {
+            if (shell === null) {
+              shell = h;
+              ShowWindow(hwnd, SW_HIDE);
+            }
+            return 1;
+          }
+          // Прочие top-level окна процесса: прячем до SetParent.
           ShowWindow(hwnd, SW_HIDE);
           if (first === null) first = h;
-          if (wasVisible && h !== null) {
-            visible = h;
-            return 0;
-          }
+          if (wasVisible && h !== null) visible = h;
           return 1;
         }, 0);
-        return visible ?? first;
+        return shell ?? visible ?? first;
       };
       return await new Promise((resolve) => {
         const tick = (): void => {

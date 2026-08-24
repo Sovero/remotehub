@@ -290,6 +290,7 @@ function RdpPane({
   const reconnectTab = useApp((s) => s.reconnectTab);
   const closeTab = useApp((s) => s.closeTab);
   const relaunchRdp = useApp((s) => s.relaunchRdp);
+  const saveRdpResolution = useApp((s) => s.saveRdpResolution);
   const tree = useApp((s) => s.tree);
   const paneRef = useRef<HTMLDivElement | null>(null);
 
@@ -338,7 +339,9 @@ function RdpPane({
   const setResolution = (value: string): void => {
     const [w, h] = value.split('×').map(Number);
     if (w && h && (w !== host?.rdp.width || h !== host?.rdp.height)) {
-      void relaunchRdp(tab.sessionId, { width: w, height: h });
+      // Сохраняем в профиль без переподключения: новая сессия (следующий
+      // запуск) использует выбранное разрешение, текущая продолжает работать.
+      void saveRdpResolution(tab.sessionId, w, h);
     }
   };
 
@@ -365,7 +368,7 @@ function RdpPane({
   return (
     <div className={`rdp-pane rdp-pane--embedded${immersive ? ' rdp-pane--immersive' : ''}`}>
       <div className="rdp-toolbar">
-        <label className="rdp-control">
+        <label className="rdp-control" title="Новое разрешение применится при следующем подключении — текущая сессия не перезапускается">
           <span className="rdp-control-label">Разрешение</span>
           <select className="input" value={currentRes} onChange={(e) => setResolution(e.target.value)}>
             {resOptions.map((r) => (
