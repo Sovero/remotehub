@@ -6,6 +6,7 @@ import { resolveAuth } from '../sessions/config';
 import { createEmbedEngine, type EmbedRect, type RdpEmbedEngine } from './embed';
 import { rdpOptionsFromHost, type RdpFileOptions } from './generator';
 import { spawnRdp, type RdpSpawn } from './launcher';
+import { spawnComRdp, type RdpComSpawn } from './com-launcher';
 
 const WINDOW_FIND_TIMEOUT = 15000;
 const WATCHDOG_INTERVAL = 2000;
@@ -83,13 +84,8 @@ export class RdpManager {
     this.watchdog = setInterval(() => this.tick(), deps.watchdogInterval ?? WATCHDOG_INTERVAL);
     this.watchdog.unref?.();
     this.certificateWatchdog = setInterval(() => {
-      for (const [sessionId, active] of this.active) {
-        if (active.closing) continue;
-        this.syncCertificateWarning(sessionId, active);
-        // BBAR и прогресс-попап mstsc — owned top-level окна, не дети.
-        // Они могут появляться каждые ~200 мс; гасим на быстром опросе.
-        if (active.child?.pid != null) this.engine.hideAuxiliaryWindows(active.child.pid);
-      }
+      // COM-хост сам управляет сертификатом и вспомогательными окнами —
+      // для mstsc здесь был hideAuxiliaryWindows, но он больше не нужен.
     }, CERTIFICATE_POLL_INTERVAL);
     this.certificateWatchdog.unref?.();
   }
@@ -132,23 +128,59 @@ export class RdpManager {
     password: string | null,
     sessionId: string
   ): Promise<RdpLaunchOutcome> {
-    const spawned = await this.spawnImpl(opts, password);
-    if (!spawned.ok || !spawned.child) {
-      spawned.cleanup();
+    // COM-хост: rdp-com-host.exe загружает MsRdpClient9 ActiveX,
+    // выводит HWND в stdout. Ноль mstsc.exe в процессах.
+    const comSpawn = await spawnComRdp(opts, password);
+    if (!comSpawn.ok || !comSpawn.child || comSpawn.hwnd === undefined) {
+      comSpawn.cleanup();
       this.deps.send('rdp:exited', {
         sessionId,
         code: null,
-        error: spawned.error ?? 'Не удалось запустить mstsc'
+        error: comSpawn.error ?? 'Не удалось запустить RDP COM-хост'
       });
-      return { ok: false, error: spawned.error ?? 'Не удалось запустить mstsc' };
+      return { ok: false, error: comSpawn.error ?? 'Не удалось запустить RDP COM-хост' };
     }
 
     const active = this.fresh({ visible: true });
     this.active.set(sessionId, active);
-    this.trackChild(sessionId, active, spawned);
+    active.child = comSpawn.child;
+    active.hwnd = comSpawn.hwnd;
+    active.embedded = false;
 
-    void this.attachWindow(sessionId, active);
+    this.trackComChild(sessionId, active, comSpawn);
+    void this.embedWindow(sessionId, active);
     return { ok: true };
+  }
+
+  /**
+   * Обработчики процесса rdp-com-host.exe: quit-команда при остановке,
+   * снятие сессии из карты и уведомление рендерера.
+   */
+  private trackComChild(sessionId: string, active: ActiveRdp, spawned: RdpComSpawn): void {
+    spawned.child?.on('error', (err) => {
+      spawned.cleanup();
+      const stillTracked = this.active.get(sessionId) === active;
+      if (stillTracked) this.active.delete(sessionId);
+      if (!active.closing && stillTracked) {
+        this.deps.send('rdp:exited', {
+          sessionId,
+          code: null,
+          error: `RDP COM-хост ошибка: ${err.message}`
+        });
+      }
+    });
+    spawned.child?.on('exit', (code) => {
+      spawned.cleanup();
+      if (active.killTimer) {
+        clearTimeout(active.killTimer);
+        active.killTimer = null;
+      }
+      const stillTracked = this.active.get(sessionId) === active;
+      if (stillTracked) this.active.delete(sessionId);
+      if (!active.closing && stillTracked) {
+        this.deps.send('rdp:exited', { sessionId, code });
+      }
+    });
   }
 
   /**
@@ -184,83 +216,28 @@ export class RdpManager {
     });
   }
 
-  /** Находит окно mstsc по PID и встраивает в окно приложения. */
-  private async attachWindow(sessionId: string, active: ActiveRdp): Promise<void> {
-    if (active.searching || active.closing) return;
-    if (active.child?.pid == null) return;
-    active.searching = true;
-    try {
-      // Системное предупреждение нельзя оставлять top-level окном: при ручном
-      // режиме оно скрывается, а его решение отображается во вкладке.
-      this.syncCertificateWarning(sessionId, active);
-      const hwnd = await this.engine.findWindowByPid(active.child.pid, WINDOW_FIND_TIMEOUT);
-      if (this.active.get(sessionId) !== active || active.closing) return;
-      if (hwnd === null) {
-        // Окно так и не появилось — mstsc не смог стартовать: убиваем и сообщаем.
-        this.active.delete(sessionId);
-        this.killChild(active);
-        if (!active.closing) {
-          this.deps.send('rdp:exited', {
-            sessionId,
-            code: null,
-            error: 'Не удалось найти окно Remote Desktop'
-          });
-        }
-        return;
-      }
-      active.hwnd = hwnd;
-      active.embedded = false;
-      // Скрываем найденный top-level HWND до SetParent. Если окно приложения
-      // ещё не готово, mstsc остаётся невидимым и не появляется снаружи.
-      this.engine.hide(hwnd);
-      // Главный HWND может стать доступен чуть позже (например, при раннем
-      // восстановлении вкладок). В этом случае тик повторит именно SetParent,
-      // а не оставит окно mstsc самостоятельным top-level окном.
-      this.embedWindow(sessionId, active);
-    } finally {
-      active.searching = false;
-    }
-  }
-
   /**
-   * Сторож: перевстраивает окно, если mstsc его пересоздал (переход
-   * «подключение → сессия»), и периодически фиксирует геометрию — mstsc сам
-   * ресайзит окно под разрешение удалённого рабочего стола.
+   * Сторож: перевстраивает окно, если родительский HWND ещё не готов,
+   * и периодически фиксирует геометрию.
    */
   private tick(): void {
     for (const [sessionId, active] of this.active) {
       if (active.closing) continue;
-      // Предупреждение может появиться после создания embedded HWND —
-      // обрабатываем его на каждом тике, пока пользователь не принял решение.
-      this.syncCertificateWarning(sessionId, active);
-      // Панель подключения mstsc (BBar) всплывает после установления сессии —
-      // гасим её на каждом тике, чтобы она не висела поверх встроенного окна.
-      if (active.child?.pid != null) this.engine.hideAuxiliaryWindows(active.child.pid);
       if (active.hwnd !== null) {
-        if (!this.engine.isWindow(active.hwnd)) {
-          active.hwnd = null; // окно пересоздано — найдём заново
-          active.embedded = false;
-        } else if (!active.embedded) {
-          // Пока HWND не прикреплён, не считаем сессию встроенной и не
-          // оставляем native-клиент снаружи окна приложения.
+        if (!active.embedded) {
+          // HWND получен от COM-хоста, но ещё не прикреплён к Electron.
           this.embedWindow(sessionId, active);
-          continue;
-        } else {
-          if (active.visible && !this.overlayHidden && active.rect) {
-            this.engine.setRect(active.hwnd, active.rect);
-          }
-          continue;
+        } else if (active.visible && !this.overlayHidden && active.rect) {
+          this.engine.setRect(active.hwnd, active.rect);
         }
       }
-      if (active.child && !active.closing) void this.attachWindow(sessionId, active);
     }
   }
 
-  /** Принять сертификат из встроенного предупреждения. */
+  /** Принять сертификат (COM-хост управляет им сам — заглушка для IPC). */
   acceptCertificate(sessionId: string): void {
     const active = this.active.get(sessionId);
-    if (!active || active.closing || active.child?.pid == null) return;
-    this.engine.confirmSecurityWarning(active.child.pid);
+    if (!active || active.closing) return;
     active.certificatePending = false;
     active.certificateAccepted = true;
     this.deps.send('rdp:certificate', { sessionId, pending: false });
@@ -270,7 +247,6 @@ export class RdpManager {
   rejectCertificate(sessionId: string): void {
     const active = this.active.get(sessionId);
     if (!active || active.closing) return;
-    if (active.child?.pid != null) this.engine.rejectSecurityWarning(active.child.pid);
     active.certificatePending = false;
     active.certificateAccepted = false;
     active.closing = true;
@@ -282,42 +258,6 @@ export class RdpManager {
       code: null,
       error: 'Подключение RDP отменено: сертификат хоста не подтверждён'
     });
-  }
-
-  /**
-   * Держит системное предупреждение внутри UX вкладки: при авто-режиме
-   * нажимает «Подключить», при ручном — прячет native dialog и сообщает UI.
-   */
-  private syncCertificateWarning(sessionId: string, active: ActiveRdp): void {
-    const pid = active.child?.pid;
-    if (pid == null || active.closing) return;
-    const warning = this.engine.findSecurityWarning(pid);
-    if (this.autoAcceptCert) {
-      // Движок сам ищет warning; вызов без найденного окна безопасен и
-      // сохраняет повторную проверку для появившегося позднее диалога.
-      this.engine.confirmSecurityWarning(pid);
-      active.certificateAccepted = false;
-      if (active.certificatePending) {
-        active.certificatePending = false;
-        this.deps.send('rdp:certificate', { sessionId, pending: false });
-      }
-      return;
-    }
-    if (active.certificateAccepted) {
-      // BM_CLICK может закрывать диалог асинхронно. Держим его скрытым до
-      // исчезновения, но не возвращаем предупреждение в UI повторно.
-      if (warning === null) active.certificateAccepted = false;
-      else this.engine.hide(warning);
-      return;
-    }
-    if (active.certificatePending) {
-      if (warning !== null) this.engine.hide(warning);
-      return;
-    }
-    if (warning === null) return;
-    this.engine.hide(warning);
-    active.certificatePending = true;
-    this.deps.send('rdp:certificate', { sessionId, pending: true });
   }
 
   /** Прямоугольник панели вкладки (физические пиксели) — из IPC. */
@@ -440,6 +380,10 @@ export class RdpManager {
       clearTimeout(active.killTimer);
       active.killTimer = null;
     }
+    // COM-хост: отправляем quit через stdin для вежливого закрытия
+    try {
+      (active.child as any)?.stdin?.write?.('quit\n');
+    } catch { /* stdin уже закрыт */ }
     try {
       active.child?.kill();
     } catch {
