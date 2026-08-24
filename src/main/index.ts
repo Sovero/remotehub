@@ -12,6 +12,7 @@ import { Store } from './store';
 import { createHost } from '../shared/types';
 import { dpapiSealer } from './store/crypto';
 import { Updater } from './updater';
+import { RdpjsClientManager } from './rdp/rdpjs-client';
 
 let mainWindow: BrowserWindow | null = null;
 let store: Store;
@@ -93,7 +94,7 @@ function createWindow(rdp: RdpManager): void {
     y: bounds.y,
     minWidth: MIN_WIDTH,
     minHeight: MIN_HEIGHT,
-    show: false,
+    show: true,
     backgroundColor: settings.theme === 'light' ? '#f4f4f6' : '#17181c',
     title: `Remote Hub v${app.getVersion()}`,
     icon: APP_ICON,
@@ -1876,7 +1877,7 @@ if (!gotLock) {
       getParentHwnd,
       autoAcceptCert: store.loadSettings().data.rdpAutoAcceptCert
     });
-    const rdpjs = new (require('./rdp/rdpjs-client').RdpjsClientManager)({
+    const rdpjs = new RdpjsClientManager({
       onBitmap: (sessionId: string, bitmap: { destLeft: number; destTop: number; width: number; height: number; data: Buffer }) => {
         broadcast('rdpjs:bitmap', {
           sessionId,
@@ -1908,7 +1909,17 @@ if (!gotLock) {
       tunnels.closeAll();
       updater.dispose();
     });
-    createWindow(rdp);
+    try {
+      createWindow(rdp);
+    } catch (err) {
+      console.error('FATAL: createWindow threw:', (err as Error).stack || (err as Error).message);
+      writeFileSync(
+        join(dirname(__filename), 'crash.log'),
+        `createWindow failed: ${(err as Error).stack || (err as Error).message}`
+      );
+      dialog.showErrorBox('Ошибка запуска', `Не удалось создать окно:\n${(err as Error).message}`);
+      throw err;
+    }
     updater.start();
 
     app.on('activate', () => {
