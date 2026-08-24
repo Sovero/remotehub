@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from 'child_process';
+import { spawn, execFile, type ChildProcess } from 'child_process';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import type { RdpFileOptions } from './generator';
@@ -42,8 +42,12 @@ function log(msg: string): void {
  * Запускает rdp-com-host.exe с аргументами подключения.
  * Читает строку "HWND:1A2B3C4D" из stdout и возвращает HWND.
  *
- * Ноль mstsc.exe в процессах — COM-хост загружает MsRdpClient9
+ * Ноль mstsc.exe в процессах — COM-хост загружает MsTscAx
  * in-process как ActiveX control в скрытом окне.
+ *
+ * Пароль: ClearTextPassword через IDispatch возвращает E_ACCESSDENIED.
+ * Обход: cmdkey инъекция перед запуском — COM-контроль сам возьмёт
+ * credentials из Credential Manager при CredSSP-рукопожатии.
  */
 export async function spawnComRdp(opts: RdpFileOptions, password: string | null): Promise<RdpComSpawn> {
   const exePath = getComHostPath();
@@ -55,12 +59,31 @@ export async function spawnComRdp(opts: RdpFileOptions, password: string | null)
     };
   }
 
+  // cmdkey: инъекция пароля в Credential Manager.
+  // COM-контроль MsTscAx при CredSSP сам найдёт эти credentials.
+  const cmdkeyTarget = `TERMSRV/${opts.host}`;
+  let passwordInjected = false;
+  const user = opts.domain ? `${opts.domain}\\${opts.username}` : opts.username;
+  if (password) {
+    await new Promise<void>((resolve) => {
+      execFile('cmdkey',
+        [`/generic:${cmdkeyTarget}`, `/user:${user}`, `/pass:${password}`],
+        { windowsHide: true },
+        (err) => {
+          if (!err) passwordInjected = true;
+          resolve();
+        }
+      );
+    });
+    log(`cmdkey injected: ${passwordInjected ? 'ok' : 'failed'}`);
+  }
+
   const args: string[] = [
     opts.host,
     String(opts.port ?? 3389),
     opts.domain ? `${opts.domain}\\${opts.username}` : opts.username,
     password ?? '',
-    '',                          // domain (пустой — уже в username)
+    opts.domain ?? '',
     String(opts.width ?? 1024),
     String(opts.height ?? 768)
   ];
@@ -125,6 +148,10 @@ export async function spawnComRdp(opts: RdpFileOptions, password: string | null)
     cleanup: () => {
       try { child.stdin?.write('quit\n'); } catch { /* */ }
       setTimeout(() => { try { child.kill(); } catch { /* */ } }, 2000);
+      // Удаляем cmdkey-запись
+      if (passwordInjected) {
+        execFile('cmdkey', [`/delete:${cmdkeyTarget}`], { windowsHide: true }, () => undefined);
+      }
     }
   };
 }

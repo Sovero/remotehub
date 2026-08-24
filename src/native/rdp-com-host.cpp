@@ -1,11 +1,11 @@
 // rdp-com-host.cpp
-// MsRdpClient9 ActiveX COM control — чистая замена mstsc.exe.
-// Загружает RDP ActiveX в скрытое окно, подключается к серверу,
-// выводит HWND в stdout для SetParent из Electron.
+// MsTscAx ActiveX COM control — чистая замена mstsc.exe.
+// Загружает RDP ActiveX (MsTscAx.MsTscAx) в скрытое окно, подключается
+// к RDP-серверу, выводит HWND в stdout для SetParent из Electron.
 //
 // Сборка (x64 Native Tools):
 //   cl /std:c++17 /EHsc /O2 /D_UNICODE /DUNICODE rdp-com-host.cpp ^
-//      /link user32.lib ole32.lib oleaut32.lib /out:rdp-com-host.exe
+//      /link user32.lib ole32.lib oleaut32.lib shell32.lib /out:rdp-com-host.exe
 //
 // Запуск:
 //   rdp-com-host.exe <host> <port> <username> <password> [domain] [width] [height]
@@ -14,7 +14,7 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#include <shellapi.h>   // CommandLineToArgvW
+#include <shellapi.h>
 #include <ocidl.h>
 #include <oaidl.h>
 #include <cstdio>
@@ -24,22 +24,9 @@
 #include <atomic>
 #include <iostream>
 
-// CLSID MsRdpClient9NotSafeForScripting
-static const CLSID CLSID_MsRdpClient9 =
-    {0x301B94BA, 0x5D25, 0x4A12, {0xBF, 0xFE, 0x3B, 0x6B, 0x7A, 0x61, 0x65, 0x85}};
-
-// DISPID для IMsRdpClientAdvancedSettings / IMsTscAx
-enum RdpDispId {
-    DISPID_SERVER        = 1,
-    DISPID_DOMAIN        = 2,
-    DISPID_USERNAME      = 3,
-    DISPID_CONNECT       = 4,
-    DISPID_DISCONNECT    = 5,
-    DISPID_DESKTOPWIDTH  = 12,
-    DISPID_DESKTOPHEIGHT = 13,
-    DISPID_SECURED       = 0xFB,   // IMsRdpClientSecuredSettings
-    DISPID_ADVANCED      = 0xFA,   // IMsRdpClientAdvancedSettings2
-};
+// CLSID MsTscAx.MsTscAx.10 — {8B918B82-7985-4C24-89DF-C33AD2BBFBCD}
+static const CLSID CLSID_MsRdpClient =
+    {0x8B918B82, 0x7985, 0x4C24, {0x89, 0xDF, 0xC3, 0x3A, 0xD2, 0xBB, 0xFB, 0xCD}};
 
 HWND g_hwndParent  = nullptr;
 HWND g_hwndRdp     = nullptr;
@@ -60,11 +47,25 @@ VARIANT VarLong(long n) {
 }
 void ClearVar(VARIANT& v) { VariantClear(&v); }
 
+// --- DISPID lookup по имени (правильный COM-подход вместо хардкода) ---
+DISPID GetDispId(IDispatch* d, const wchar_t* name) {
+    DISPID id = DISPID_UNKNOWN;
+    LPOLESTR names[1] = { (LPOLESTR)name };
+    HRESULT hr = d->GetIDsOfNames(IID_NULL, names, 1, LOCALE_USER_DEFAULT, &id);
+    if (FAILED(hr)) return DISPID_UNKNOWN;
+    return id;
+}
+
 HRESULT PutProp(IDispatch* d, DISPID id, VARIANT& v) {
     DISPID dispidPut = DISPID_PROPERTYPUT;
     DISPPARAMS dp = { &v, &dispidPut, 1, 1 };
     return d->Invoke(id, IID_NULL, LOCALE_USER_DEFAULT,
                      DISPATCH_PROPERTYPUT, &dp, nullptr, nullptr, nullptr);
+}
+HRESULT PutPropByName(IDispatch* d, const wchar_t* name, VARIANT& v) {
+    DISPID id = GetDispId(d, name);
+    if (id == DISPID_UNKNOWN) return E_FAIL;
+    return PutProp(d, id, v);
 }
 
 IDispatch* GetPropDisp(IDispatch* d, DISPID id) {
@@ -78,11 +79,21 @@ IDispatch* GetPropDisp(IDispatch* d, DISPID id) {
     }
     return v.pdispVal;
 }
+IDispatch* GetPropDispByName(IDispatch* d, const wchar_t* name) {
+    DISPID id = GetDispId(d, name);
+    if (id == DISPID_UNKNOWN) return nullptr;
+    return GetPropDisp(d, id);
+}
 
 HRESULT CallMethod(IDispatch* d, DISPID id) {
     DISPPARAMS dp = { nullptr, nullptr, 0, 0 };
     return d->Invoke(id, IID_NULL, LOCALE_USER_DEFAULT,
                      DISPATCH_METHOD, &dp, nullptr, nullptr, nullptr);
+}
+HRESULT CallMethodByName(IDispatch* d, const wchar_t* name) {
+    DISPID id = GetDispId(d, name);
+    if (id == DISPID_UNKNOWN) return E_FAIL;
+    return CallMethod(d, id);
 }
 
 // --- Window ---
@@ -141,14 +152,12 @@ int main() {
     if (width < 100)  width  = 100;
     if (height < 100) height = 100;
 
-    // COM init (STA — ActiveX требует STA)
     HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     if (FAILED(hr)) {
         std::cerr << "CoInit: 0x" << std::hex << hr << std::endl;
         return 2;
     }
 
-    // Window class
     const wchar_t WC[] = L"RdpComHostWnd";
     WNDCLASSW wc = {};
     wc.lpfnWndProc   = WndProc;
@@ -157,7 +166,6 @@ int main() {
     wc.hCursor       = LoadCursorW(nullptr, IDC_ARROW);
     RegisterClassW(&wc);
 
-    // Создаём СКРЫТОЕ окно — Electron сделает SetParent и покажет его
     g_hwndParent = CreateWindowExW(
         0, WC, L"RdpComHost",
         WS_OVERLAPPEDWINDOW,
@@ -170,18 +178,16 @@ int main() {
         return 3;
     }
 
-    // Создаём MsRdpClient9 ActiveX
     IUnknown* pRdp = nullptr;
-    hr = CoCreateInstance(CLSID_MsRdpClient9, nullptr, CLSCTX_INPROC_SERVER,
+    hr = CoCreateInstance(CLSID_MsRdpClient, nullptr, CLSCTX_INPROC_SERVER,
                           IID_IUnknown, (void**)&pRdp);
     if (FAILED(hr) || !pRdp) {
-        std::cerr << "MsRdpClient9: 0x" << std::hex << hr << std::endl;
+        std::cerr << "MsTscAx: 0x" << std::hex << hr << std::endl;
         DestroyWindow(g_hwndParent);
         CoUninitialize();
         return 4;
     }
 
-    // IOleObject — встраиваем контрол
     IOleObject* pOle = nullptr;
     hr = pRdp->QueryInterface(IID_IOleObject, (void**)&pOle);
     if (SUCCEEDED(hr) && pOle) {
@@ -192,7 +198,6 @@ int main() {
         pOle->Release();
     }
 
-    // HWND контрола
     IOleInPlaceObject* pInPlace = nullptr;
     hr = pRdp->QueryInterface(IID_IOleInPlaceObject, (void**)&pInPlace);
     if (SUCCEEDED(hr) && pInPlace) {
@@ -203,7 +208,6 @@ int main() {
         g_hwndRdp = GetWindow(g_hwndParent, GW_CHILD);
     }
 
-    // IDispatch
     IDispatch* pDisp = nullptr;
     hr = pRdp->QueryInterface(IID_IDispatch, (void**)&pDisp);
     if (!pDisp) {
@@ -214,42 +218,48 @@ int main() {
         return 5;
     }
 
-    // Server, Username, Domain
-    { VARIANT v = VarBstr(host.c_str());     PutProp(pDisp, DISPID_SERVER, v);   ClearVar(v); }
-    { VARIANT v = VarBstr(username.c_str()); PutProp(pDisp, DISPID_USERNAME, v); ClearVar(v); }
+    // Server, UserName — по имени (через GetIDsOfNames)
+    { VARIANT v = VarBstr(host.c_str());     PutPropByName(pDisp, L"Server", v);   ClearVar(v); }
+    { VARIANT v = VarBstr(username.c_str()); PutPropByName(pDisp, L"UserName", v);  ClearVar(v); }
     if (!domain.empty()) {
-        VARIANT v = VarBstr(domain.c_str()); PutProp(pDisp, DISPID_DOMAIN, v);   ClearVar(v);
+        VARIANT v = VarBstr(domain.c_str()); PutPropByName(pDisp, L"Domain", v);   ClearVar(v);
     }
 
-    // Desktop size
-    { VARIANT v = VarLong(width);  PutProp(pDisp, DISPID_DESKTOPWIDTH, v);  ClearVar(v); }
-    { VARIANT v = VarLong(height); PutProp(pDisp, DISPID_DESKTOPHEIGHT, v); ClearVar(v); }
+    // DesktopWidth / DesktopHeight
+    { VARIANT v = VarLong(width);  PutPropByName(pDisp, L"DesktopWidth", v);  ClearVar(v); }
+    { VARIANT v = VarLong(height); PutPropByName(pDisp, L"DesktopHeight", v); ClearVar(v); }
 
-    // SecuredSettings — пароль (ClearTextPassword = DISPID 0)
-    IDispatch* pSec = GetPropDisp(pDisp, DISPID_SECURED);
+    // SecuredSettings2 (более новый интерфейс) — пароль
+    IDispatch* pSec = GetPropDispByName(pDisp, L"SecuredSettings2");
+    if (!pSec) pSec = GetPropDispByName(pDisp, L"SecuredSettings");
     if (pSec) {
         VARIANT vp = VarBstr(password.c_str());
-        PutProp(pSec, 0, vp);
+        HRESULT hrPw = PutPropByName(pSec, L"ClearTextPassword", vp);
         ClearVar(vp);
+        if (FAILED(hrPw)) {
+            std::cerr << "SetPassword: 0x" << std::hex << hrPw << std::endl;
+        }
         pSec->Release();
+    } else {
+        std::cerr << "SecuredSettings not found" << std::endl;
     }
 
-    // AdvancedSettings — порт (RDPPort = DISPID 1)
-    IDispatch* pAdv = GetPropDisp(pDisp, DISPID_ADVANCED);
+    // AdvancedSettings — порт + CredSSP
+    IDispatch* pAdv = GetPropDispByName(pDisp, L"AdvancedSettings");
     if (pAdv) {
-        { VARIANT v = VarLong(port); PutProp(pAdv, 1, v); ClearVar(v); }
-        // EnableCredSspSupport = DISPID 0x115
-        { VARIANT v = VarLong(1); PutProp(pAdv, 0x115, v); ClearVar(v); }
+        { VARIANT v = VarLong(port); PutPropByName(pAdv, L"RDPPort", v); ClearVar(v); }
+        // EnableCredSspSupport — может не быть в старых версиях, игнорируем ошибку
+        { VARIANT v = VarLong(1); PutPropByName(pAdv, L"EnableCredSspSupport", v); ClearVar(v); }
         pAdv->Release();
     }
 
-    // Вывод HWND → stdout (Electron читает это)
+    // Вывод HWND → stdout
     uintptr_t hwndOut = (uintptr_t)(g_hwndRdp ? g_hwndRdp : g_hwndParent);
     std::cout << "HWND:" << std::hex << hwndOut << std::endl;
     std::cout.flush();
 
-    // Подключение
-    hr = CallMethod(pDisp, DISPID_CONNECT);
+    // Connect — по имени метода
+    hr = CallMethodByName(pDisp, L"Connect");
     if (FAILED(hr)) {
         std::cerr << "Connect: 0x" << std::hex << hr << std::endl;
     }
@@ -257,8 +267,6 @@ int main() {
     // stdin поток
     std::thread t(StdinThread);
     t.detach();
-
-    // НЕ показываем окно — SetParent из Electron управляет видимостью
 
     // Message loop
     MSG msg = {};
@@ -268,7 +276,7 @@ int main() {
     }
 
     // Cleanup
-    CallMethod(pDisp, DISPID_DISCONNECT);
+    CallMethodByName(pDisp, L"Disconnect");
     pDisp->Release();
     pRdp->Release();
     DestroyWindow(g_hwndParent);
