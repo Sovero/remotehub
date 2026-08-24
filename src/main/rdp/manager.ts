@@ -84,7 +84,11 @@ export class RdpManager {
     this.watchdog.unref?.();
     this.certificateWatchdog = setInterval(() => {
       for (const [sessionId, active] of this.active) {
-        if (!active.closing) this.syncCertificateWarning(sessionId, active);
+        if (active.closing) continue;
+        this.syncCertificateWarning(sessionId, active);
+        // BBAR и прогресс-попап mstsc — owned top-level окна, не дети.
+        // Они могут появляться каждые ~200 мс; гасим на быстром опросе.
+        if (active.child?.pid != null) this.engine.hideAuxiliaryWindows(active.child.pid);
       }
     }, CERTIFICATE_POLL_INTERVAL);
     this.certificateWatchdog.unref?.();

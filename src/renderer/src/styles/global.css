@@ -1615,6 +1615,12 @@ textarea.input {
   text-align: center;
 }
 
+/* Когда mstsc встроен — прозрачный фон, чтобы native-окно было видно сквозь Chromium. */
+.rdp-stage--live {
+  background: transparent !important;
+  overflow: hidden;
+}
+
 .rdp-controls {
   display: flex;
   align-items: center;

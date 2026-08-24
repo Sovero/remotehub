@@ -403,22 +403,15 @@ function RdpPane({
           <Icon name={immersive ? 'window' : 'expand'} size={13} />
           {immersive ? 'Окно' : 'На весь экран'}
         </button>
+        <button
+          className="btn btn--sm"
+          title="Переподключить сессию заново"
+          onClick={() => void reconnectTab(tab.sessionId)}
+        >
+          <Icon name="refresh" size={13} />
+        </button>
       </div>
-      <div className="rdp-stage" ref={paneRef}>
-        <div className="rdp-icon">🖥</div>
-        <div className="rdp-title">Remote Desktop подключён</div>
-        <div className="rdp-text">
-          Рабочий стол открыт прямо во вкладке{immersive ? ' и развёрнут на рабочую область приложения.' : '.'}
-        </div>
-        <div className="rdp-actions">
-          <button className="btn btn--primary" onClick={() => void reconnectTab(tab.sessionId)}>
-            <Icon name="refresh" size={13} /> Запустить заново
-          </button>
-          <button className="btn" onClick={() => void closeTab(tab.sessionId, true)}>
-            <Icon name="close" size={13} /> Закрыть вкладку
-          </button>
-        </div>
-      </div>
+      <div className="rdp-stage rdp-stage--live" ref={paneRef} />
     </div>
   );
 }
