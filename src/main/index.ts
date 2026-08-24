@@ -1840,7 +1840,25 @@ if (process.env.RH_USER_DATA) {
   app.setPath('userData', process.env.RH_USER_DATA);
 }
 
-const gotLock = app.requestSingleInstanceLock();
+// При краше прошлой сессии lockfile может остаться и блокировать новый запуск.
+// Electron использует именованный мьютекс на Windows (не файл), но на случай
+// багов или гонок — разрешаем захват блокировки через удаление lock-файла.
+const lockPath = join(app.getPath('userData'), 'lockfile');
+let gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  try {
+    const stat = require('fs').statSync(lockPath, { throwIfNoEntry: false }) as {
+      mtimeMs: number;
+    } | undefined;
+    if (stat && Date.now() - stat.mtimeMs > 30000) {
+      // lockfile старше 30 секунд — stale, удаляем и пробуем снова
+      require('fs').unlinkSync(lockPath);
+      gotLock = app.requestSingleInstanceLock();
+    }
+  } catch {
+    // файла нет — значит мьютекс занят реальным процессом
+  }
+}
 if (!gotLock) {
   app.quit();
 } else {
