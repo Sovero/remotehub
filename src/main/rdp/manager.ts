@@ -14,6 +14,8 @@ const WATCHDOG_INTERVAL = 2000;
 const CERTIFICATE_POLL_INTERVAL = 100;
 /** После WM_CLOSE даём mstsc столько на вежливый выход, затем TerminateProcess. */
 const KILL_GRACE_MS = 3000;
+/** Debounce для resize-команды в COM-хост: не чаще чем раз в N мс. */
+const RESIZE_DEBOUNCE_MS = 300;
 
 /** Результат RDP не содержит внешнего/window-режима: сессия всегда embedded. */
 export interface RdpLaunchOutcome {
@@ -36,6 +38,11 @@ interface ActiveRdp {
   /** После ручного подтверждения не показываем тот же native-диалог повторно,
    * пока mstsc не уберёт его; это предотвращает мерцание баннера. */
   certificateAccepted: boolean;
+  /** Debounce-таймер для resize-команды в COM-хост ( stdin "resize W H" ). */
+  resizeTimer: NodeJS.Timeout | null;
+  /** Последний отправленный в COM-хост размер (чтобы не слать дубли). */
+  lastResizeW: number;
+  lastResizeH: number;
 }
 
 export interface RdpManagerDeps {
@@ -56,6 +63,8 @@ export interface RdpManagerDeps {
    * false — предупреждение показывается пользователю.
    */
   autoAcceptCert?: boolean;
+  /** Тестовый перехват spawnComRdp — возвращает фейковый COM-хост. */
+  comSpawn?: (opts: RdpFileOptions, password: string | null) => Promise<RdpComSpawn>;
 }
 
 /**
@@ -68,6 +77,7 @@ export class RdpManager {
   private readonly active = new Map<string, ActiveRdp>();
   private readonly engine: RdpEmbedEngine;
   private readonly spawnImpl: (opts: RdpFileOptions, password: string | null) => Promise<RdpSpawn>;
+  private readonly comSpawnImpl: (opts: RdpFileOptions, password: string | null) => Promise<RdpComSpawn>;
   private readonly watchdog: NodeJS.Timeout;
   private readonly certificateWatchdog: NodeJS.Timeout;
   private readonly killGraceMs: number;
@@ -79,6 +89,7 @@ export class RdpManager {
   constructor(private readonly deps: RdpManagerDeps) {
     this.engine = deps.engine ?? createEmbedEngine();
     this.spawnImpl = deps.spawn ?? spawnRdp;
+    this.comSpawnImpl = deps.comSpawn ?? spawnComRdp;
     this.autoAcceptCert = deps.autoAcceptCert ?? true;
     this.killGraceMs = deps.killGraceMs ?? KILL_GRACE_MS;
     this.watchdog = setInterval(() => this.tick(), deps.watchdogInterval ?? WATCHDOG_INTERVAL);
@@ -130,7 +141,7 @@ export class RdpManager {
   ): Promise<RdpLaunchOutcome> {
     // COM-хост: rdp-com-host.exe загружает MsRdpClient9 ActiveX,
     // выводит HWND в stdout. Ноль mstsc.exe в процессах.
-    const comSpawn = await spawnComRdp(opts, password);
+    const comSpawn = await this.comSpawnImpl(opts, password);
     if (!comSpawn.ok || !comSpawn.child || comSpawn.hwnd === undefined) {
       comSpawn.cleanup();
       this.deps.send('rdp:exited', {
@@ -341,6 +352,10 @@ export class RdpManager {
     const active = this.active.get(sessionId);
     if (!active) return;
     active.closing = true;
+    if (active.resizeTimer) {
+      clearTimeout(active.resizeTimer);
+      active.resizeTimer = null;
+    }
     this.active.delete(sessionId);
     if (active.hwnd !== null) {
       this.engine.close(active.hwnd);
@@ -371,14 +386,48 @@ export class RdpManager {
 
   private applyRect(active: ActiveRdp): void {
     if (!active.embedded || active.hwnd === null || active.rect === null) return;
+    // Win32 SetWindowPos — мгновенно двигает встроенное окно.
     this.engine.setRect(active.hwnd, active.rect);
     if (active.visible && !this.overlayHidden) this.engine.show(active.hwnd);
+    // COM-хост: с debounce отправляем «resize W H» в stdin, чтобы RDP-контроль
+    // адаптировал разрешение удалённого рабочего стола под новый размер.
+    this.scheduleComResize(active);
+  }
+
+  /**
+   * Debounce-отправка «resize W H» в stdin COM-хоста. При частом изменении
+   * размера вкладки (drag, maximize) команда уходит не чаще чем раз в
+   * RESIZE_DEBOUNCE_MS, и только если размер реально изменился.
+   */
+  private scheduleComResize(active: ActiveRdp): void {
+    if (!active.rect || active.closing || !active.child) return;
+    const w = Math.max(100, Math.round(active.rect.width));
+    const h = Math.max(100, Math.round(active.rect.height));
+    // Не шлём дубликат последнего отправленного размера.
+    if (w === active.lastResizeW && h === active.lastResizeH) return;
+    if (active.resizeTimer) clearTimeout(active.resizeTimer);
+    active.resizeTimer = setTimeout(() => {
+      active.resizeTimer = null;
+      if (active.closing || !active.child) return;
+      try {
+        (active.child as any).stdin?.write?.(`resize ${w} ${h}\n`);
+        active.lastResizeW = w;
+        active.lastResizeH = h;
+      } catch {
+        // stdin уже закрыт — процесс завершается
+      }
+    }, RESIZE_DEBOUNCE_MS);
+    active.resizeTimer.unref?.();
   }
 
   private killChild(active: ActiveRdp): void {
     if (active.killTimer) {
       clearTimeout(active.killTimer);
       active.killTimer = null;
+    }
+    if (active.resizeTimer) {
+      clearTimeout(active.resizeTimer);
+      active.resizeTimer = null;
     }
     // COM-хост: отправляем quit через stdin для вежливого закрытия
     try {
@@ -402,6 +451,9 @@ export class RdpManager {
       searching: false,
       certificatePending: false,
       certificateAccepted: false,
+      resizeTimer: null,
+      lastResizeW: 0,
+      lastResizeH: 0,
       ...over
     };
   }
