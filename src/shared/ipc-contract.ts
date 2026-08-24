@@ -49,6 +49,24 @@ export const IPC = {
   rdpRect: 'rdp:rect',
   rdpActivate: 'rdp:activate',
   rdpOverlay: 'rdp:overlay',
+  /** node-rdpjs: битмап из main в renderer */
+  rdpjsBitmap: 'rdpjs:bitmap',
+  /** node-rdpjs: состояние сессии */
+  rdpjsState: 'rdpjs:state',
+  /** node-rdpjs: события мыши из renderer */
+  rdpjsMouse: 'rdpjs:mouse',
+  /** node-rdpjs: движение мыши */
+  rdpjsMouseMove: 'rdpjs:mouse-move',
+  /** node-rdpjs: колёсико */
+  rdpjsWheel: 'rdpjs:wheel',
+  /** node-rdpjs: клавиша (юникод) */
+  rdpjsKeyUnicode: 'rdpjs:key-unicode',
+  /** node-rdpjs: клавиша (сканкод) */
+  rdpjsKeyScancode: 'rdpjs:key-scancode',
+  /** node-rdpjs: запуск сессии */
+  rdpjsLaunch: 'rdpjs:launch',
+  /** node-rdpjs: закрытие сессии */
+  rdpjsClose: 'rdpjs:close',
   updateState: 'update:state',
   updateCheck: 'update:check',
   updateDownload: 'update:download',
@@ -361,4 +379,67 @@ export interface MonitorCheckResult {
   ok: boolean;
   ms?: number;
   error?: string;
+}
+
+// ---- rdpjs (node-rdpjs) ----
+
+export interface RdpjsLaunchRequest {
+  sessionId: string;
+  host: string;
+  port?: number;
+  username: string;
+  password: string;
+  domain?: string;
+  width?: number;
+  height?: number;
+}
+
+export interface RdpjsLaunchResult {
+  ok: boolean;
+  error?: string;
+}
+
+export interface RdpjsBitmapPayload {
+  sessionId: string;
+  destLeft: number;
+  destTop: number;
+  width: number;
+  height: number;
+  /** Raw BGRA pixel data as ArrayBuffer (transferable). */
+  data: ArrayBuffer;
+}
+
+export interface RdpjsStatePayload {
+  sessionId: string;
+  state: 'connecting' | 'connected' | 'disconnected';
+  error?: string;
+}
+
+export interface RdpjsMouseEvent {
+  sessionId: string;
+  x: number;
+  y: number;
+  button: number;
+  isPressed: boolean;
+}
+
+export interface RdpjsMouseMoveEvent {
+  sessionId: string;
+  x: number;
+  y: number;
+}
+
+export interface RdpjsWheelEvent {
+  sessionId: string;
+  x: number;
+  y: number;
+  step: number;
+  isNegative: boolean;
+  isHorizontal: boolean;
+}
+
+export interface RdpjsKeyEvent {
+  sessionId: string;
+  code: number;
+  isPressed: boolean;
 }

@@ -195,7 +195,38 @@ const api = {
   monitorCheck: (req: MonitorCheckRequest): Promise<MonitorCheckResult> =>
     ipcRenderer.invoke(IPC.monitorCheck, req),
   monitorCheckAll: (): Promise<{ ok: boolean }> =>
-    ipcRenderer.invoke(IPC.monitorCheckAll)
+    ipcRenderer.invoke(IPC.monitorCheckAll),
+  // ---- rdpjs (node-rdpjs) ----
+  rdpjsLaunch: (req: import('../shared/ipc-contract').RdpjsLaunchRequest): Promise<import('../shared/ipc-contract').RdpjsLaunchResult> =>
+    ipcRenderer.invoke(IPC.rdpjsLaunch, req),
+  rdpjsClose: (sessionId: string): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IPC.rdpjsClose, sessionId),
+  rdpjsMouse: (sessionId: string, x: number, y: number, button: number, isPressed: boolean): void =>
+    ipcRenderer.send(IPC.rdpjsMouse, { sessionId, x, y, button, isPressed }),
+  rdpjsMouseMove: (sessionId: string, x: number, y: number): void =>
+    ipcRenderer.send(IPC.rdpjsMouseMove, { sessionId, x, y }),
+  rdpjsWheel: (sessionId: string, x: number, y: number, step: number, isNegative: boolean, isHorizontal: boolean): void =>
+    ipcRenderer.send(IPC.rdpjsWheel, { sessionId, x, y, step, isNegative, isHorizontal }),
+  rdpjsKeyUnicode: (sessionId: string, code: number, isPressed: boolean): void =>
+    ipcRenderer.send(IPC.rdpjsKeyUnicode, { sessionId, code, isPressed }),
+  rdpjsKeyScancode: (sessionId: string, code: number, isPressed: boolean): void =>
+    ipcRenderer.send(IPC.rdpjsKeyScancode, { sessionId, code, isPressed }),
+  onRdpjsBitmap: (cb: (payload: import('../shared/ipc-contract').RdpjsBitmapPayload) => void): (() => void) => {
+    const listener = (_e: unknown, payload: import('../shared/ipc-contract').RdpjsBitmapPayload): void => cb(payload);
+    ipcRenderer.on(IPC.rdpjsBitmap, listener);
+    return () => ipcRenderer.removeListener(IPC.rdpjsBitmap, listener);
+  },
+  onRdpjsState: (cb: (payload: import('../shared/ipc-contract').RdpjsStatePayload) => void): (() => void) => {
+    const listener = (_e: unknown, payload: import('../shared/ipc-contract').RdpjsStatePayload): void => cb(payload);
+    ipcRenderer.on(IPC.rdpjsState, listener);
+    return () => ipcRenderer.removeListener(IPC.rdpjsState, listener);
+  },
+  offRdpjsBitmap: (cb: (...args: unknown[]) => void): void => {
+    ipcRenderer.removeListener(IPC.rdpjsBitmap, cb as (...args: unknown[]) => void);
+  },
+  offRdpjsState: (cb: (...args: unknown[]) => void): void => {
+    ipcRenderer.removeListener(IPC.rdpjsState, cb as (...args: unknown[]) => void);
+  }
 };
 
 export type RendererApi = typeof api;

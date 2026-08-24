@@ -15,6 +15,11 @@ import {
   type ImportResult,
   type RdpLaunchRequest,
   type RdpRectRequest,
+  type RdpjsLaunchRequest,
+  type RdpjsMouseEvent,
+  type RdpjsMouseMoveEvent,
+  type RdpjsWheelEvent,
+  type RdpjsKeyEvent,
   type SessionAuthRequest,
   type SessionOpenRequest,
   type SftpOpenRequest,
@@ -32,6 +37,7 @@ import {
   validateCredentialInput
 } from './credentials/dto';
 import { RdpManager } from './rdp/manager';
+import { RdpjsClientManager } from './rdp/rdpjs-client';
 import { SessionManager } from './sessions/manager';
 import { SftpManager } from './sftp/manager';
 import { TunnelManager } from './tunnels/manager';
@@ -46,7 +52,8 @@ export function registerIpc(
   vnc: VncManager,
   sftp: SftpManager,
   tunnels: TunnelManager,
-  updater: Updater
+  updater: Updater,
+  rdpjs: RdpjsClientManager
 ): void {
   const resolveCredential = (host: { credentialId?: string | null }): CredentialSet | null =>
     host.credentialId ? store.loadCredentials().data.find((c) => c.id === host.credentialId) ?? null : null;
@@ -271,6 +278,45 @@ export function registerIpc(
   // Открытие/закрытие модального диалога: встроенные окна временно прячутся.
   ipcMain.on(IPC.rdpOverlay, (_e, overlay: boolean) => {
     rdp.setOverlay(overlay);
+  });
+
+  // ---- RDPJS (node-rdpjs) ----
+  ipcMain.handle(IPC.rdpjsLaunch, async (_e, req: RdpjsLaunchRequest) => {
+    const result = await rdpjs.connect(req.sessionId, {
+      host: req.host,
+      port: req.port,
+      username: req.username,
+      password: req.password,
+      domain: req.domain,
+      width: req.width,
+      height: req.height
+    });
+    return result;
+  });
+
+  ipcMain.handle(IPC.rdpjsClose, (_e, sessionId: string) => {
+    rdpjs.disconnect(sessionId);
+    return { ok: true };
+  });
+
+  ipcMain.on(IPC.rdpjsMouse, (_e, event: RdpjsMouseEvent) => {
+    rdpjs.sendMouse(event.sessionId, event.x, event.y, event.button, event.isPressed);
+  });
+
+  ipcMain.on(IPC.rdpjsMouseMove, (_e, event: RdpjsMouseMoveEvent) => {
+    rdpjs.sendMouse(event.sessionId, event.x, event.y, 0, false);
+  });
+
+  ipcMain.on(IPC.rdpjsWheel, (_e, event: RdpjsWheelEvent) => {
+    rdpjs.sendWheel(event.sessionId, event.x, event.y, event.step, event.isNegative, event.isHorizontal);
+  });
+
+  ipcMain.on(IPC.rdpjsKeyUnicode, (_e, event: RdpjsKeyEvent) => {
+    rdpjs.sendKeyUnicode(event.sessionId, event.code, event.isPressed);
+  });
+
+  ipcMain.on(IPC.rdpjsKeyScancode, (_e, event: RdpjsKeyEvent) => {
+    rdpjs.sendKeyScancode(event.sessionId, event.code, event.isPressed);
   });
 
   // ---- VNC ----

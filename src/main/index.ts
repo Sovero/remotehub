@@ -1876,6 +1876,21 @@ if (!gotLock) {
       getParentHwnd,
       autoAcceptCert: store.loadSettings().data.rdpAutoAcceptCert
     });
+    const rdpjs = new (require('./rdp/rdpjs-client').RdpjsClientManager)({
+      onBitmap: (sessionId: string, bitmap: { destLeft: number; destTop: number; width: number; height: number; data: Buffer }) => {
+        broadcast('rdpjs:bitmap', {
+          sessionId,
+          destLeft: bitmap.destLeft,
+          destTop: bitmap.destTop,
+          width: bitmap.width,
+          height: bitmap.height,
+          data: bitmap.data.buffer.slice(bitmap.data.byteOffset, bitmap.data.byteOffset + bitmap.data.byteLength)
+        });
+      },
+      onState: (sessionId: string, state: string, error?: string) => {
+        broadcast('rdpjs:state', { sessionId, state, error });
+      }
+    });
     const vnc = new VncManager(dpapiSealer, (sessionId, message) => {
       broadcast('vnc:error', { sessionId, message });
     });
@@ -1883,10 +1898,11 @@ if (!gotLock) {
     const tunnels = new TunnelManager(dpapiSealer);
     const updater = new Updater(broadcast);
     installMenu(updater);
-    registerIpc(store, sessions, rdp, vnc, sftp, tunnels, updater);
+    registerIpc(store, sessions, rdp, vnc, sftp, tunnels, updater, rdpjs);
     app.on('before-quit', () => {
       sessions.closeAll();
       rdp.closeAll();
+      rdpjs.closeAll();
       vnc.closeAll();
       sftp.closeAll();
       tunnels.closeAll();
