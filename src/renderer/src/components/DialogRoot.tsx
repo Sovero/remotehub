@@ -14,6 +14,7 @@ import TunnelsDialog from './dialogs/TunnelsDialog';
 import WhatsNewDialog from './dialogs/WhatsNewDialog';
 import HistoryPanel from './HistoryPanel';
 import RunbooksDialog from './dialogs/RunbooksDialog';
+import Modal from './dialogs/Modal';
 
 export default function DialogRoot(): React.JSX.Element | null {
   const dialog = useApp((s) => s.dialog);
@@ -58,11 +59,9 @@ export default function DialogRoot(): React.JSX.Element | null {
       return <TunnelsDialog sessionId={dialog.sessionId} title={dialog.title} host={dialog.host} onClose={closeDialog} />;
     case 'history':
       return (
-        <div className="modal" onClick={closeDialog}>
-          <div className="modal-panel modal-panel--wide" onClick={(e) => e.stopPropagation()}>
-            <HistoryPanel />
-          </div>
-        </div>
+        <Modal title="История подключений" onClose={closeDialog} width={640}>
+          <HistoryPanel />
+        </Modal>
       );
     case 'runbooks':
       return <RunbooksDialog />;

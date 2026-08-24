@@ -27,9 +27,7 @@ function formatDuration(ms: number): string {
 export default function HistoryPanel(): React.JSX.Element {
   const history = useApp((s) => s.history);
   const clearHistory = useApp((s) => s.clearHistory);
-  const openDialog = useApp((s) => s.openDialog);
   const openSession = useApp((s) => s.openSession);
-  const closeDialog = useApp((s) => s.closeDialog);
   const tree = useApp((s) => s.tree);
   const pushToast = useApp((s) => s.pushToast);
   const [filter, setFilter] = useState('');
@@ -74,35 +72,29 @@ export default function HistoryPanel(): React.JSX.Element {
 
   return (
     <div className="history-panel">
-      <div className="history-header">
-        <h3>История подключений</h3>
-        <div className="history-actions">
-          <input
-            className="input input--search"
-            placeholder="Поиск…"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-          />
-          <select
-            className="input"
-            value={protocolFilter}
-            onChange={(e) => setProtocolFilter(e.target.value)}
-          >
-            <option value="all">Все протоколы</option>
-            <option value="ssh">SSH</option>
-            <option value="rdp">RDP</option>
-            <option value="vnc">VNC</option>
-            <option value="telnet">Telnet</option>
-          </select>
-          {history.length > 0 && (
-            <button className="btn btn--sm btn--danger" onClick={() => void clearHistory()}>
-              <Icon name="trash" size={12} /> Очистить
-            </button>
-          )}
-          <button className="btn btn--sm" onClick={() => closeDialog()}>
-            <Icon name="close" size={12} />
+      <div className="history-bar">
+        <input
+          className="input input--search"
+          placeholder="Поиск…"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+        />
+        <select
+          className="input"
+          value={protocolFilter}
+          onChange={(e) => setProtocolFilter(e.target.value)}
+        >
+          <option value="all">Все протоколы</option>
+          <option value="ssh">SSH</option>
+          <option value="rdp">RDP</option>
+          <option value="vnc">VNC</option>
+          <option value="telnet">Telnet</option>
+        </select>
+        {history.length > 0 && (
+          <button className="btn btn--sm btn--danger" onClick={() => void clearHistory()}>
+            <Icon name="trash" size={12} /> Очистить
           </button>
-        </div>
+        )}
       </div>
       <div className="history-list">
         {filtered.length === 0 ? (

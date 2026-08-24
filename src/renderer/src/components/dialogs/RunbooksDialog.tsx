@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Runbook, RunbookStep } from '@shared/types';
 import { useApp } from '../../store';
 import Icon from '../Icon';
+import Modal from './Modal';
 
 function genId(): string {
   return Math.random().toString(36).slice(2, 10);
@@ -33,16 +34,9 @@ export default function RunbooksDialog(): React.JSX.Element {
   }
 
   return (
-    <div className="modal" onClick={() => closeDialog()}>
-      <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-head">
-          <Icon name="code" size={16} />
-          <span>Runbook-скрипты</span>
-          <button className="btn btn--ghost btn--sm btn--icon" onClick={() => closeDialog()}>
-            <Icon name="close" size={12} />
-          </button>
-        </div>
-        <div className="modal-body">
+    <Modal title="Runbook-скрипты" onClose={() => closeDialog()} width={620}>
+      <div className="runbook-panel">
+        <div className="runbook-body">
           {runbooks.length === 0 ? (
             <div className="history-empty">
               <Icon name="code" size={32} />
@@ -92,7 +86,7 @@ export default function RunbooksDialog(): React.JSX.Element {
             </div>
           )}
         </div>
-        <div className="modal-foot">
+        <div className="runbook-foot">
           <button className="btn btn--primary" onClick={() => setEditing({
             id: genId(),
             name: '',
@@ -104,10 +98,9 @@ export default function RunbooksDialog(): React.JSX.Element {
           })}>
             <Icon name="plus" size={12} /> Создать
           </button>
-          <button className="btn" onClick={() => closeDialog()}>Закрыть</button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -144,59 +137,49 @@ function RunbookEditor({ runbook, onSave, onCancel }: {
   };
 
   return (
-    <div className="modal" onClick={onCancel}>
-      <div className="modal-panel modal-panel--wide" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-head">
-          <Icon name="code" size={16} />
-          <span>{runbook.name ? 'Редактировать runbook' : 'Новый runbook'}</span>
-          <button className="btn btn--ghost btn--sm btn--icon" onClick={onCancel}>
-            <Icon name="close" size={12} />
+    <Modal title={runbook.name ? 'Редактировать runbook' : 'Новый runbook'} onClose={onCancel} width={560}>
+      <div className="runbook-editor">
+        <label className="form-label">
+          Название
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Мой скрипт" />
+        </label>
+        <label className="form-label">
+          Описание
+          <input className="input" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Обновление пакетов и перезагрузка" />
+        </label>
+        <div className="runbook-steps">
+          <h4>Шаги ({steps.length})</h4>
+          {steps.map((step, idx) => (
+            <div key={step.id} className="runbook-step">
+              <span className="runbook-step-num">{idx + 1}</span>
+              <input
+                className="input input--sm"
+                value={step.name}
+                onChange={(e) => updateStep(step.id, { name: e.target.value })}
+                placeholder="Название шага"
+                style={{ flex: '0 0 140px' }}
+              />
+              <input
+                className="input"
+                value={step.command}
+                onChange={(e) => updateStep(step.id, { command: e.target.value })}
+                placeholder="apt update && apt upgrade -y"
+              />
+              <button className="btn btn--sm btn--danger btn--icon" onClick={() => removeStep(step.id)}>
+                <Icon name="trash" size={11} />
+              </button>
+            </div>
+          ))}
+          <button className="btn btn--sm" onClick={addStep}>
+            <Icon name="plus" size={12} /> Добавить шаг
           </button>
         </div>
-        <div className="modal-body">
-          <label className="form-label">
-            Название
-            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Мой скрипт" />
-          </label>
-          <label className="form-label">
-            Описание
-            <input className="input" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Обновление пакетов и перезагрузка" />
-          </label>
-          <div className="runbook-steps">
-            <h4>Шаги ({steps.length})</h4>
-            {steps.map((step, idx) => (
-              <div key={step.id} className="runbook-step">
-                <span className="runbook-step-num">{idx + 1}</span>
-                <input
-                  className="input input--sm"
-                  value={step.name}
-                  onChange={(e) => updateStep(step.id, { name: e.target.value })}
-                  placeholder="Название шага"
-                  style={{ flex: '0 0 140px' }}
-                />
-                <input
-                  className="input"
-                  value={step.command}
-                  onChange={(e) => updateStep(step.id, { command: e.target.value })}
-                  placeholder="apt update && apt upgrade -y"
-                />
-                <button className="btn btn--sm btn--danger btn--icon" onClick={() => removeStep(step.id)}>
-                  <Icon name="trash" size={11} />
-                </button>
-              </div>
-            ))}
-            <button className="btn btn--sm" onClick={addStep}>
-              <Icon name="plus" size={12} /> Добавить шаг
-            </button>
-          </div>
-        </div>
-        <div className="modal-foot">
+        <div className="runbook-foot">
           <button className="btn btn--primary" onClick={() => void handleSave()} disabled={!name.trim()}>
             <Icon name="save" size={12} /> Сохранить
           </button>
-          <button className="btn" onClick={onCancel}>Отмена</button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
