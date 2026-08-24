@@ -401,7 +401,7 @@ function RdpPane({
           onClick={toggleImmersive}
         >
           <Icon name={immersive ? 'window' : 'expand'} size={13} />
-          {immersive ? 'Оконный режим' : 'На весь рабочий экран'}
+          {immersive ? 'Окно' : 'На весь экран'}
         </button>
       </div>
       <div className="rdp-stage" ref={paneRef}>
