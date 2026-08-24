@@ -77,6 +77,9 @@ class FakeEngine implements RdpEmbedEngine {
   setForeground(hwnd: bigint): void {
     this.calls.push(`foreground:${hwnd}`);
   }
+  hideAuxiliaryWindows(pid: number): void {
+    this.calls.push(`hide-aux:${pid}`);
+  }
   close(hwnd: bigint): void {
     this.calls.push(`close:${hwnd}`);
   }

@@ -69,9 +69,11 @@ export function createWin32Engine(): RdpEmbedEngine {
   const WS_EX_TOOLWINDOW = 0x00000080;
 
   const SW_HIDE = 0;
-  const SW_SHOW = 5;
+  const SW_SHOWNA = 8;
   const WM_CLOSE = 0x0010;
   const BM_CLICK = 0x00f5;
+  const SWP_NOSIZE = 0x0001;
+  const SWP_NOMOVE = 0x0002;
   const SWP_NOZORDER = 0x0004;
   const SWP_NOACTIVATE = 0x0010;
   const SWP_FRAMECHANGED = 0x0020;
@@ -281,13 +283,15 @@ export function createWin32Engine(): RdpEmbedEngine {
       // Скрываем до SetParent — исключаем внешний «всплеск».
       ShowWindow(hwnd, SW_HIDE);
 
-      // Снимаем top-level оформление (заголовок, рамку, кнопки). WS_CHILD при
-      // этом НЕ выставляем: это флаг времени создания окна, и SetParent его не
-      // меняет — проверка по нему ложна. Встраивание верифицируем по реальному
-      // родителю через GetAncestor(GA_PARENT).
+      // По документации SetParent: перед сменой родителя НУЖНО очистить
+      // WS_POPUP и выставить WS_CHILD — иначе окно не станет полноценным
+      // дочерним и не будет рендериться внутри родителя. Верификацию при
+      // этом делаем НЕ по WS_CHILD (SetParent не меняет стили сам), а по
+      // фактическому родителю через GetAncestor(GA_PARENT).
       const childStyleBefore = Number(GetWindowLongPtrW(hwnd, GWL_STYLE)) & 0xffffffff;
       const embeddedStyle =
-        childStyleBefore & ~(WS_POPUP | WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU);
+        (childStyleBefore | WS_CHILD) &
+        ~(WS_POPUP | WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU);
       SetWindowLongPtrW(hwnd, GWL_STYLE, embeddedStyle);
 
       // Привязываем окно к родителю. Возврат SetParent (старый родитель) не
@@ -310,9 +314,12 @@ export function createWin32Engine(): RdpEmbedEngine {
         throw new Error('Win32 SetParent не привязал окно mstsc к окну приложения');
       }
 
-      // Убираем окно из панели задач.
+      // Убираем окно из панели задач и принудительно поднимаем в Z-порядке
+      // родителя: в Electron контент Chromium рисуется поверх нативных
+      // дочерних окон, поэтому без явного подъёма mstsc останется невидимым.
       const ex = Number(GetWindowLongPtrW(hwnd, GWL_EXSTYLE)) & 0xffffffff;
       SetWindowLongPtrW(hwnd, GWL_EXSTYLE, (ex & ~WS_EX_APPWINDOW) | WS_EX_TOOLWINDOW);
+      SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     },
 
     setRect(hwnd: bigint, rect: EmbedRect): void {
@@ -323,12 +330,14 @@ export function createWin32Engine(): RdpEmbedEngine {
         rect.y,
         Math.max(1, rect.width),
         Math.max(1, rect.height),
-        SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED
+        SWP_NOACTIVATE | SWP_FRAMECHANGED
       );
     },
 
     show(hwnd: bigint): void {
-      ShowWindow(hwnd, SW_SHOW);
+      ShowWindow(hwnd, SW_SHOWNA);
+      // После показа поднимаем окно поверх контента Chromium.
+      SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     },
 
     hide(hwnd: bigint): void {
@@ -337,6 +346,23 @@ export function createWin32Engine(): RdpEmbedEngine {
 
     setForeground(hwnd: bigint): void {
       SetForegroundWindow(hwnd);
+    },
+
+    hideAuxiliaryWindows(pid: number): void {
+      EnumWindows((hwnd: unknown) => {
+        if (hwnd === null) return 1;
+        if (pidOf(hwnd) !== pid) return 1;
+        const klass = windowClass(hwnd);
+        // Панель подключения mstsc (чёрная полоса с адресом) и прогресс
+        // «Подключение…» не должны всплывать поверх встроенной сессии.
+        if (
+          klass === 'BBarWindowClass' ||
+          klass === 'TSC_POPUP_PARENT_WNDCLASS'
+        ) {
+          ShowWindow(hwnd, SW_HIDE);
+        }
+        return 1;
+      }, 0);
     },
 
     close(hwnd: bigint): void {

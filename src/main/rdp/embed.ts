@@ -38,6 +38,12 @@ export interface RdpEmbedEngine {
   show(hwnd: bigint): void;
   hide(hwnd: bigint): void;
   setForeground(hwnd: bigint): void;
+  /**
+   * Скрывает вспомогательные top-level окна mstsc (панель подключения
+   * BBarWindowClass и прогресс «Подключение…»), которые не должны
+   * всплывать поверх встроенной сессии.
+   */
+  hideAuxiliaryWindows(pid: number): void;
   /** Best-effort закрытие (WM_CLOSE). Надёжный путь — TerminateProcess у менеджера. */
   close(hwnd: bigint): void;
 }
@@ -53,6 +59,7 @@ const noopEngine: RdpEmbedEngine = {
   show: () => undefined,
   hide: () => undefined,
   setForeground: () => undefined,
+  hideAuxiliaryWindows: () => undefined,
   close: () => undefined
 };
 

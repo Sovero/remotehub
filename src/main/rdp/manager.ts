@@ -229,6 +229,9 @@ export class RdpManager {
       // Предупреждение может появиться после создания embedded HWND —
       // обрабатываем его на каждом тике, пока пользователь не принял решение.
       this.syncCertificateWarning(sessionId, active);
+      // Панель подключения mstsc (BBar) всплывает после установления сессии —
+      // гасим её на каждом тике, чтобы она не висела поверх встроенного окна.
+      if (active.child?.pid != null) this.engine.hideAuxiliaryWindows(active.child.pid);
       if (active.hwnd !== null) {
         if (!this.engine.isWindow(active.hwnd)) {
           active.hwnd = null; // окно пересоздано — найдём заново
