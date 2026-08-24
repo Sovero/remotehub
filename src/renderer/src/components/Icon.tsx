@@ -38,7 +38,9 @@ export type IconName =
   | 'spinner'
   | 'warning'
   | 'tree'
-  | 'tab';
+  | 'tab'
+  | 'history'
+  | 'script';
 
 const PATHS: Record<IconName, React.JSX.Element> = {
   plus: <path d="M8 3.2v9.6M3.2 8h9.6" />,
@@ -162,7 +164,25 @@ const PATHS: Record<IconName, React.JSX.Element> = {
     </>
   ),
   // Вкладка: голова-выступ над телом вкладки.
-  tab: <path d="M2.4 4.4h4.8l1.6 1.8h4.8a1.4 1.4 0 0 1 1.4 1.4v5a1.4 1.4 0 0 1-1.4 1.4H3.8a1.4 1.4 0 0 1-1.4-1.4V5.8a1.4 1.4 0 0 1 1.4-1.4z" />
+  tab: <path d="M2.4 4.4h4.8l1.6 1.8h4.8a1.4 1.4 0 0 1 1.4 1.4v5a1.4 1.4 0 0 1-1.4 1.4H3.8a1.4 1.4 0 0 1-1.4-1.4V5.8a1.4 1.4 0 0 1 1.4-1.4z" />,
+  // Часы: круг со стрелкой-дугой (история).
+  history: (
+    <>
+      <circle cx="8" cy="8" r="5.4" />
+      <path d="M8 4.8V8l2.8 2" />
+      <path d="M2.2 8A5.8 5.8 0 1 1 4 11.4" />
+      <path d="M2.2 8V5.6" />
+      <path d="M1 8.8l1.2-.8" />
+    </>
+  ),
+  // Скрипт/терминал: прямоугольник с промптом.
+  script: (
+    <>
+      <rect x="2" y="3" width="12" height="10" rx="1.2" />
+      <path d="M5 7l2.2 1.6L5 10.2" />
+      <path d="M8.4 10.2h3.2" />
+    </>
+  )
 };
 
 export default function Icon({

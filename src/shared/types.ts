@@ -71,6 +71,49 @@ export interface Snippet {
   command: string;
 }
 
+/** Запись истории подключений. */
+export interface HistoryEntry {
+  id: string;
+  hostId: string | null;
+  hostName: string;
+  protocol: Protocol;
+  address: string;
+  connectedAt: string;
+  disconnectedAt: string | null;
+  durationMs: number | null;
+  ok: boolean;
+  error: string | null;
+}
+
+/** Шаг runbook-скрипта. */
+export interface RunbookStep {
+  id: string;
+  name: string;
+  command: string;
+}
+
+/** Runbook — цепочка команд для выполнения на хостах. */
+export interface Runbook {
+  id: string;
+  name: string;
+  description: string;
+  hostIds: string[];
+  steps: RunbookStep[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Статус доступности хоста (для мониторинга). */
+export interface HostStatus {
+  hostId: string;
+  status: 'unknown' | 'checking' | 'ok' | 'fail';
+  lastCheckedAt: string | null;
+  lastOkAt: string | null;
+  lastFailAt: string | null;
+  lastMs: number | null;
+  lastError: string | null;
+}
+
 export interface OpenTabMeta {
   sessionId: string;
   hostId: string | null;
@@ -92,6 +135,14 @@ export interface Settings {
   winBounds: WindowBounds | null;
   openTabs: OpenTabMeta[];
   snippets: Snippet[];
+  /** История подключений (последние 500 записей). */
+  history: HistoryEntry[];
+  /** Runbook-скрипты. */
+  runbooks: Runbook[];
+  /** Мониторинг: интервал проверки (секунды, 0 = выключен). */
+  monitorIntervalSec: number;
+  /** Мониторинг: статусы хостов. */
+  hostStatuses: HostStatus[];
   onboardingDone: boolean;
   /** Справка об ошибке подключения уже открывалась автоматически (один раз). */
   helpErrorShown: boolean;
@@ -127,6 +178,10 @@ export const DEFAULT_SETTINGS: Settings = {
   winBounds: null,
   openTabs: [],
   snippets: [],
+  history: [],
+  runbooks: [],
+  monitorIntervalSec: 0,
+  hostStatuses: [],
   onboardingDone: false,
   helpErrorShown: false,
   lastSeenVersion: null

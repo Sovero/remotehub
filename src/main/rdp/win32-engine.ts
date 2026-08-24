@@ -19,7 +19,10 @@ export function createWin32Engine(): RdpEmbedEngine {
 
   const BOOL = koffi.alias('BOOL', 'int32');
   const DWORD = koffi.alias('DWORD', 'uint32_t');
-  const HANDLE = koffi.pointer('HANDLE', koffi.opaque());
+  // HWND как uintptr_t (BigInt/number), а не koffi.opaque(): opaque-указатели
+  // koffi не умеет вернуть из нативных функций (даёт null для валидных HWND),
+  // из-за чего ломались SetParent/GetParent/GetAncestor.
+  const HANDLE = koffi.alias('HANDLE', koffi.types.uintptr_t);
   const HWND = koffi.alias('HWND', HANDLE);
   const LPARAM = koffi.alias('LPARAM', koffi.types.intptr);
   const WPARAM = koffi.alias('WPARAM', koffi.types.intptr);
@@ -40,6 +43,7 @@ export function createWin32Engine(): RdpEmbedEngine {
   );
   const SetParent = user32.func('HWND __stdcall SetParent(HWND hwndChild, HWND hwndNewParent)');
   const GetParent = user32.func('HWND __stdcall GetParent(HWND hwnd)');
+  const GetAncestor = user32.func('HWND __stdcall GetAncestor(HWND hwnd, uint32_t gaFlags)');
   const IsWindow = user32.func('BOOL __stdcall IsWindow(HWND hwnd)');
   const ShowWindow = user32.func('BOOL __stdcall ShowWindow(HWND hwnd, int nCmdShow)');
   const PostMessageW = user32.func(
@@ -52,6 +56,7 @@ export function createWin32Engine(): RdpEmbedEngine {
 
   const GWL_STYLE = -16;
   const GWL_EXSTYLE = -20;
+  const GA_PARENT = 1;
 
   const WS_CHILD = 0x40000000;
   const WS_POPUP = 0x80000000;
@@ -252,18 +257,40 @@ export function createWin32Engine(): RdpEmbedEngine {
     },
 
     embed(hwnd: bigint, parentHwnd: bigint): void {
+      // Скрываем до SetParent — исключаем внешний «всплеск».
       ShowWindow(hwnd, SW_HIDE);
-      SetParent(hwnd, parentHwnd);
-      const actualParent = GetParent(hwnd);
-      if (actualParent !== parentHwnd) {
+
+      // Снимаем top-level оформление (заголовок, рамку, кнопки). WS_CHILD при
+      // этом НЕ выставляем: это флаг времени создания окна, и SetParent его не
+      // меняет — проверка по нему ложна. Встраивание верифицируем по реальному
+      // родителю через GetAncestor(GA_PARENT).
+      const childStyleBefore = Number(GetWindowLongPtrW(hwnd, GWL_STYLE)) & 0xffffffff;
+      const embeddedStyle =
+        childStyleBefore & ~(WS_POPUP | WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU);
+      SetWindowLongPtrW(hwnd, GWL_STYLE, embeddedStyle);
+
+      // Привязываем окно к родителю. Возврат SetParent (старый родитель) не
+      // читаем — он не нужен для верификации.
+      try {
+        SetParent(hwnd, parentHwnd);
+      } catch (err) {
+        throw new Error(`Win32 SetParent вызвал ошибку: ${(err as Error).message}`);
+      }
+
+      // Честная верификация: фактический родитель окна. GetParent у диалогов
+      // возвращает владельца, поэтому используем GetAncestor(GA_PARENT) — он
+      // возвращает именно родителя из дерева окон.
+      const actualParent = hwndValue(GetAncestor(hwnd, GA_PARENT));
+      if (actualParent === null || actualParent !== parentHwnd) {
+        console.error(
+          `[rdp-embed] SetParent не привязал: hwnd=0x${hwnd.toString(16)} ` +
+          `parent=0x${parentHwnd.toString(16)} actual=0x${(actualParent ?? 0n).toString(16)}`
+        );
         throw new Error('Win32 SetParent не привязал окно mstsc к окну приложения');
       }
-      const style = Number(GetWindowLongPtrW(hwnd, GWL_STYLE));
-      const next =
-        (style | WS_CHILD) &
-        ~(WS_POPUP | WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU);
-      SetWindowLongPtrW(hwnd, GWL_STYLE, next);
-      const ex = Number(GetWindowLongPtrW(hwnd, GWL_EXSTYLE));
+
+      // Убираем окно из панели задач.
+      const ex = Number(GetWindowLongPtrW(hwnd, GWL_EXSTYLE)) & 0xffffffff;
       SetWindowLongPtrW(hwnd, GWL_EXSTYLE, (ex & ~WS_EX_APPWINDOW) | WS_EX_TOOLWINDOW);
     },
 

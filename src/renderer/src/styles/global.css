@@ -2917,3 +2917,225 @@ textarea.input {
     animation: none;
   }
 }
+
+/* ---- History Panel ---- */
+.history-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: 70vh;
+  min-width: 480px;
+}
+
+.history-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.history-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.history-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+  align-items: center;
+}
+
+.history-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.history-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 32px 16px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.history-item:hover {
+  background: var(--bg-hover);
+  border-color: var(--border);
+}
+
+.history-item--error {
+  opacity: 0.65;
+}
+
+.history-item-icon {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.history-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.history-item-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-item-address {
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+.history-item-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.history-item-time {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.history-item-duration {
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  color: var(--ok);
+}
+
+/* ---- Runbooks ---- */
+.runbook-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.runbook-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.runbook-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.runbook-item-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.runbook-item-desc {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.runbook-item-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.runbook-steps {
+  margin-top: 12px;
+}
+
+.runbook-steps h4 {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.runbook-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.runbook-step-num {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.runbook-step .input {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.modal-panel--wide {
+  min-width: 560px;
+  max-width: 680px;
+}
+
+/* ---- Monitor Status Indicators (in tree) ---- */
+.tree-host-status {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-left: 6px;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+.tree-host-status--ok {
+  background: var(--ok);
+}
+
+.tree-host-status--fail {
+  background: var(--danger);
+}
+
+.tree-host-status--checking {
+  background: var(--warn);
+  animation: status-pulse 1s ease-in-out infinite;
+}
+
+.tree-host-status--unknown {
+  background: var(--text-muted);
+  opacity: 0.4;
+}
+
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}

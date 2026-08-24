@@ -1,4 +1,4 @@
-import type { CredentialSet, Settings, TreeNode } from './types';
+import type { CredentialSet, Settings, TreeNode, HistoryEntry, Runbook, RunbookStep } from './types';
 
 export const IPC = {
   profilesGet: 'profiles:get',
@@ -56,7 +56,18 @@ export const IPC = {
   checkPort: 'check:port',
   checkPing: 'check:ping',
   checkCancel: 'check:cancel',
-  quickConnect: 'quick:connect'
+  quickConnect: 'quick:connect',
+  historyGet: 'history:get',
+  historyAdd: 'history:add',
+  historyClear: 'history:clear',
+  runbooksGet: 'runbooks:get',
+  runbooksSave: 'runbooks:save',
+  runbooksDelete: 'runbooks:delete',
+  runbookRun: 'runbook:run',
+  runbookStop: 'runbook:stop',
+  runbookStepResult: 'runbook:step-result',
+  monitorCheck: 'monitor:check',
+  monitorCheckAll: 'monitor:check-all'
 } as const;
 
 export interface ProfilesGetResult {
@@ -308,4 +319,46 @@ export interface CheckPingRequest {
 
 export interface CheckCancelRequest {
   requestIds: string[];
+}
+
+// ---- history ----
+
+export interface HistoryAddRequest {
+  entry: Omit<import('./types').HistoryEntry, 'id'>;
+}
+
+// ---- runbooks ----
+
+export interface RunbookRunRequest {
+  runbookId: string;
+  hostId: string;
+  password?: string;
+}
+
+export interface RunbookStepResultPayload {
+  runbookId: string;
+  hostId: string;
+  stepId: string;
+  ok: boolean;
+  output: string;
+  error?: string;
+}
+
+export interface RunbookStopRequest {
+  runbookId: string;
+  hostId: string;
+}
+
+// ---- monitoring ----
+
+export interface MonitorCheckRequest {
+  hostId: string;
+  host: string;
+  port: number;
+}
+
+export interface MonitorCheckResult {
+  ok: boolean;
+  ms?: number;
+  error?: string;
 }

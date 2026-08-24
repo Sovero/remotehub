@@ -46,6 +46,38 @@ export default function Sidebar(): React.JSX.Element {
   const bulkReqs = useRef<Set<string>>(new Set());
   const bulkChecking = Object.values(hostStatus).some((s) => s.status === 'checking');
 
+  // Load persistent host statuses from settings for monitoring
+  const hostStatuses = useApp((s) => s.settings.hostStatuses ?? []);
+  // Merge persistent statuses into the status map (bulk check takes priority)
+  const mergedStatusMap = useMemo(() => {
+    const map: HostStatusMap = {};
+    for (const hs of hostStatuses) {
+      if (hs.status !== 'unknown') {
+        map[hs.hostId] = { status: hs.status, ms: hs.lastMs ?? undefined };
+      }
+    }
+    // Override with live bulk check statuses
+    for (const [id, info] of Object.entries(hostStatus)) {
+      map[id] = info;
+    }
+    return map;
+  }, [hostStatuses, hostStatus]);
+
+  // Auto-monitoring interval
+  const monitorInterval = useApp((s) => s.settings.monitorIntervalSec ?? 0);
+  const monitorCheckAll = useApp((s) => s.monitorCheckAll);
+  const patchSettings = useApp((s) => s.patchSettings);
+  const [autoMonitor, setAutoMonitor] = useState(monitorInterval > 0);
+
+  // Auto-refresh monitoring
+  useEffect(() => {
+    if (!autoMonitor) return;
+    const intervalSec = 60; // Check every 60 seconds
+    void patchSettings({ monitorIntervalSec: intervalSec });
+    const id = setInterval(() => void monitorCheckAll(), intervalSec * 1000);
+    return () => clearInterval(id);
+  }, [autoMonitor]);
+
   const tags = useMemo(() => collectTags(tree), [tree]);
 
   const filtered = useMemo(() => {
@@ -275,6 +307,17 @@ export default function Sidebar(): React.JSX.Element {
         <span className="sidebar-title">Профили</span>
         <button
           className="btn btn--ghost btn--sm btn--icon"
+          title={autoMonitor ? 'Выключить мониторинг' : 'Включить мониторинг (проверка каждые 60 сек)'}
+          onClick={() => {
+            const next = !autoMonitor;
+            setAutoMonitor(next);
+            if (!next) void patchSettings({ monitorIntervalSec: 0 });
+          }}
+        >
+          {autoMonitor ? <Icon name="spinner" size={12} className="icon-spin" /> : <Icon name="power" size={12} />}
+        </button>
+        <button
+          className="btn btn--ghost btn--sm btn--icon"
           title={bulkChecking ? 'Остановить проверку доступности' : 'Проверить доступность всех хостов'}
           onClick={() => (bulkChecking ? stopBulk() : void checkAllHosts())}
         >
@@ -333,7 +376,7 @@ export default function Sidebar(): React.JSX.Element {
             </div>
           )
         ) : (
-          <TreeView nodes={filtered} parentId={null} onMenu={(req) => setMenu(req)} statusMap={hostStatus} />
+          <TreeView nodes={filtered} parentId={null} onMenu={(req) => setMenu(req)} statusMap={mergedStatusMap} />
         )}
       </div>
 
@@ -361,6 +404,12 @@ export default function Sidebar(): React.JSX.Element {
         </button>
         <button className="btn btn--sm" onClick={() => void exportTree()}>
           <Icon name="export" size={13} /> Экспорт
+        </button>
+        <button className="btn btn--sm" title="История подключений" onClick={() => openDialog({ type: 'history' })}>
+          <Icon name="history" size={13} /> История
+        </button>
+        <button className="btn btn--sm" title="Runbook-скрипты" onClick={() => openDialog({ type: 'runbooks' })}>
+          <Icon name="script" size={13} /> Скрипты
         </button>
         <button className="btn btn--sm" title="Наборы учётных данных" onClick={() => openDialog({ type: 'credentials' })}>
           <Icon name="key" size={13} /> Учётные данные

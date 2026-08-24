@@ -8,8 +8,14 @@ import {
   type CredentialSaveResult,
   type CredentialSetInput,
   type ExportResult,
+  type HistoryAddRequest,
   type ImportResult,
   type LocalEntry,
+  type MonitorCheckRequest,
+  type MonitorCheckResult,
+  type RunbookRunRequest,
+  type RunbookStepResultPayload,
+  type RunbookStopRequest,
   type SessionDataPayload,
   type SessionOpenRequest,
   type SessionStatePayload,
@@ -162,7 +168,34 @@ const api = {
     const listener = (_e: unknown, payload: SessionStatePayload): void => cb(payload);
     ipcRenderer.on(IPC.sessionState, listener);
     return () => ipcRenderer.removeListener(IPC.sessionState, listener);
-  }
+  },
+  // ---- history ----
+  getHistory: (): Promise<{ entries: import('../shared/types').HistoryEntry[] }> =>
+    ipcRenderer.invoke(IPC.historyGet),
+  addHistory: (req: HistoryAddRequest): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IPC.historyAdd, req),
+  clearHistory: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.historyClear),
+  // ---- runbooks ----
+  getRunbooks: (): Promise<{ runbooks: import('../shared/types').Runbook[] }> =>
+    ipcRenderer.invoke(IPC.runbooksGet),
+  saveRunbook: (runbook: import('../shared/types').Runbook): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IPC.runbooksSave, runbook),
+  deleteRunbook: (id: string): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IPC.runbooksDelete, id),
+  runRunbook: (req: RunbookRunRequest): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.runbookRun, req),
+  stopRunbook: (req: RunbookStopRequest): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IPC.runbookStop, req),
+  onRunbookStepResult: (cb: (payload: RunbookStepResultPayload) => void): (() => void) => {
+    const listener = (_e: unknown, payload: RunbookStepResultPayload): void => cb(payload);
+    ipcRenderer.on(IPC.runbookStepResult, listener);
+    return () => ipcRenderer.removeListener(IPC.runbookStepResult, listener);
+  },
+  // ---- monitoring ----
+  monitorCheck: (req: MonitorCheckRequest): Promise<MonitorCheckResult> =>
+    ipcRenderer.invoke(IPC.monitorCheck, req),
+  monitorCheckAll: (): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IPC.monitorCheckAll)
 };
 
 export type RendererApi = typeof api;

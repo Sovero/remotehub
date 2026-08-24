@@ -21,7 +21,7 @@ import {
   type TunnelAddRequest,
   type VncOpenRequest
 } from '../shared/ipc-contract';
-import type { CredentialSet, Settings, TreeNode } from '../shared/types';
+import type { CredentialSet, Settings, TreeNode, HistoryEntry, Runbook, HostStatus } from '../shared/types';
 import { parseChangelog } from '../shared/changelog';
 import { buildExport, parseProfileExport } from '../shared/tree';
 import { checkPort, pingHost } from './availability';
@@ -464,6 +464,179 @@ export function registerIpc(
 
   ipcMain.handle(IPC.checkCancel, (_e, req: CheckCancelRequest) => {
     for (const id of req.requestIds) activeChecks.get(id)?.abort();
+    return { ok: true };
+  });
+
+  // ---- история ----
+  ipcMain.handle(IPC.historyGet, () => {
+    const { data } = store.loadSettings();
+    return { entries: data.history ?? [] };
+  });
+
+  ipcMain.handle(IPC.historyAdd, (_e, req: { entry: Omit<HistoryEntry, 'id'> }) => {
+    const { nanoid } = require('nanoid');
+    const entry: HistoryEntry = { ...req.entry, id: nanoid(10) };
+    const current = store.loadSettings().data;
+    const history = [entry, ...(current.history ?? [])].slice(0, 500);
+    store.saveSettings({ ...current, history });
+    return { ok: true };
+  });
+
+  ipcMain.handle(IPC.historyClear, () => {
+    const current = store.loadSettings().data;
+    store.saveSettings({ ...current, history: [] });
+    return { ok: true };
+  });
+
+  // ---- runbooks ----
+  ipcMain.handle(IPC.runbooksGet, () => {
+    const { data } = store.loadSettings();
+    return { runbooks: data.runbooks ?? [] };
+  });
+
+  ipcMain.handle(IPC.runbooksSave, (_e, runbook: Runbook) => {
+    const current = store.loadSettings().data;
+    const runbooks = [...(current.runbooks ?? [])];
+    const idx = runbooks.findIndex((r) => r.id === runbook.id);
+    if (idx >= 0) runbooks[idx] = runbook;
+    else runbooks.push(runbook);
+    store.saveSettings({ ...current, runbooks });
+    return { ok: true };
+  });
+
+  ipcMain.handle(IPC.runbooksDelete, (_e, id: string) => {
+    const current = store.loadSettings().data;
+    const runbooks = (current.runbooks ?? []).filter((r) => r.id !== id);
+    store.saveSettings({ ...current, runbooks });
+    return { ok: true };
+  });
+
+  // Активные runbook-сессии: runbookId+hostId → sessionId
+  const activeRunbooks = new Map<string, string>();
+
+  ipcMain.handle(IPC.runbookRun, async (_e, req: { runbookId: string; hostId: string; password?: string }) => {
+    const { data } = store.loadSettings();
+    const runbook = (data.runbooks ?? []).find((r) => r.id === req.runbookId);
+    if (!runbook) return { ok: false, error: 'Runbook не найден' };
+    const key = `${req.runbookId}:${req.hostId}`;
+    if (activeRunbooks.has(key)) return { ok: false, error: 'Runbook уже выполняется' };
+
+    // Находим хост в дереве
+    const { data: tree } = store.loadProfiles();
+    const node = tree.flatMap(function flatten(n: any): any[] {
+      return n.kind === 'group' ? (n.children ?? []).flatMap(flatten) : [n];
+    }).find((n: any) => n.id === req.hostId);
+    if (!node || node.kind !== 'host') return { ok: false, error: 'Хост не найден' };
+
+    // Запускаем SSH-сессию для каждого шага
+    const credential = node.credentialId
+      ? store.loadCredentials().data.find((c) => c.id === node.credentialId) ?? null
+      : null;
+
+    const sessionId = `runbook-${req.runbookId}-${req.hostId}-${Date.now()}`;
+    activeRunbooks.set(key, sessionId);
+
+    // Запускаем сессию — команды будут буферизованы и выполнены при подключении
+    sessions.open({
+      id: sessionId,
+      host: node,
+      credential,
+      dialogPassword: req.password,
+      cols: 200,
+      rows: 50
+    });
+
+    // Выполняем шаги последовательно в фоне с задержкой
+    void (async () => {
+      // Начальная задержка для подключения
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      for (const step of runbook.steps) {
+        if (!activeRunbooks.has(key)) break;
+        try {
+          const cmd = step.command.trim() + '\n';
+          sessions.input(sessionId, Buffer.from(cmd));
+          // Даём время на выполнение (5 секунд на шаг)
+          await new Promise((resolve) => setTimeout(resolve, 5000));
+          broadcast(IPC.runbookStepResult, {
+            runbookId: req.runbookId,
+            hostId: req.hostId,
+            stepId: step.id,
+            ok: true,
+            output: `[выполнено: ${step.name}]`
+          });
+        } catch (err) {
+          broadcast(IPC.runbookStepResult, {
+            runbookId: req.runbookId,
+            hostId: req.hostId,
+            stepId: step.id,
+            ok: false,
+            output: '',
+            error: (err as Error).message
+          });
+        }
+      }
+      activeRunbooks.delete(key);
+      sessions.close(sessionId);
+    })();
+
+    return { ok: true };
+  });
+
+  ipcMain.handle(IPC.runbookStop, (_e, req: { runbookId: string; hostId: string }) => {
+    const key = `${req.runbookId}:${req.hostId}`;
+    const sessionId = activeRunbooks.get(key);
+    if (sessionId) {
+      sessions.close(sessionId);
+      activeRunbooks.delete(key);
+    }
+    return { ok: true };
+  });
+
+  // ---- мониторинг ----
+  ipcMain.handle(IPC.monitorCheck, async (_e, req: { hostId: string; host: string; port: number }) => {
+    const [portRes, pingRes] = await Promise.all([
+      checkPort(req.host, req.port),
+      pingHost(req.host)
+    ]);
+    const ok = portRes.ok || pingRes.ok;
+    return { ok, ms: portRes.ms ?? pingRes.ms, error: ok ? undefined : (portRes.error ?? pingRes.error) };
+  });
+
+  ipcMain.handle(IPC.monitorCheckAll, async () => {
+    const { data: tree } = store.loadProfiles();
+    const hosts = tree.flatMap(function flatten(n: any): any[] {
+      return n.kind === 'group' ? (n.children ?? []).flatMap(flatten) : [n];
+    }).filter((n: any) => n.kind === 'host');
+
+    const current = store.loadSettings().data;
+    const statuses: HostStatus[] = [];
+    const now = new Date().toISOString();
+
+    // Проверяем хосты параллельно (пакетами по 4)
+    const queue = [...hosts];
+    const worker = async (): Promise<void> => {
+      while (queue.length > 0) {
+        const host = queue.shift();
+        if (!host) break;
+        const portNum = host.port ?? (host.protocol === 'rdp' ? 3389 : host.protocol === 'ssh' ? 22 : host.protocol === 'vnc' ? 5900 : 23);
+        const portRes = await checkPort(host.host, portNum);
+        const pingRes = await pingHost(host.host);
+        const ok = portRes.ok || pingRes.ok;
+        statuses.push({
+          hostId: host.id,
+          status: ok ? 'ok' : 'fail',
+          lastCheckedAt: now,
+          lastOkAt: ok ? now : null,
+          lastFailAt: ok ? null : now,
+          lastMs: portRes.ms ?? pingRes.ms ?? null,
+          lastError: ok ? null : (portRes.error ?? pingRes.error ?? null)
+        });
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(4, hosts.length) }, () => worker()));
+
+    // Обновляем статусы в настройках
+    store.saveSettings({ ...current, hostStatuses: statuses });
     return { ok: true };
   });
 

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { nanoid } from 'nanoid';
-import type { Group, Host, RdpOptions, Settings, Snippet, TreeNode } from '@shared/types';
+import type { Group, Host, HistoryEntry, RdpOptions, Runbook, Settings, Snippet, TreeNode } from '@shared/types';
 import { createGroup, createHost } from '@shared/types';
 import type { SessionState, UpdateStatus } from '@shared/ipc-contract';
 import {
@@ -53,6 +53,9 @@ export type DialogState =
   | { type: 'whats-new' }
   | { type: 'help'; sectionId?: string }
   | { type: 'tunnels'; sessionId: string; title: string; host: Host }
+  | { type: 'history' }
+  | { type: 'runbooks' }
+  | { type: 'runbook-edit'; runbook?: Runbook }
   | null;
 
 interface AppState {
@@ -121,10 +124,26 @@ interface AppState {
   persistTabs: () => void;
   saveSnippet: (snippet: Snippet) => Promise<void>;
   deleteSnippet: (id: string) => Promise<void>;
+  // History
+  history: HistoryEntry[];
+  loadHistory: () => Promise<void>;
+  addHistory: (entry: Omit<HistoryEntry, 'id'>) => Promise<void>;
+  clearHistory: () => Promise<void>;
+  // Runbooks
+  runbooks: Runbook[];
+  loadRunbooks: () => Promise<void>;
+  saveRunbook: (runbook: Runbook) => Promise<void>;
+  deleteRunbook: (id: string) => Promise<void>;
+  runRunbook: (runbookId: string, hostId: string, password?: string) => Promise<void>;
+  stopRunbook: (runbookId: string, hostId: string) => Promise<void>;
+  // Monitor
+  monitorCheckAll: () => Promise<void>;
 }
 
 export const useApp = create<AppState>((set, get) => ({
   tree: [],
+  history: [],
+  runbooks: [],
   settings: {
     theme: 'dark',
     fontSize: 14,
@@ -136,6 +155,10 @@ export const useApp = create<AppState>((set, get) => ({
     winBounds: null,
     openTabs: [],
     snippets: [],
+    history: [],
+    runbooks: [],
+    monitorIntervalSec: 0,
+    hostStatuses: [],
     onboardingDone: false,
     helpErrorShown: false,
     lastSeenVersion: null
@@ -237,6 +260,12 @@ export const useApp = create<AppState>((set, get) => ({
     if (settings.recovered) {
       get().pushToast('Файл настроек был повреждён — применены настройки по умолчанию');
     }
+    // Загрузка истории и runbook-ов
+    const [historyRes, runbooksRes] = await Promise.all([
+      window.api.getHistory(),
+      window.api.getRunbooks()
+    ]);
+    set({ history: historyRes.entries, runbooks: runbooksRes.runbooks });
     // «Что нового» после обновления: сравнение сохранённой и текущей версии.
     await get().maybeShowWhatsNew();
   },
@@ -387,6 +416,18 @@ export const useApp = create<AppState>((set, get) => ({
       startedAt: null
     };
     set((s) => ({ tabs: [...s.tabs, tab], activeTabId: sessionId }));
+    // Record history entry
+    void get().addHistory({
+      hostId: host.id,
+      hostName: host.name,
+      protocol: host.protocol,
+      address: `${host.host}:${host.port ?? 22}`,
+      connectedAt: new Date().toISOString(),
+      disconnectedAt: null,
+      durationMs: null,
+      ok: true,
+      error: null
+    });
     const res = await window.api.openSession({ sessionId, host, password: opts?.password });
     // sessionId из main может отличаться (для ad-hoc), синхронизируем
     if (res.sessionId && res.sessionId !== sessionId) {
@@ -420,6 +461,17 @@ export const useApp = create<AppState>((set, get) => ({
       ],
       activeTabId: sessionId
     }));
+    void get().addHistory({
+      hostId: host.id,
+      hostName: host.name,
+      protocol: 'rdp',
+      address: `${host.host}:${host.port ?? 3389}`,
+      connectedAt: new Date().toISOString(),
+      disconnectedAt: null,
+      durationMs: null,
+      ok: true,
+      error: null
+    });
     const res = await window.api.rdpLaunch({ sessionId, host });
     get().applyRdpOutcome(sessionId, res);
     get().persistTabs();
@@ -444,6 +496,17 @@ export const useApp = create<AppState>((set, get) => ({
       ],
       activeTabId: sessionId
     }));
+    void get().addHistory({
+      hostId: host.id,
+      hostName: host.name,
+      protocol: 'vnc',
+      address: `${host.host}:${host.port ?? 5900}`,
+      connectedAt: new Date().toISOString(),
+      disconnectedAt: null,
+      durationMs: null,
+      ok: true,
+      error: null
+    });
     const res = await window.api.vncOpen({ sessionId, host });
     set((s) => ({
       tabs: s.tabs.map((t) =>
@@ -481,6 +544,17 @@ export const useApp = create<AppState>((set, get) => ({
       ],
       activeTabId: sessionId
     }));
+    void get().addHistory({
+      hostId: host.id,
+      hostName: host.name,
+      protocol: host.protocol,
+      address: `${host.host}:${host.port ?? 22}`,
+      connectedAt: new Date().toISOString(),
+      disconnectedAt: null,
+      durationMs: null,
+      ok: true,
+      error: null
+    });
     const res = await window.api.sftpOpen({ sessionId, host });
     set((s) => ({
       tabs: s.tabs.map((t) =>
@@ -714,6 +788,46 @@ export const useApp = create<AppState>((set, get) => ({
   deleteSnippet: async (id) => {
     const { settings } = get();
     await get().patchSettings({ snippets: settings.snippets.filter((s) => s.id !== id) });
+  },
+
+  // ---- History ----
+  loadHistory: async () => {
+    const res = await window.api.getHistory();
+    set({ history: res.entries });
+  },
+  addHistory: async (entry) => {
+    await window.api.addHistory({ entry });
+    await get().loadHistory();
+  },
+  clearHistory: async () => {
+    await window.api.clearHistory();
+    set({ history: [] });
+  },
+
+  // ---- Runbooks ----
+  loadRunbooks: async () => {
+    const res = await window.api.getRunbooks();
+    set({ runbooks: res.runbooks });
+  },
+  saveRunbook: async (runbook) => {
+    await window.api.saveRunbook(runbook);
+    await get().loadRunbooks();
+  },
+  deleteRunbook: async (id) => {
+    await window.api.deleteRunbook(id);
+    await get().loadRunbooks();
+  },
+  runRunbook: async (runbookId, hostId, password) => {
+    const res = await window.api.runRunbook({ runbookId, hostId, password });
+    if (!res.ok) get().pushToast(res.error ?? 'Ошибка запуска runbook');
+  },
+  stopRunbook: async (runbookId, hostId) => {
+    await window.api.stopRunbook({ runbookId, hostId });
+  },
+
+  // ---- Monitor ----
+  monitorCheckAll: async () => {
+    await window.api.monitorCheckAll();
   }
 }));
 
