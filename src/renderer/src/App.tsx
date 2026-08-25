@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SessionState } from '@shared/ipc-contract';
+import type { RdpEngine } from '@shared/types';
 import { findNode } from '@shared/tree';
 import { useApp } from './store';
 import Sidebar from './components/Sidebar';
@@ -14,6 +15,8 @@ import SessionOverlay from './components/SessionOverlay';
 import SftpPane from './components/SftpPane';
 import VncViewer from './components/VncViewer';
 import UpdateBar from './components/UpdateBar';
+import RdpCanvas from './components/RdpCanvas';
+import IronRdpView from './components/IronRdpView';
 import Icon from './components/Icon';
 
 export default function App(): React.JSX.Element {
@@ -110,11 +113,24 @@ export default function App(): React.JSX.Element {
     const offUpdate = window.api.onUpdateState((state) => {
       useApp.getState().applyUpdateState(state);
     });
+    const offRdpjsState = window.api.onRdpjsState?.((payload) => {
+      const s = useApp.getState();
+      const phase = payload.state === 'connected' ? 'connected'
+        : payload.state === 'connecting' ? 'connecting'
+        : payload.error ? { phase: 'error' as const, message: payload.error }
+        : { phase: 'closed' as const, reason: 'RDP-сессия завершена' };
+      if (typeof phase === 'string') {
+        s.applySessionState(payload.sessionId, { phase });
+      } else {
+        s.applySessionState(payload.sessionId, phase);
+      }
+    });
     return () => {
       offData();
       offState();
       offRdp();
       offRdpCertificate();
+      offRdpjsState?.();
       offVncErr();
       offNotify();
       offMenu();
@@ -283,16 +299,17 @@ function RdpPane({
     hostId: string | null;
     title: string;
     state: { phase: string };
+    rdpEngine?: RdpEngine;
     certificatePending?: boolean;
   };
   active: boolean;
 }): React.JSX.Element {
   const reconnectTab = useApp((s) => s.reconnectTab);
-  const closeTab = useApp((s) => s.closeTab);
   const relaunchRdp = useApp((s) => s.relaunchRdp);
   const saveRdpResolution = useApp((s) => s.saveRdpResolution);
   const tree = useApp((s) => s.tree);
-  const paneRef = useRef<HTMLDivElement | null>(null);
+  const selectedRdpEngine = useApp((s) => s.settings.rdpEngine);
+  const rdpEngine = tab.rdpEngine ?? selectedRdpEngine;
 
   const host = useMemo(() => {
     if (!tab.hostId) return null;
@@ -305,33 +322,6 @@ function RdpPane({
     setImmersive(host?.rdp.screenMode === 'fullscreen');
   }, [host?.rdp.screenMode]);
 
-  // mstsc — дочернее окно stage, а fullscreen — режим самой RDP-вкладки.
-  // Ни один вариант профиля не создаёт отдельного окна Remote Desktop.
-  const sendRect = (): void => {
-    const el = paneRef.current;
-    if (!el || !active) return;
-    const r = el.getBoundingClientRect();
-    if (r.width < 2 || r.height < 2) return; // панель скрыта — прямоугольник неактуален
-    window.api.rdpSetRect(tab.sessionId, { x: r.x, y: r.y, width: r.width, height: r.height });
-  };
-  useEffect(() => {
-    if (!active || tab.state.phase !== 'connected') return;
-    window.api.rdpActivate(tab.sessionId);
-    sendRect();
-    const el = paneRef.current;
-    let ro: ResizeObserver | null = null;
-    if (el && typeof ResizeObserver !== 'undefined') {
-      ro = new ResizeObserver(() => sendRect());
-      ro.observe(el);
-    }
-    window.addEventListener('resize', sendRect);
-    return () => {
-      ro?.disconnect();
-      window.removeEventListener('resize', sendRect);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, tab.sessionId, tab.state.phase]);
-
   const currentRes = host ? `${host.rdp.width}×${host.rdp.height}` : '';
   const resOptions = [...RDP_RESOLUTIONS.map(([w, h]) => `${w}×${h}`)];
   if (currentRes && !resOptions.includes(currentRes)) resOptions.unshift(currentRes);
@@ -339,13 +329,11 @@ function RdpPane({
   const setResolution = (value: string): void => {
     const [w, h] = value.split('×').map(Number);
     if (w && h && (w !== host?.rdp.width || h !== host?.rdp.height)) {
-      // Сохраняем в профиль без переподключения: новая сессия (следующий
-      // запуск) использует выбранное разрешение, текущая продолжает работать.
       void saveRdpResolution(tab.sessionId, w, h);
     }
   };
 
-  if (tab.state.phase !== 'connected') {
+  if (rdpEngine !== 'iron' && tab.state.phase !== 'connected') {
     return (
       <div className="placeholder-panel">
         <div className="placeholder-icon">
@@ -361,9 +349,11 @@ function RdpPane({
     if (!host) return;
     const next = !immersive;
     setImmersive(next);
-    // Сохраняем выбор в профиле и переподключаемся тем же embedded-путём.
     void relaunchRdp(tab.sessionId, { screenMode: next ? 'fullscreen' : 'window' });
   };
+
+  const rdpWidth = host?.rdp.width ?? 1366;
+  const rdpHeight = host?.rdp.height ?? 768;
 
   return (
     <div className={`rdp-pane rdp-pane--embedded${immersive ? ' rdp-pane--immersive' : ''}`}>
@@ -383,18 +373,6 @@ function RdpPane({
             <Icon name="window" size={12} /> Все мониторы · внутри вкладки
           </span>
         )}
-        {tab.certificatePending && (
-          <div className="rdp-cert-banner" role="alert">
-            <Icon name="warning" size={13} />
-            <span>Сертификат RDP не доверен. Подтвердить подключение?</span>
-            <button className="btn btn--primary btn--sm" onClick={() => window.api.rdpAcceptCertificate(tab.sessionId)}>
-              <Icon name="check" size={12} /> Подключить
-            </button>
-            <button className="btn btn--sm" onClick={() => window.api.rdpRejectCertificate(tab.sessionId)}>
-              <Icon name="close" size={12} /> Отмена
-            </button>
-          </div>
-        )}
         <button
           className="btn btn--sm"
           title={immersive ? 'Вернуть оконный режим внутри приложения' : 'Развернуть RDP на рабочую область приложения'}
@@ -411,7 +389,39 @@ function RdpPane({
           <Icon name="refresh" size={13} />
         </button>
       </div>
-      <div className="rdp-stage rdp-stage--live" ref={paneRef} />
+      {rdpEngine === 'iron' ? (
+        <div className="iron-rdp-stage">
+          <IronRdpView
+            sessionId={tab.sessionId}
+            host={host?.host ?? ''}
+            port={host?.port ?? 3389}
+            domain={host?.rdp.domain ?? ''}
+            credentialId={host?.credentialId ?? null}
+            width={rdpWidth}
+            height={rdpHeight}
+          />
+          {tab.state.phase !== 'connected' && (
+            <div
+              className={`iron-rdp-overlay${tab.state.phase === 'error' ? ' iron-rdp-overlay--error' : ''}`}
+            >
+              {tab.state.phase === 'connecting' ? (
+                <>
+                  <Icon name="spinner" size={30} className="icon-spin" />
+                  <span>Подключение через IronRDP…</span>
+                </>
+              ) : (
+                <span>
+                  {tab.state.phase === 'error'
+                    ? ((tab.state as { message?: string }).message ?? 'Ошибка RDP')
+                    : ((tab.state as { reason?: string }).reason ?? 'Сессия завершена')}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      ) : (
+        <RdpCanvas sessionId={tab.sessionId} width={rdpWidth} height={rdpHeight} connected={tab.state.phase === 'connected'} />
+      )}
     </div>
   );
 }

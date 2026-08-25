@@ -88,6 +88,22 @@ npm run typecheck
 npm test
 ```
 
+### IronRDP smoke на реальном хосте
+
+Опциональный smoke запускает отдельный Electron-профиль, создаёт временный зашифрованный credential и открывает реальный RDP-хост движком IronRDP. Он завершается только после проверки `state.phase === "connected"` и ненулевых не-чёрных пикселей в canvas. Пароль не выводится в лог и не записывается в репозиторий.
+
+```powershell
+$env:RH_RDP_HOST = "rdp.example.com"
+$env:RH_RDP_USERNAME = "user"
+$env:RH_RDP_PASSWORD = "<password>"
+$env:RH_RDP_PORT = "3389"              # optional
+$env:RH_RDP_DOMAIN = "DOMAIN"          # optional
+$env:RH_RDP_TIMEOUT_MS = "90000"       # optional
+npm run smoke:rdp:iron
+```
+
+В Unix shell используются те же имена переменных через `export`. Smoke opt-in и не входит в обычный `npm test`; запуск без обязательных переменных завершается с кодом `2`.
+
 ## Лицензия
 
 [MIT](LICENSE) © 2026 Remote Hub

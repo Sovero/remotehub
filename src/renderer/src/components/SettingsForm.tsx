@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { RdpEngine } from '@shared/types';
 import { useApp } from '../store';
 
 const FONTS = [
@@ -48,6 +49,15 @@ export default function SettingsForm(): React.JSX.Element {
     const fam = familyName(value);
     const note = installed.has(fam) ? '' : ' — шрифт не найден в системе, будет использован запасной';
     pushToast(`Шрифт терминала: ${fam}${note}`);
+  };
+
+  const applyRdpEngine = (rdpEngine: RdpEngine): void => {
+    void patchSettings({ rdpEngine });
+    pushToast(
+      rdpEngine === 'iron'
+        ? 'RDP: IronRDP (WASM) будет использоваться для новых подключений'
+        : 'RDP: legacy canvas (node-rdpjs) будет использоваться для новых подключений'
+    );
   };
 
   return (
@@ -113,6 +123,22 @@ export default function SettingsForm(): React.JSX.Element {
               aria-label={c}
             />
           ))}
+        </div>
+      </div>
+
+      <div className="form-row">
+        <label className="form-label" htmlFor="rdp-engine">Движок RDP</label>
+        <select
+          id="rdp-engine"
+          className="input"
+          value={settings.rdpEngine}
+          onChange={(e) => applyRdpEngine(e.target.value as RdpEngine)}
+        >
+          <option value="rdpjs">Legacy canvas (node-rdpjs)</option>
+          <option value="iron">IronRDP (WASM, canvas)</option>
+        </select>
+        <div className="form-hint">
+          Выбор применяется к новым подключениям. Для уже открытой вкладки используйте переподключение.
         </div>
       </div>
 

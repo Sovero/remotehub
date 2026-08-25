@@ -38,6 +38,8 @@ export interface RdpEmbedEngine {
   show(hwnd: bigint): void;
   hide(hwnd: bigint): void;
   setForeground(hwnd: bigint): void;
+  /** Клавиатурный фокус встроенному окну: AttachThreadInput + SetFocus + подъём в Z-порядке. */
+  focus(hwnd: bigint): void;
   /**
    * Скрывает вспомогательные top-level окна mstsc (панель подключения
    * BBarWindowClass и прогресс «Подключение…»), которые не должны
@@ -59,6 +61,7 @@ const noopEngine: RdpEmbedEngine = {
   show: () => undefined,
   hide: () => undefined,
   setForeground: () => undefined,
+  focus: () => undefined,
   hideAuxiliaryWindows: () => undefined,
   close: () => undefined
 };

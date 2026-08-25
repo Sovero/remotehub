@@ -3151,3 +3151,46 @@ textarea.input {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
 }
+
+/* ---- iron: WASM RDP поверх локального моста ---- */
+
+.iron-rdp-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  background: #000;
+  overflow: hidden;
+}
+
+.iron-rdp-view {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  outline: none;
+  overflow: hidden;
+}
+
+.iron-rdp-view canvas {
+  max-width: 100%;
+  max-height: 100%;
+  cursor: default;
+}
+
+.iron-rdp-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted, #cbd5e1);
+  background: rgba(2, 6, 23, 0.72);
+  pointer-events: none;
+}
+
+.iron-rdp-overlay--error {
+  color: #fca5a5;
+}

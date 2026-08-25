@@ -63,6 +63,10 @@ export const IPC = {
   rdpjsKeyUnicode: 'rdpjs:key-unicode',
   /** node-rdpjs: клавиша (сканкод) */
   rdpjsKeyScancode: 'rdpjs:key-scancode',
+  /** iron (IronRDP/WASM): запуск локального RDCleanPath-моста для сессии */
+  ironStart: 'iron:start',
+  /** iron: остановка моста */
+  ironStop: 'iron:stop',
   /** node-rdpjs: запуск сессии */
   rdpjsLaunch: 'rdpjs:launch',
   /** node-rdpjs: закрытие сессии */
@@ -339,6 +343,33 @@ export interface CheckCancelRequest {
   requestIds: string[];
 }
 
+// ---- iron (@devolutions/iron-remote-desktop через локальный мост) ----
+
+export interface IronStartRequest {
+  sessionId: string;
+  host: string;
+  port?: number;
+  domain?: string;
+  credentialId?: string | null;
+}
+
+/**
+ * Результат запуска моста. Пароль возвращается в renderer осознанно:
+ * WASM-клиент IronRDP выполняет NLA сам, серверной стороны у него нет.
+ * Секрет разрешён в main из хранилища (credentialId) и никуда дальше не идёт.
+ */
+export interface IronStartResult {
+  ok: boolean;
+  /** WebSocket-адрес локального RDCleanPath-моста (ws://127.0.0.1:<port>). */
+  wsUrl?: string;
+  /** Строка destination для Request PDU (host:port реального сервера). */
+  destination?: string;
+  username?: string;
+  password?: string;
+  domain?: string;
+  error?: string;
+}
+
 // ---- history ----
 
 export interface HistoryAddRequest {
@@ -389,6 +420,7 @@ export interface RdpjsLaunchRequest {
   port?: number;
   username: string;
   password: string;
+  credentialId?: string | null;
   domain?: string;
   width?: number;
   height?: number;
