@@ -48,7 +48,14 @@ export class Updater {
     });
     autoUpdater.on('error', (err) => {
       console.error('[updater]', err);
-      this.push({ status: 'error', message: err.message });
+      // ENOENT app-update.yml — файл не создаётся при --dir/unpacked-сборке.
+      // Не показываем баннер — это не ошибка пользователя, а среда разработки.
+      const msg = (err as Error).message ?? '';
+      if (msg.includes('ENOENT') && msg.includes('app-update.yml')) {
+        console.info('[updater] app-update.yml отсутствует — автообновление отключено в этой сборке');
+        return;
+      }
+      this.push({ status: 'error', message: msg });
     });
   }
 

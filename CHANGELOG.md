@@ -3,6 +3,28 @@
 Все заметные изменения проекта. Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 версионирование — семантическое (MAJOR.MINOR.PATCH).
 
+## [0.1.8] — 2026-08-24
+
+### Добавлено
+- RDP-подключения используют C++ COM-хост (rdp-com-host.exe, 300 KB) вместо
+  mstsc.exe: MsTscAx ActiveX загружается in-process в скрытое окно, HWND
+  передаётся в Electron через stdout для SetParent. Ноль mstsc.exe в
+  процессах.
+- Resize-команда в stdin COM-хоста с debounce 300 мс: при изменении размера
+  вкладки RDP-сессия адаптирует разрешение удалённого рабочего стола.
+
+### Исправлено
+- CLSID MsTscAx.MsTscAx.10 ({8B918B82-...}) вместо незарегистрированного
+  MsRdpClient9: COM-хост создаёт HWND без ошибки 0x80040154.
+- DISPID ищутся через GetIDsOfNames вместо хардкода — Connect, Server,
+  UserName, SecuredSettings2 работают на любой версии Windows.
+- Пароль через cmdkey-инъекцию: ClearTextPassword через IDispatch
+  возвращает E_ACCESSDENIED, обход — Credential Manager.
+- Баннер «ENOENT app-update.yml» подавлен в unpacked-сборках.
+- JS-зависимости bundle внутрь out/main/index.js вместо require():
+  electron-updater, ssh2, ws и др. больше не теряются в asar.
+- Stale lockfile старше 30 секунд удаляется перед повторным захватом.
+
 ## [0.1.7] — 2026-08-23
 
 ### Исправлено

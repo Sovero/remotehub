@@ -35,7 +35,14 @@
     ],
     "asarUnpack": [
       "node_modules/koffi/**",
-      "node_modules/@koromix/**"
+      "node_modules/@koromix/**",
+      "node_modules/nanoid/**"
+    ],
+    "extraResources": [
+      {
+        "from": "src/native/rdp-com-host.exe",
+        "to": "rdp-com-host.exe"
+      }
     ],
     "publish": [
       {
@@ -78,6 +85,7 @@
     "koffi": "^3.1.6",
     "nanoid": "^6.0.1",
     "node-rdpjs": "^0.3.0",
+    "node-rdpjs-2": "^0.3.5",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "ssh2": "^1.17.0",
