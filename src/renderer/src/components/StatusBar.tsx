@@ -125,7 +125,7 @@ export default function StatusBar(): React.JSX.Element {
           onClick={() => openDialog({ type: 'about' })}
         >
           <Icon name="window" size={11} />
-          v{appInfo.version} · Electron {appInfo.electron} · {appInfo.arch}
+          v{appInfo.version} · {appInfo.arch}
         </button>
       )}
     </footer>

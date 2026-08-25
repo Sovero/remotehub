@@ -42,7 +42,7 @@ export default function AboutDialog({ onClose }: { onClose: () => void }): React
           <div>
             <div className="about-name">Remote Hub</div>
             <div className="about-meta">
-              v{appInfo?.version ?? '—'} · Electron {appInfo?.electron ?? '—'} · {appInfo?.arch ?? '—'}
+              v{appInfo?.version ?? '—'} · {appInfo?.arch ?? '—'}
             </div>
           </div>
         </div>

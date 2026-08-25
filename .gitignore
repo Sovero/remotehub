@@ -18,6 +18,8 @@ dist/
 out/
 release/
 dist-release/
+dist-release2/
+src/native/*.obj
 
 # Python
 __pycache__/

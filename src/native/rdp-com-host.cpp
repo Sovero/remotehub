@@ -253,8 +253,10 @@ int main() {
         pAdv->Release();
     }
 
-    // Вывод HWND → stdout
-    uintptr_t hwndOut = (uintptr_t)(g_hwndRdp ? g_hwndRdp : g_hwndParent);
+    // Передаём наружу окно-контейнер, а не дочерний ActiveX HWND. Оставив
+    // контрол дочерним, сохраняем его OLE-родителя: он продолжает получать
+    // WM_SIZE, сообщения и отрисовку после SetParent в окне Electron.
+    uintptr_t hwndOut = (uintptr_t)g_hwndParent;
     std::cout << "HWND:" << std::hex << hwndOut << std::endl;
     std::cout.flush();
 

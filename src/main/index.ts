@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, Menu, shell } from 'electron';
+import { app, BrowserWindow, dialog, Menu, screen, shell } from 'electron';
 import { writeFileSync, mkdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { pathToFileURL } from 'url';
@@ -23,7 +23,8 @@ const MIN_WIDTH = 900;
 const MIN_HEIGHT = 600;
 
 /** Иконка приложения: в окне и в диалогах (в packaged-сборке — внутри app.asar/build). */
-const APP_ICON = join(__dirname, '../../build/icon.ico');
+const APP_ICON = join(process.resourcesPath, 'build', 'icon.ico');
+const DEV_APP_ICON = join(__dirname, '../../build/icon.ico');
 
 const APP_REPOSITORY = 'https://github.com/Sovero/remotehub';
 
@@ -125,12 +126,12 @@ function installMenu(updater: Updater): void {
                 type: 'info',
                 title: 'Remote Hub',
                 message: 'Remote Hub',
-                icon: APP_ICON,
+                icon: require('fs').existsSync(APP_ICON) ? APP_ICON : DEV_APP_ICON,
                 buttons: ['Закрыть', 'Открыть репозиторий'],
                 defaultId: 0,
                 cancelId: 0,
                 noLink: true,
-                detail: `Версия ${app.getVersion()}\nElectron ${process.versions.electron ?? ''}\nРабочий стол для SSH, Telnet, RDP, VNC и SFTP.\n\nРепозиторий: ${APP_REPOSITORY}`
+                detail: `Версия ${app.getVersion()}\nРабочий стол для SSH, Telnet, RDP, VNC и SFTP.\n\nРепозиторий: ${APP_REPOSITORY}`
               })
               .then(({ response }) => {
                 if (response === 1) void shell.openExternal(APP_REPOSITORY);
@@ -143,10 +144,39 @@ function installMenu(updater: Updater): void {
   Menu.setApplicationMenu(menu);
 }
 
+function normalizeWindowBounds(settings: ReturnType<Store['loadSettings']>['data']): {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+} {
+  const saved = settings.winBounds;
+  const fallback = { width: 1280, height: 800 };
+  const width = Number.isFinite(saved?.width) ? Math.max(MIN_WIDTH, Math.round(saved!.width)) : fallback.width;
+  const height = Number.isFinite(saved?.height) ? Math.max(MIN_HEIGHT, Math.round(saved!.height)) : fallback.height;
+  const candidate = {
+    x: Number.isFinite(saved?.x) ? Math.round(saved!.x) : 0,
+    y: Number.isFinite(saved?.y) ? Math.round(saved!.y) : 0,
+    width,
+    height
+  };
+  const display = screen.getDisplayMatching(candidate);
+  const workArea = display.workArea;
+  const x = Math.min(
+    Math.max(candidate.x, workArea.x - candidate.width + 80),
+    workArea.x + workArea.width - 80
+  );
+  const y = Math.min(
+    Math.max(candidate.y, workArea.y - candidate.height + 80),
+    workArea.y + workArea.height - 80
+  );
+  return { x, y, width: Math.min(candidate.width, workArea.width), height: Math.min(candidate.height, workArea.height) };
+}
+
 function createWindow(rdp: RdpManager): void {
   const settings = store.loadSettings().data;
-  const bounds: { x?: number; y?: number; width: number; height: number } =
-    settings.winBounds ?? { width: 1280, height: 800 };
+  const bounds = normalizeWindowBounds(settings);
+  const icon = require('fs').existsSync(APP_ICON) ? APP_ICON : DEV_APP_ICON;
 
   mainWindow = new BrowserWindow({
     width: bounds.width,
@@ -158,7 +188,7 @@ function createWindow(rdp: RdpManager): void {
     show: true,
     backgroundColor: settings.theme === 'light' ? '#f4f4f6' : '#17181c',
     title: `Remote Hub v${app.getVersion()}`,
-    icon: APP_ICON,
+    icon,
     autoHideMenuBar: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -168,7 +198,17 @@ function createWindow(rdp: RdpManager): void {
     }
   });
 
-  mainWindow.once('ready-to-show', () => mainWindow?.show());
+  mainWindow.once('ready-to-show', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.show();
+    mainWindow.focus();
+  });
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    console.error(`[startup] renderer load failed: ${errorCode} ${errorDescription} (${validatedURL})`);
+  });
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    console.error(`[startup] renderer process gone: ${details.reason}`);
+  });
 
   // Заголовок окна содержит версию; HTML-тег <title> не должен его перезаписывать.
   mainWindow.on('page-title-updated', (e) => e.preventDefault());
@@ -1961,9 +2001,13 @@ function createWindow(rdp: RdpManager): void {
   });
 
   if (process.env['ELECTRON_RENDERER_URL']) {
-    void mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL']);
+    void mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL']).catch((error: unknown) => {
+      console.error('[startup] renderer URL failed:', error);
+    });
   } else {
-    void mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
+    void mainWindow.loadFile(join(__dirname, '../renderer/index.html')).catch((error: unknown) => {
+      console.error('[startup] renderer file failed:', error);
+    });
   }
 }
 
@@ -2067,18 +2111,33 @@ if (!gotLock) {
       createWindow(rdp);
     } catch (err) {
       console.error('FATAL: createWindow threw:', (err as Error).stack || (err as Error).message);
-      writeFileSync(
-        join(dirname(__filename), 'crash.log'),
-        `createWindow failed: ${(err as Error).stack || (err as Error).message}`
-      );
+      try {
+        writeFileSync(
+          join(app.getPath('userData'), 'crash.log'),
+          `createWindow failed: ${(err as Error).stack || (err as Error).message}`
+        );
+      } catch {
+        // Диалог ниже остаётся последним каналом диагностики, если userData недоступен.
+      }
       dialog.showErrorBox('Ошибка запуска', `Не удалось создать окно:\n${(err as Error).message}`);
-      throw err;
+      app.exit(1);
+      return;
     }
     updater.start();
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow(rdp);
     });
+  }).catch((err: unknown) => {
+    const message = err instanceof Error ? err.stack || err.message : String(err);
+    console.error('[startup] app initialization failed:', message);
+    try {
+      writeFileSync(join(app.getPath('userData'), 'crash.log'), `app initialization failed: ${message}`);
+    } catch {
+      // Не скрываем исходную ошибку, если userData недоступен.
+    }
+    dialog.showErrorBox('Ошибка запуска Remote Hub', `Приложение не удалось запустить:\n${message}`);
+    app.exit(1);
   });
 
   app.on('window-all-closed', () => {
