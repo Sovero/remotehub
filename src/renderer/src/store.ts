@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { nanoid } from 'nanoid';
-import type { Group, Host, HistoryEntry, RdpOptions, Runbook, Settings, Snippet, TreeNode } from '@shared/types';
+import type { Group, Host, HistoryEntry, RdpEngine, RdpOptions, Runbook, Settings, Snippet, TreeNode } from '@shared/types';
 import { createGroup, createHost } from '@shared/types';
 import type { SessionState, UpdateStatus } from '@shared/ipc-contract';
 import {
@@ -31,6 +31,8 @@ export interface SessionTab {
   state: SessionState;
   /** Системное предупреждение RDP перенесено в UI вкладки, чтобы не было top-level окна. */
   certificatePending?: boolean;
+  /** Движок, на котором создана эта вкладка; настройка не меняет уже живую сессию. */
+  rdpEngine?: RdpEngine;
   adHocHost: Host | null;
   startedAt: number | null;
   /** Транзитная информация VNC-сессии (порт моста и пароль — только в памяти). */
@@ -154,6 +156,7 @@ export const useApp = create<AppState>((set, get) => ({
     confirmOnDelete: true,
     restoreTabs: true,
     rdpAutoAcceptCert: true,
+    rdpEngine: 'rdpjs',
     winBounds: null,
     openTabs: [],
     snippets: [],
@@ -447,6 +450,7 @@ export const useApp = create<AppState>((set, get) => ({
 
   openRdp: async (host) => {
     const sessionId = nanoid(10);
+    const rdpEngine = get().settings.rdpEngine;
     set((s) => ({
       tabs: [
         ...s.tabs,
@@ -456,6 +460,7 @@ export const useApp = create<AppState>((set, get) => ({
           title: host.name,
           protocol: 'rdp',
           kind: 'rdp',
+          rdpEngine,
           state: { phase: 'connecting' },
           adHocHost: null,
           startedAt: null
@@ -474,8 +479,36 @@ export const useApp = create<AppState>((set, get) => ({
       ok: true,
       error: null
     });
-    const res = await window.api.rdpLaunch({ sessionId, host });
-    get().applyRdpOutcome(sessionId, res);
+    if (rdpEngine === 'iron') {
+      // Движок iron: мост и соединение открывает IronRdpView внутри вкладки.
+      get().persistTabs();
+      return;
+    }
+    const res = await window.api.rdpjsLaunch({
+      sessionId,
+      host: host.host,
+      port: host.port ?? 3389,
+      username: host.username,
+      password: '',
+      credentialId: host.credentialId,
+      width: host.rdp.width,
+      height: host.rdp.height
+    });
+    if (res.ok) {
+      set((s) => ({
+        tabs: s.tabs.map((t) =>
+          t.sessionId === sessionId ? { ...t, state: { phase: 'connected' }, startedAt: Date.now() } : t
+        )
+      }));
+    } else {
+      set((s) => ({
+        tabs: s.tabs.map((t) =>
+          t.sessionId === sessionId
+            ? { ...t, state: { phase: 'error', message: res.error ?? 'Не удалось запустить RDP' } }
+            : t
+        )
+      }));
+    }
     get().persistTabs();
   },
 
@@ -640,13 +673,44 @@ export const useApp = create<AppState>((set, get) => ({
       return;
     }
     if (tab.kind === 'rdp') {
+      const rdpEngine = get().settings.rdpEngine;
       set((s) => ({
         tabs: s.tabs.map((t) =>
-          t.sessionId === sessionId ? { ...t, state: { phase: 'connecting' }, certificatePending: false } : t
+          t.sessionId === sessionId
+            ? { ...t, rdpEngine, state: { phase: 'connecting' }, certificatePending: false }
+            : t
         )
       }));
-      const res = await window.api.rdpLaunch({ sessionId, host });
-      get().applyRdpOutcome(sessionId, res);
+      if (rdpEngine === 'iron') {
+        // Движок iron: перезапуск соединения выполняет IronRdpView по событию.
+        window.dispatchEvent(new CustomEvent(`iron-reconnect-${sessionId}`));
+        return;
+      }
+      const res = await window.api.rdpjsLaunch({
+        sessionId,
+        host: host.host,
+        port: host.port ?? 3389,
+        username: host.username,
+        password: '',
+        credentialId: host.credentialId,
+        width: host.rdp.width,
+        height: host.rdp.height
+      });
+      if (res.ok) {
+        set((s) => ({
+          tabs: s.tabs.map((t) =>
+            t.sessionId === sessionId ? { ...t, state: { phase: 'connected' }, startedAt: Date.now() } : t
+          )
+        }));
+      } else {
+        set((s) => ({
+          tabs: s.tabs.map((t) =>
+            t.sessionId === sessionId
+              ? { ...t, state: { phase: 'error', message: res.error ?? 'Не удалось запустить RDP' } }
+              : t
+          )
+        }));
+      }
       return;
     }
     if (tab.kind === 'vnc') {
@@ -776,9 +840,8 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   persistTabs: () => {
-    const { tabs, settings } = get();
+    const { tabs } = get();
     void get().patchSettings({
-      ...settings,
       openTabs: tabs.map((t) => ({
         sessionId: t.sessionId,
         hostId: t.hostId,

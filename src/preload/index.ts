@@ -196,6 +196,10 @@ const api = {
     ipcRenderer.invoke(IPC.monitorCheck, req),
   monitorCheckAll: (): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke(IPC.monitorCheckAll),
+  // ---- iron (IronRDP через локальный RDCleanPath-мост) ----
+  ironStart: (req: import('../shared/ipc-contract').IronStartRequest): Promise<import('../shared/ipc-contract').IronStartResult> =>
+    ipcRenderer.invoke(IPC.ironStart, req),
+  ironStop: (sessionId: string): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.ironStop, sessionId),
   // ---- rdpjs (node-rdpjs) ----
   rdpjsLaunch: (req: import('../shared/ipc-contract').RdpjsLaunchRequest): Promise<import('../shared/ipc-contract').RdpjsLaunchResult> =>
     ipcRenderer.invoke(IPC.rdpjsLaunch, req),

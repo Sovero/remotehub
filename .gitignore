@@ -17,6 +17,7 @@ node_modules/
 dist/
 out/
 release/
+dist-release/
 
 # Python
 __pycache__/

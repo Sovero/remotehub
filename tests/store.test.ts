@@ -99,6 +99,21 @@ describe('settings', () => {
     expect(loaded.data.theme).toBe('dark');
   });
 
+  it('добавляет rdpjs для старого файла без выбора движка', () => {
+    writeFileSync(
+      join(dir, 'settings.json'),
+      JSON.stringify({ schemaVersion: 1, settings: { theme: 'dark', fontSize: 15 } }),
+      'utf8'
+    );
+    const loaded = store.loadSettings();
+    expect(loaded.data.rdpEngine).toBe('rdpjs');
+  });
+
+  it('сохраняет выбранный IronRDP-движок', () => {
+    store.saveSettings({ ...DEFAULT_SETTINGS, rdpEngine: 'iron' });
+    expect(store.loadSettings().data.rdpEngine).toBe('iron');
+  });
+
   it('повреждённый файл настроек откладывается в .bak', () => {
     writeFileSync(join(dir, 'settings.json'), '%%%', 'utf8');
     const loaded = store.loadSettings();

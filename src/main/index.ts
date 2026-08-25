@@ -4,6 +4,7 @@ import { dirname, join } from 'path';
 import { pathToFileURL } from 'url';
 import { registerIpc } from './ipc';
 import { RdpManager } from './rdp/manager';
+import { stopAllIronGateways } from './rdp/iron-sessions';
 import { SessionManager } from './sessions/manager';
 import { SftpManager } from './sftp/manager';
 import { TunnelManager } from './tunnels/manager';
@@ -11,6 +12,7 @@ import { VncManager } from './vnc/manager';
 import { Store } from './store';
 import { createHost } from '../shared/types';
 import { dpapiSealer } from './store/crypto';
+import { sealSecret } from './store/crypto-format';
 import { Updater } from './updater';
 import { RdpjsClientManager } from './rdp/rdpjs-client';
 
@@ -24,6 +26,65 @@ const MIN_HEIGHT = 600;
 const APP_ICON = join(__dirname, '../../build/icon.ico');
 
 const APP_REPOSITORY = 'https://github.com/Sovero/remotehub';
+
+/**
+ * Подготавливает одноразовый профиль для opt-in smoke-теста IronRDP.
+ * Пароль приходит только из окружения и сохраняется в изолированный userData
+ * через тот же sealer, что и обычные учётные данные приложения.
+ */
+function seedIronRdpSmoke(): boolean {
+  if (process.env.RH_SMOKE_RDP_IRON !== '1') return true;
+
+  const host = process.env.RH_RDP_HOST?.trim();
+  const username = process.env.RH_RDP_USERNAME?.trim();
+  const password = process.env.RH_RDP_PASSWORD;
+  const port = Number(process.env.RH_RDP_PORT ?? 3389);
+  if (!host || !username || password === undefined || !Number.isInteger(port) || port < 1 || port > 65535) {
+    console.error('[smoke] iron RDP: RH_RDP_HOST, RH_RDP_USERNAME, RH_RDP_PASSWORD and a valid RH_RDP_PORT are required');
+    return false;
+  }
+
+  const credentialId = 'smoke-rdp-iron-credential';
+  store.saveCredentials([
+    {
+      id: credentialId,
+      name: 'IronRDP smoke credential',
+      username,
+      passwordMode: 'stored',
+      passwordCipher: sealSecret(password, dpapiSealer),
+      keyFile: null,
+      keyPassphraseCipher: null,
+      useAgent: false
+    }
+  ]);
+
+  const smokeHost = createHost({
+    id: 'smoke-rdp-iron-host',
+    name: process.env.RH_RDP_NAME?.trim() || 'IronRDP smoke host',
+    protocol: 'rdp',
+    host,
+    port,
+    username,
+    credentialId,
+    rdp: {
+      domain: process.env.RH_RDP_DOMAIN?.trim() || '',
+      screenMode: 'window',
+      width: Number(process.env.RH_RDP_WIDTH ?? 1280),
+      height: Number(process.env.RH_RDP_HEIGHT ?? 800),
+      multiMonitor: false,
+      promptForCreds: false
+    }
+  });
+  store.saveProfiles([smokeHost]);
+  store.saveSettings({
+    ...store.loadSettings().data,
+    rdpEngine: 'iron',
+    restoreTabs: false,
+    openTabs: [],
+    onboardingDone: true
+  });
+  return true;
+}
 
 function installMenu(updater: Updater): void {
   const sendMenu = (command: string): void => {
@@ -1344,6 +1405,76 @@ function createWindow(rdp: RdpManager): void {
             });
           return;
         }
+        if (process.env.RH_SMOKE_RDP_IRON === '1') {
+          clearTimeout(watchdog);
+          const timeoutMs = Math.max(1000, Number(process.env.RH_RDP_TIMEOUT_MS ?? 90000) || 90000);
+          await mainWindow?.webContents
+            .executeJavaScript(`
+              (async () => {
+                const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+                const deadline = Date.now() + ${timeoutMs};
+                const host = document.querySelector('.tree-host');
+                if (!host) return 'no-host';
+                const store = window.__RH_STORE__;
+                const configuredEngine = store && store.getState ? store.getState().settings?.rdpEngine : null;
+                if (configuredEngine !== 'iron') return 'wrong-engine:' + String(configuredEngine);
+                host.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+                let lastPhase = 'missing';
+                let lastCanvas = 'missing';
+                let lastNonBlack = 0;
+                while (Date.now() < deadline) {
+                  const store = window.__RH_STORE__;
+                  const tabs = store && store.getState ? store.getState().tabs : [];
+                  const tab = tabs.find((t) => t.kind === 'rdp');
+                  lastPhase = tab ? tab.state.phase : 'missing';
+                  if (lastPhase === 'error') {
+                    return 'error:' + ((tab.state && tab.state.message) || 'RDP error');
+                  }
+
+                  const canvas = document.querySelector('.iron-rdp-view canvas');
+                  if (canvas) {
+                    lastCanvas = canvas.width + 'x' + canvas.height;
+                    if (lastPhase === 'connected' && canvas.width > 0 && canvas.height > 0) {
+                      try {
+                        const ctx = canvas.getContext('2d');
+                        if (ctx) {
+                          const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+                          let nonBlack = 0;
+                          // Sample every fourth pixel: enough to prove a real frame without
+                          // blocking the renderer on a full 1280x800 scan every iteration.
+                          for (let i = 0; i < data.length; i += 16) {
+                            if (data[i] > 8 || data[i + 1] > 8 || data[i + 2] > 8) nonBlack++;
+                          }
+                          lastNonBlack = nonBlack;
+                          if (nonBlack > 0) {
+                            return 'ok:phase=connected:canvas=' + lastCanvas + ':nonBlack=' + nonBlack;
+                          }
+                        }
+                      } catch {
+                        // Canvas may be between resizes; retry until the deadline.
+                      }
+                    }
+                  }
+                  await wait(250);
+                }
+                return 'timeout:phase=' + lastPhase + ':canvas=' + lastCanvas + ':nonBlack=' + lastNonBlack;
+              })()
+            `)
+            .then((res) => {
+              if (typeof res === 'string' && res.startsWith('ok:phase=connected:')) {
+                console.log(`[smoke] iron RDP flow OK — ${res.slice(3)}`);
+                app.exit(0);
+              } else {
+                console.error(`[smoke] iron RDP flow failed: ${String(res)}`);
+                app.exit(1);
+              }
+            })
+            .catch((err) => {
+              console.error(`[smoke] iron RDP flow rejected: ${String(err && err.message ? err.message : err)}`);
+              app.exit(1);
+            });
+          return;
+        }
         if (process.env.RH_SMOKE_RDP === '1') {
           await mainWindow?.webContents
             .executeJavaScript(`
@@ -1871,6 +2002,10 @@ if (!gotLock) {
 
   app.whenReady().then(() => {
     store = new Store(app.getPath('userData'), dpapiSealer);
+    if (!seedIronRdpSmoke()) {
+      app.exit(2);
+      return;
+    }
     const broadcast = (channel: string, payload: unknown): void => {
       for (const win of BrowserWindow.getAllWindows()) {
         win.webContents.send(channel, payload);
@@ -1919,6 +2054,7 @@ if (!gotLock) {
     installMenu(updater);
     registerIpc(store, sessions, rdp, vnc, sftp, tunnels, updater, rdpjs);
     app.on('before-quit', () => {
+      void stopAllIronGateways();
       sessions.closeAll();
       rdp.closeAll();
       rdpjs.closeAll();

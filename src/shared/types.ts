@@ -1,5 +1,8 @@
 export type Protocol = 'ssh' | 'telnet' | 'rdp' | 'vnc';
 
+/** Реализация RDP-клиента, выбираемая в настройках приложения. */
+export type RdpEngine = 'rdpjs' | 'iron';
+
 export interface SshOptions {
   keepalive: number; // seconds, 0 = off
   agent: boolean; // use SSH agent for key auth
@@ -132,6 +135,8 @@ export interface Settings {
   restoreTabs: boolean;
   /** Авто-подтверждать предупреждение безопасности RDP (непроверенный сертификат). */
   rdpAutoAcceptCert: boolean;
+  /** Движок RDP: legacy node-rdpjs или IronRDP/WASM. */
+  rdpEngine: RdpEngine;
   winBounds: WindowBounds | null;
   openTabs: OpenTabMeta[];
   snippets: Snippet[];
@@ -175,6 +180,7 @@ export const DEFAULT_SETTINGS: Settings = {
   confirmOnDelete: true,
   restoreTabs: true,
   rdpAutoAcceptCert: true,
+  rdpEngine: 'rdpjs',
   winBounds: null,
   openTabs: [],
   snippets: [],

@@ -24,10 +24,14 @@ import {
   type SessionOpenRequest,
   type SftpOpenRequest,
   type TunnelAddRequest,
-  type VncOpenRequest
+  type VncOpenRequest,
+  type IronStartRequest
 } from '../shared/ipc-contract';
 import type { CredentialSet, Settings, TreeNode, HistoryEntry, Runbook, HostStatus } from '../shared/types';
 import { parseChangelog } from '../shared/changelog';
+import { resolveAuth } from './sessions/config';
+import { startIronGateway, stopIronGateway } from './rdp/iron-sessions';
+import { readFileSync } from 'fs';
 import { buildExport, parseProfileExport } from '../shared/tree';
 import { checkPort, pingHost } from './availability';
 import {
@@ -123,7 +127,8 @@ export function registerIpc(
 
   ipcMain.handle(IPC.settingsSet, (_e, patch: Partial<Settings>) => {
     const current = store.loadSettings().data;
-    const next: Settings = { ...current, ...patch };
+    const rdpEngine = patch.rdpEngine === 'iron' || patch.rdpEngine === 'rdpjs' ? patch.rdpEngine : current.rdpEngine;
+    const next: Settings = { ...current, ...patch, rdpEngine };
     store.saveSettings(next);
     // Настройка RDP применяется к живым менеджеру сразу, без перезапуска.
     if ('rdpAutoAcceptCert' in patch) {
@@ -227,9 +232,11 @@ export function registerIpc(
     sessions.resize(payload.sessionId, payload.cols, payload.rows);
   });
 
-  ipcMain.handle(IPC.sessionClose, (_e, sessionId: string) => {
+  ipcMain.handle(IPC.sessionClose, async (_e, sessionId: string) => {
     sessions.close(sessionId);
     rdp.stop(sessionId);
+    rdpjs.disconnect(sessionId);
+    await stopIronGateway(sessionId);
     vnc.close(sessionId);
     sftp.close(sessionId);
     tunnels.stopAll(sessionId);
@@ -282,11 +289,22 @@ export function registerIpc(
 
   // ---- RDPJS (node-rdpjs) ----
   ipcMain.handle(IPC.rdpjsLaunch, async (_e, req: RdpjsLaunchRequest) => {
+    // Разрешаем credentials: если передан credentialId, берём пароль из хранилища.
+    let username = req.username;
+    let password = req.password;
+    if (req.credentialId && !password) {
+      const cred = store.loadCredentials().data.find((c) => c.id === req.credentialId);
+      if (cred) {
+        username = cred.username || username;
+        const auth = resolveAuth(cred, undefined, store.sealer(), (p) => readFileSync(p, 'utf8'));
+        password = auth.password ?? '';
+      }
+    }
     const result = await rdpjs.connect(req.sessionId, {
       host: req.host,
       port: req.port,
-      username: req.username,
-      password: req.password,
+      username,
+      password,
       domain: req.domain,
       width: req.width,
       height: req.height
@@ -317,6 +335,44 @@ export function registerIpc(
 
   ipcMain.on(IPC.rdpjsKeyScancode, (_e, event: RdpjsKeyEvent) => {
     rdpjs.sendKeyScancode(event.sessionId, event.code, event.isPressed);
+  });
+
+  // ---- iron (локальный RDCleanPath-мост для @devolutions/iron-remote-desktop) ----
+  ipcMain.handle(IPC.ironStart, async (_e, req: IronStartRequest) => {
+    // Секрет разрешается здесь: пароль хранилища уходит только в ответ этой сессии.
+    let username = '';
+    let password = '';
+    let domain: string | undefined = req.domain;
+    if (req.credentialId) {
+      const cred = store.loadCredentials().data.find((c) => c.id === req.credentialId);
+      if (cred) {
+        username = cred.username || '';
+        const auth = resolveAuth(cred, undefined, store.sealer(), (p) => readFileSync(p, 'utf8'));
+        password = auth.password ?? '';
+      }
+    }
+    try {
+      const port = await startIronGateway({
+        sessionId: req.sessionId,
+        host: req.host,
+        port: req.port ?? 3389
+      });
+      return {
+        ok: true,
+        wsUrl: `ws://127.0.0.1:${port}`,
+        destination: `${req.host}:${req.port ?? 3389}`,
+        username,
+        password,
+        domain
+      };
+    } catch (e) {
+      return { ok: false, error: (e as Error)?.message ?? 'Не удалось поднять RDCleanPath-мост' };
+    }
+  });
+
+  ipcMain.handle(IPC.ironStop, async (_e, sessionId: string) => {
+    await stopIronGateway(sessionId);
+    return { ok: true };
   });
 
   // ---- VNC ----

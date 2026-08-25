@@ -16,6 +16,7 @@ function getKoffi(): typeof KoffiDefault {
 export function createWin32Engine(): RdpEmbedEngine {
   const koffi = getKoffi();
   const user32 = koffi.load('user32.dll');
+  const kernel32 = koffi.load('kernel32.dll');
 
   const BOOL = koffi.alias('BOOL', 'int32');
   const DWORD = koffi.alias('DWORD', 'uint32_t');
@@ -53,6 +54,11 @@ export function createWin32Engine(): RdpEmbedEngine {
     'BOOL __stdcall SetWindowPos(HWND hwnd, HWND hwndInsertAfter, int x, int y, int cx, int cy, uint32_t flags)'
   );
   const SetForegroundWindow = user32.func('BOOL __stdcall SetForegroundWindow(HWND hwnd)');
+  const SetFocus = user32.func('HWND __stdcall SetFocus(HWND hwnd)');
+  const AttachThreadInput = user32.func(
+    'BOOL __stdcall AttachThreadInput(DWORD idAttach, DWORD idAttachTo, BOOL fAttach)'
+  );
+  const GetCurrentThreadId = kernel32.func('DWORD __stdcall GetCurrentThreadId()');
 
   const GWL_STYLE = -16;
   const GWL_EXSTYLE = -20;
@@ -346,6 +352,25 @@ export function createWin32Engine(): RdpEmbedEngine {
 
     setForeground(hwnd: bigint): void {
       SetForegroundWindow(hwnd);
+    },
+
+    focus(hwnd: bigint): void {
+      // Chromium перерисовывает контент поверх нативных дочерних окон —
+      // перед фокусом каждый раз поднимаем окно в Z-порядке.
+      SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+      // После cross-process SetParent клавиатура сама к дочернему окну не
+      // приходит: присоединяем потоки ввода на время SetFocus, иначе фокус
+      // из чужого процесса молча не сработает.
+      const pidRef: (number | null)[] = [null];
+      const childTid = GetWindowThreadProcessId(hwnd, pidRef);
+      const myTid = GetCurrentThreadId();
+      const attach = childTid !== 0 && childTid !== myTid;
+      if (attach) AttachThreadInput(myTid, childTid, 1);
+      try {
+        SetFocus(hwnd);
+      } finally {
+        if (attach) AttachThreadInput(myTid, childTid, 0);
+      }
     },
 
     hideAuxiliaryWindows(pid: number): void {

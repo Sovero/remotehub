@@ -70,7 +70,10 @@ class FakeEngine implements RdpEmbedEngine {
   setForeground(hwnd: bigint): void {
     this.calls.push(`foreground:${hwnd}`);
   }
-  hideAuxiliaryWindows(): void {
+  focus(hwnd: bigint): void {
+    this.calls.push(`focus:${hwnd}`);
+  }
+  hideAuxiliaryWindows(_pid: number): void {
     // no-op
   }
   close(hwnd: bigint): void {
@@ -213,9 +216,11 @@ describe('RdpManager: COM-хост встраивание', () => {
     manager.activate('s1');
     expect(engine.calls).toContain('show:1');
     expect(engine.calls).toContain('hide:2');
+    expect(engine.calls).toContain('focus:1');
     manager.activate('s2');
     expect(engine.calls).toContain('hide:1');
     expect(engine.calls).toContain('show:2');
+    expect(engine.calls).toContain('focus:2');
   });
 
   it('overlay прячет все встроенные окна и возвращает активное', async () => {

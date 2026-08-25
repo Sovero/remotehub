@@ -323,6 +323,9 @@ export class RdpManager {
         this.applyRect(active);
         this.engine.show(active.hwnd);
         this.engine.setForeground(active.hwnd);
+        // Клавиатура должна попадать в mstsc сразу после переключения вкладки:
+        // без явного SetFocus её перехватывает Chromium.
+        this.engine.focus(active.hwnd);
       } else {
         this.engine.hide(active.hwnd);
       }

@@ -1,0 +1,94 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v0.1.10)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Determine version from tag
+        id: tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Set version in package.json
+        shell: bash
+        run: |
+          VERSION="${{ steps.tag.outputs.version }}"
+          node -e "
+            const fs = require('fs');
+            const p = 'package.json';
+            const pkg = JSON.parse(fs.readFileSync(p, 'utf8'));
+            pkg.version = '$VERSION';
+            fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + '\n');
+          "
+
+      - name: Build installer
+        run: npx electron-builder --win --x64 --publish never
+
+      - name: Generate latest.yml
+        shell: bash
+        run: |
+          VERSION="${{ steps.tag.outputs.version }}"
+          EXE="release/Remote Hub Setup ${VERSION}.exe"
+          SHA=$(powershell -NoProfile -Command "(Get-FileHash -Algorithm SHA512 \"$EXE\").Hash.ToLower()")
+          SIZE=$(wc -c < "$EXE" | tr -d ' ')
+          DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          node -e "
+            const fs = require('fs');
+            const v = '$VERSION';
+            const sha = '$SHA';
+            const size = parseInt('$SIZE', 10);
+            const date = '$DATE';
+            const name = 'Remote Hub Setup ' + v + '.exe';
+            const yml =
+              'version: ' + v + '\n' +
+              'files:\n' +
+              '  - url: ' + name + '\n' +
+              '    sha512: ' + sha + '\n' +
+              '    size: ' + size + '\n' +
+              'path: ' + name + '\n' +
+              'sha512: ' + sha + '\n' +
+              'releaseDate: \\'' + date + '\\'\n';
+            fs.writeFileSync('release/latest.yml', yml);
+            console.log(yml);
+          "
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
+          generate_release_notes: true
+          files: |
+            release/Remote Hub Setup ${{ steps.tag.outputs.version }}.exe
+            release/latest.yml
