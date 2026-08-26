@@ -305,6 +305,9 @@ export default function Sidebar(): React.JSX.Element {
         <button className="btn btn--sm" title="История подключений" onClick={() => openDialog({ type: 'history' })}>
           <Icon name="history" size={13} /> История
         </button>
+        <button className="btn btn--sm" title="Журнал событий — что происходило с приложением и подключениями" onClick={() => openDialog({ type: 'logs' })}>
+          <Icon name="log" size={13} /> Лог
+        </button>
         <button className="btn btn--sm" title="Runbook-скрипты" onClick={() => openDialog({ type: 'runbooks' })}>
           <Icon name="script" size={13} /> Скрипты
         </button>

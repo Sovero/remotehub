@@ -13,6 +13,7 @@ import SnippetsDialog from './dialogs/SnippetsDialog';
 import TunnelsDialog from './dialogs/TunnelsDialog';
 import WhatsNewDialog from './dialogs/WhatsNewDialog';
 import SettingsDialog from './dialogs/SettingsDialog';
+import LogDialog from './dialogs/LogDialog';
 import HistoryPanel from './HistoryPanel';
 import RunbooksDialog from './dialogs/RunbooksDialog';
 import Modal from './dialogs/Modal';
@@ -66,6 +67,8 @@ export default function DialogRoot(): React.JSX.Element | null {
           <HistoryPanel />
         </Modal>
       );
+    case 'logs':
+      return <LogDialog />;
     case 'runbooks':
       return <RunbooksDialog />;
     default:

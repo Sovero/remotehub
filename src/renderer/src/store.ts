@@ -22,6 +22,22 @@ interface Toast {
   message: string;
 }
 
+/**
+ * Запись в журнал событий из renderer (переходы состояний сессий, ошибки UI).
+ * Потокобезопасна: уходит в main по IPC, оттуда — во все окна.
+ */
+export function appLog(
+  level: 'info' | 'warn' | 'error',
+  source: 'app' | 'rdp' | 'iron' | 'vnc' | 'ssh' | 'update' | 'sftp' | 'system',
+  message: string
+): void {
+  try {
+    window.api.addLog({ level, source, message });
+  } catch {
+    // preload может быть недоступен в тестах — не роняем приложение.
+  }
+}
+
 export interface SessionTab {
   sessionId: string;
   hostId: string | null;
@@ -56,6 +72,7 @@ export type DialogState =
   | { type: 'help'; sectionId?: string }
   | { type: 'tunnels'; sessionId: string; title: string; host: Host }
   | { type: 'history' }
+  | { type: 'logs' }
   | { type: 'runbooks' }
   | { type: 'runbook-edit'; runbook?: Runbook }
   | { type: 'settings' }
@@ -795,6 +812,7 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   applySessionState: (sessionId, state) => {
+    const prev = get().tabs.find((t) => t.sessionId === sessionId)?.state.phase;
     set((s) => ({
       tabs: s.tabs.map((t) => {
         if (t.sessionId !== sessionId) return t;
@@ -805,6 +823,21 @@ export const useApp = create<AppState>((set, get) => ({
         };
       })
     }));
+    // Журнал: каждый переход состояния сессии (подключение/ошибка/разрыв).
+    if (prev !== state.phase) {
+      const tab = get().tabs.find((t) => t.sessionId === sessionId);
+      const detail =
+        state.phase === 'error' && 'message' in state
+          ? (state as { message?: string }).message
+          : state.phase === 'closed' && 'reason' in state
+            ? (state as { reason?: string }).reason
+            : undefined;
+      appLog(
+        state.phase === 'error' ? 'error' : state.phase === 'closed' ? 'warn' : 'info',
+        (tab?.protocol as 'rdp' | 'vnc' | 'ssh' | 'app') ?? 'app',
+        `Сессия ${sessionId.slice(0, 8)} (${tab?.title ?? 'без имени'}): ${state.phase}${detail ? ` — ${detail}` : ''}`
+      );
+    }
     if (state.phase === 'auth-required') {
       const tab = get().tabs.find((t) => t.sessionId === sessionId);
       if (tab) {

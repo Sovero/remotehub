@@ -25,10 +25,12 @@ import {
   type SftpOpenRequest,
   type TunnelAddRequest,
   type VncOpenRequest,
-  type IronStartRequest
+  type IronStartRequest,
+  type LogAddRequest
 } from '../shared/ipc-contract';
 import type { CredentialSet, Settings, TreeNode, HistoryEntry, Runbook, HostStatus } from '../shared/types';
 import { parseChangelog } from '../shared/changelog';
+import { addLog, clearLogs, getLogs, onLog } from './log';
 import { resolveAuth } from './sessions/config';
 import { startIronGateway, stopIronGateway } from './rdp/iron-sessions';
 import { readFileSync } from 'fs';
@@ -66,6 +68,21 @@ export function registerIpc(
       win.webContents.send(channel, payload);
     }
   };
+
+  // ---- журнал событий: новые записи main → все окна ----
+  onLog((entry) => broadcast(IPC.logEntry, entry));
+
+  ipcMain.handle(IPC.logsGet, () => ({ entries: getLogs() }));
+
+  ipcMain.handle(IPC.logsClear, () => {
+    clearLogs();
+    return { ok: true };
+  });
+
+  // Записи из renderer (переходы состояний сессий, ошибки UI) попадают в тот же журнал.
+  ipcMain.on(IPC.logAdd, (_e, req: LogAddRequest) => {
+    addLog(req.level, req.source, req.message);
+  });
 
   // ---- profiles ----
   ipcMain.handle(IPC.profilesGet, () => {
@@ -221,6 +238,8 @@ export function registerIpc(
       cols: req.cols ?? 80,
       rows: req.rows ?? 24
     });
+    const source = req.host.protocol === 'ssh' || req.host.protocol === 'telnet' ? req.host.protocol : 'system';
+    addLog('info', source, `Открытие сессии ${req.host.host}:${req.host.port ?? (req.host.protocol === 'ssh' ? 22 : 23)}`);
     return { sessionId };
   });
 
@@ -240,6 +259,7 @@ export function registerIpc(
     vnc.close(sessionId);
     sftp.close(sessionId);
     tunnels.stopAll(sessionId);
+    addLog('info', 'system', `Сессия ${sessionId} закрыта`);
     return { ok: true };
   });
 
@@ -357,6 +377,7 @@ export function registerIpc(
         host: req.host,
         port: req.port ?? 3389
       });
+      addLog('info', 'iron', `IronRDP: мост для ${req.host}:${req.port ?? 3389} поднят на 127.0.0.1:${port}`);
       return {
         ok: true,
         wsUrl: `ws://127.0.0.1:${port}`,
@@ -366,12 +387,14 @@ export function registerIpc(
         domain
       };
     } catch (e) {
+      addLog('error', 'iron', `IronRDP: не удалось поднять мост — ${(e as Error)?.message ?? 'неизвестная ошибка'}`);
       return { ok: false, error: (e as Error)?.message ?? 'Не удалось поднять RDCleanPath-мост' };
     }
   });
 
   ipcMain.handle(IPC.ironStop, async (_e, sessionId: string) => {
     await stopIronGateway(sessionId);
+    addLog('info', 'iron', `IronRDP: мост сессии ${sessionId} остановлен`);
     return { ok: true };
   });
 
@@ -380,7 +403,15 @@ export function registerIpc(
     const credential = req.host.credentialId
       ? store.loadCredentials().data.find((c) => c.id === req.host.credentialId) ?? null
       : null;
-    return vnc.open(req.host, credential, req.sessionId);
+    const res = await vnc.open(req.host, credential, req.sessionId);
+    addLog(
+      res.ok ? 'info' : 'error',
+      'vnc',
+      res.ok
+        ? `VNC: подключение к ${req.host.host}:${req.host.port ?? 5900} (порт моста ${res.port ?? '?'})`
+        : `VNC: ошибка подключения к ${req.host.host}:${req.host.port ?? 5900} — ${res.error ?? 'неизвестно'}`
+    );
+    return res;
   });
 
   ipcMain.handle(IPC.vncClose, (_e, sessionId: string) => {

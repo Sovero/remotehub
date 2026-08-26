@@ -220,6 +220,17 @@ const api = {
     ipcRenderer.on(IPC.rdpjsBitmap, listener);
     return () => ipcRenderer.removeListener(IPC.rdpjsBitmap, listener);
   },
+  // ---- журнал событий ----
+  getLogs: (): Promise<{ entries: import('../shared/ipc-contract').LogEntry[] }> =>
+    ipcRenderer.invoke(IPC.logsGet),
+  clearLogs: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.logsClear),
+  addLog: (req: import('../shared/ipc-contract').LogAddRequest): void =>
+    ipcRenderer.send(IPC.logAdd, req),
+  onLogEntry: (cb: (entry: import('../shared/ipc-contract').LogEntry) => void): (() => void) => {
+    const listener = (_e: unknown, entry: import('../shared/ipc-contract').LogEntry): void => cb(entry);
+    ipcRenderer.on(IPC.logEntry, listener);
+    return () => ipcRenderer.removeListener(IPC.logEntry, listener);
+  },
   onRdpjsState: (cb: (payload: import('../shared/ipc-contract').RdpjsStatePayload) => void): (() => void) => {
     const listener = (_e: unknown, payload: import('../shared/ipc-contract').RdpjsStatePayload): void => cb(payload);
     ipcRenderer.on(IPC.rdpjsState, listener);

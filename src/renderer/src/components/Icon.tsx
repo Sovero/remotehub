@@ -40,7 +40,8 @@ export type IconName =
   | 'tree'
   | 'tab'
   | 'history'
-  | 'script';
+  | 'script'
+  | 'log';
 
 const PATHS: Record<IconName, React.JSX.Element> = {
   plus: <path d="M8 3.2v9.6M3.2 8h9.6" />,
@@ -181,6 +182,14 @@ const PATHS: Record<IconName, React.JSX.Element> = {
       <rect x="2" y="3" width="12" height="10" rx="1.2" />
       <path d="M5 7l2.2 1.6L5 10.2" />
       <path d="M8.4 10.2h3.2" />
+    </>
+  ),
+  // Журнал: страница со строками-записями.
+  log: (
+    <>
+      <path d="M3.2 2.4h6.3l3.1 3.1v8.1a1 1 0 0 1-1 1H3.2a1 1 0 0 1-1-1V3.4a1 1 0 0 1 1-1z" />
+      <path d="M9.5 2.4v3.1h3.1" />
+      <path d="M5.4 8h5.2M5.4 10.2h5.2M5.4 12.4h3" />
     </>
   )
 };

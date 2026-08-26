@@ -2,6 +2,7 @@
  * Реестр IronGateway по sessionId: один мост = одна RDP-сессия.
  * Разделён с ipc.ts, чтобы before-quit мог остановить всё разом.
  */
+import { addLog } from '../log';
 import { IronGateway, type IronGatewayOptions } from './iron-gateway';
 
 const gateways = new Map<string, IronGateway>();
@@ -13,7 +14,18 @@ export async function startIronGateway(opts: IronGatewayOptions): Promise<number
     gateways.delete(opts.sessionId);
     await prev.stop().catch(() => undefined);
   }
-  const gw = new IronGateway(opts);
+  const gw = new IronGateway({
+    ...opts,
+    onState: (sessionId, state) => {
+      // Состояния моста попадают в журнал: connecting/connected/error/closed + причина.
+      addLog(
+        state.phase === 'error' ? 'error' : state.phase === 'closed' ? 'warn' : 'info',
+        'iron',
+        `IronRDP: сессия ${sessionId} — ${state.phase}${state.message ? ` (${state.message})` : ''}`
+      );
+      opts.onState?.(sessionId, state);
+    }
+  });
   const port = await gw.start();
   gateways.set(opts.sessionId, gw);
   return port;

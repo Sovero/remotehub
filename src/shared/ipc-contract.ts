@@ -89,7 +89,15 @@ export const IPC = {
   runbookStop: 'runbook:stop',
   runbookStepResult: 'runbook:step-result',
   monitorCheck: 'monitor:check',
-  monitorCheckAll: 'monitor:check-all'
+  monitorCheckAll: 'monitor:check-all',
+  /** журнал событий: получить текущие записи */
+  logsGet: 'logs:get',
+  /** журнал событий: очистить */
+  logsClear: 'logs:clear',
+  /** журнал событий: запись из renderer в main */
+  logAdd: 'log:add',
+  /** журнал событий: новая запись (main → окна) */
+  logEntry: 'log:entry'
 } as const;
 
 export interface ProfilesGetResult {
@@ -410,6 +418,25 @@ export interface MonitorCheckResult {
   ok: boolean;
   ms?: number;
   error?: string;
+}
+
+// ---- журнал событий ----
+
+export type LogLevel = 'info' | 'warn' | 'error';
+export type LogSource = 'app' | 'rdp' | 'iron' | 'vnc' | 'ssh' | 'telnet' | 'update' | 'sftp' | 'system';
+
+export interface LogEntry {
+  id: number;
+  ts: number;
+  level: LogLevel;
+  source: LogSource;
+  message: string;
+}
+
+export interface LogAddRequest {
+  level: LogLevel;
+  source: LogSource;
+  message: string;
 }
 
 // ---- rdpjs (node-rdpjs) ----
