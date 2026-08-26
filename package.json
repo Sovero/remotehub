@@ -1,6 +1,6 @@
 {
   "name": "remote-hub",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "description": "Remote Hub — Termius-подобное приложение для Windows: SSH, Telnet, RDP, VNC, SFTP",
   "repository": "https://github.com/Sovero/remotehub.git",
   "main": "./out/main/index.js",
@@ -55,7 +55,7 @@
     "win": {
       "target": "nsis",
       "icon": "build/icon.ico",
-      "verifyUpdateCodeSignature": true,
+      "verifyUpdateCodeSignature": false,
       "signtoolOptions": {
         "signingHashAlgorithms": [
           "sha256"
