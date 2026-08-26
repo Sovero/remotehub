@@ -894,7 +894,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     body: (
       <>
         <Lead>Настройки открываются кнопкой ⚙ внизу левой панели или через меню «Помощь → Настройки».</Lead>
-        <Shot src={settingsShot} label="Панель настроек" />
+        <Shot src={settingsShot} label="Окно настроек" />
         <Table
           head={['Настройка', 'Описание']}
           rows={[

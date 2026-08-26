@@ -12,6 +12,7 @@ import PasswordDialog from './dialogs/PasswordDialog';
 import SnippetsDialog from './dialogs/SnippetsDialog';
 import TunnelsDialog from './dialogs/TunnelsDialog';
 import WhatsNewDialog from './dialogs/WhatsNewDialog';
+import SettingsDialog from './dialogs/SettingsDialog';
 import HistoryPanel from './HistoryPanel';
 import RunbooksDialog from './dialogs/RunbooksDialog';
 import Modal from './dialogs/Modal';
@@ -53,6 +54,8 @@ export default function DialogRoot(): React.JSX.Element | null {
       return <WhatsNewDialog onClose={closeDialog} />;
     case 'help':
       return <HelpDialog sectionId={dialog.sectionId} onClose={closeDialog} />;
+    case 'settings':
+      return <SettingsDialog onClose={closeDialog} />;
     case 'password':
       return <PasswordDialog sessionId={dialog.sessionId} title={dialog.title} detail={dialog.detail} />;
     case 'tunnels':

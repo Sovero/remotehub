@@ -169,23 +169,6 @@ body {
   padding: 8px;
 }
 
-.sidebar-settings-sheet {
-  border-top: 1px solid var(--border);
-  background: var(--bg);
-  max-height: 58%;
-  overflow-y: auto;
-  flex-shrink: 0;
-  padding: 10px 12px 12px;
-}
-
-.sidebar-settings-sheet__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-  font-weight: 600;
-}
-
 .settings-form .form-row {
   margin-bottom: 14px;
 }
@@ -198,12 +181,6 @@ body {
   line-height: 1.35;
   color: var(--text-muted);
   cursor: pointer;
-}
-
-.sidebar-footer .btn--active {
-  background: var(--accent);
-  color: var(--accent-fg);
-  border-color: var(--accent);
 }
 
 .sidebar-empty {
@@ -915,11 +892,28 @@ textarea.input {
 }
 
 .sidebar-footer {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 6px;
   padding: 8px;
   border-top: 1px solid var(--border);
-  flex-wrap: wrap;
+}
+
+/* Подвал левой панели: кнопки одинаковой ширины, по две в ряд. */
+.sidebar-footer .btn {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 6px 10px;
+}
+
+.sidebar-footer .btn:not(.btn--primary) svg {
+  color: var(--text-muted);
+  opacity: 0.9;
+}
+
+.sidebar-footer .btn:hover svg {
+  color: inherit;
+  opacity: 1;
 }
 
 /* ---------- context menu ---------- */

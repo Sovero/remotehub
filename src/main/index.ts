@@ -490,8 +490,8 @@ function createWindow(rdp: RdpManager): void {
               js: `(async () => { ${waitProbe} const deadline = Date.now() + 6000; while (Date.now() < deadline) { const t = document.querySelector('.tour-overlay'); if (!t) return 'ok'; const skip = t.querySelector('.btn--ghost'); if (skip) skip.click(); await wait(100); } return document.querySelector('.tour-overlay') ? 'tour-open' : 'ok'; })()`
             },            {
               name: 'settings',
-              js: `(async () => { ${waitProbe} const btn = document.querySelector('.sidebar-footer [title="Настройки"]'); if (!btn) return 'no-btn'; btn.click(); const deadline = Date.now() + 6000; while (Date.now() < deadline) { if (document.querySelector('.sidebar-settings-sheet')) return 'ok'; await wait(100); } return 'no-panel'; })()`,
-              close: `(() => { const btn = document.querySelector('.sidebar-footer [title="Настройки"]'); if (btn) btn.click(); return 'ok'; })()`
+              js: `(async () => { ${waitProbe} const btn = document.querySelector('.sidebar-footer [title="Настройки"]'); if (!btn) return 'no-btn'; btn.click(); const deadline = Date.now() + 6000; while (Date.now() < deadline) { const m = document.querySelector('.modal'); if (m && (m.textContent || '').includes('Акцентный цвет')) return 'ok'; await wait(100); } return 'no-modal'; })()`,
+              close: closeModal
             },
             {
               name: 'host-dialog',
@@ -559,11 +559,11 @@ function createWindow(rdp: RdpManager): void {
                   btn.click();
                   const deadline = Date.now() + 6000;
                   while (Date.now() < deadline) {
-                    const panel = document.querySelector('.sidebar-settings-sheet');
-                    if (panel && (panel.textContent || '').includes('Акцентный цвет')) return 'ok';
+                    const m = document.querySelector('.modal');
+                    if (m && (m.textContent || '').includes('Акцентный цвет')) return 'ok';
                     await wait(100);
                   }
-                  return 'no-settings-panel';
+                  return 'no-settings-modal';
                 })()
               `)
               .then((r) => console.log('[smoke] screenshot: open settings panel →', String(r)));
@@ -872,27 +872,6 @@ function createWindow(rdp: RdpManager): void {
                 group.dispatchEvent(dragEvt('dragleave'));
                 await wait(150);
                 if (group.querySelector('.tree-folder--drag')) return 'drag-stuck';
-                // Спиннер на кнопке массовой проверки: idle → refresh без вращения,
-                // во время проверки → иконка с классом .icon-spin, после остановки → снова refresh.
-                const bulkBtn = document.querySelector('.sidebar-header .btn');
-                if (!bulkBtn) return 'no-bulk-btn';
-                if (bulkBtn.querySelector('svg.icon-spin')) return 'bad-idle-spin';
-                bulkBtn.click();
-                let sawSpin = false;
-                const spinDeadline = Date.now() + 4000;
-                while (Date.now() < spinDeadline) {
-                  if (bulkBtn.querySelector('svg.icon-spin')) { sawSpin = true; break; }
-                  await wait(50);
-                }
-                if (!sawSpin) return 'no-spinner-during-check';
-                bulkBtn.click(); // остановить проверку
-                let backToRefresh = false;
-                const stopDeadline = Date.now() + 2000;
-                while (Date.now() < stopDeadline) {
-                  if (!bulkBtn.querySelector('svg.icon-spin')) { backToRefresh = true; break; }
-                  await wait(50);
-                }
-                if (!backToRefresh) return 'no-back-to-refresh';
                 // Контекстное меню хоста: у пунктов должны быть иконки.
                 const host = document.querySelector('.tree-host');
                 if (!host) return 'no-host';
@@ -1737,11 +1716,11 @@ function createWindow(rdp: RdpManager): void {
                 if (!btn) return 'no-settings-btn';
                 btn.click();
                 const panel = await until(() => {
-                  const p = document.querySelector('.sidebar-settings-sheet');
+                  const p = document.querySelector('.modal');
                   return p && (p.textContent || '').includes('Акцентный цвет') ? p : null;
                 });
                 if (!panel) return 'no-settings-panel';
-                if (!document.querySelector('.sidebar .sidebar-settings-sheet')) return 'panel-not-in-sidebar';
+                if (!document.querySelector('.modal-overlay')) return 'no-modal-overlay';
                 // 2. Светлая тема.
                 const lightBtn = [...panel.querySelectorAll('.seg-btn')].find((b) => b.textContent === 'Светлая');
                 if (!lightBtn) return 'no-light-btn';
@@ -1765,18 +1744,18 @@ function createWindow(rdp: RdpManager): void {
                   body: css('body'),
                   app: css('.app'),
                   sidebar: css('.sidebar'),
-                  settingsPanel: css('.sidebar-body--settings'),
+                  settingsModal: css('.modal'),
                   tabbar: css('.tabbar'),
                   main: css('main'),
                   modal: css('.modal')
                 });
                 const ok = accent.toLowerCase() === '#57ab5a' && bodyBg !== 'rgb(23, 24, 28)';
-                // 4. Возврат к дереву: крестик в шапке панели (или повторный клик по ⚙).
-                const closeBtn = [...panel.querySelectorAll('.sidebar-settings-sheet__head button')].find((b) => (b.textContent || '').includes('✕'));
+                // 4. Возврат к дереву: крестик в шапке модального окна.
+                const closeBtn = document.querySelector('.modal-close');
                 if (!closeBtn) return 'no-close-btn';
                 closeBtn.click();
                 await wait(150);
-                if (!document.querySelector('.sidebar-settings-sheet') && document.querySelector('.tree-host, .sidebar-empty')) {
+                if (!document.querySelector('.modal') && document.querySelector('.tree-host, .sidebar-empty')) {
                   return 'ok' + ' probe:' + probe;
                 }
                 return 'back-failed' + ' probe:' + probe;

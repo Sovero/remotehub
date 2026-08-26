@@ -180,7 +180,7 @@ export const DEFAULT_SETTINGS: Settings = {
   confirmOnDelete: true,
   restoreTabs: true,
   rdpAutoAcceptCert: true,
-  rdpEngine: 'rdpjs',
+  rdpEngine: 'iron',
   winBounds: null,
   openTabs: [],
   snippets: [],

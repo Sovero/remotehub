@@ -134,8 +134,8 @@ export default function SettingsForm(): React.JSX.Element {
           value={settings.rdpEngine}
           onChange={(e) => applyRdpEngine(e.target.value as RdpEngine)}
         >
+          <option value="iron">IronRDP (WASM, canvas) — рекомендуется</option>
           <option value="rdpjs">Legacy canvas (node-rdpjs)</option>
-          <option value="iron">IronRDP (WASM, canvas)</option>
         </select>
         <div className="form-hint">
           Выбор применяется к новым подключениям. Для уже открытой вкладки используйте переподключение.

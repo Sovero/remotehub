@@ -58,6 +58,7 @@ export type DialogState =
   | { type: 'history' }
   | { type: 'runbooks' }
   | { type: 'runbook-edit'; runbook?: Runbook }
+  | { type: 'settings' }
   | null;
 
 interface AppState {
@@ -93,9 +94,6 @@ interface AppState {
   openOnboarding: () => void;
   closeOnboarding: () => void;
   finishOnboarding: () => Promise<void>;
-  /** Текущий вид левой панели: дерево профилей или встроенные настройки. */
-  sidebarView: 'tree' | 'settings';
-  setSidebarView: (v: 'tree' | 'settings') => void;
   upsertHost: (host: Host, parentId: string | null) => Promise<void>;
   upsertGroup: (group: Group, parentId: string | null) => Promise<void>;
   deleteNode: (id: string) => Promise<void>;
@@ -156,7 +154,7 @@ export const useApp = create<AppState>((set, get) => ({
     confirmOnDelete: true,
     restoreTabs: true,
     rdpAutoAcceptCert: true,
-    rdpEngine: 'rdpjs',
+    rdpEngine: 'iron',
     winBounds: null,
     openTabs: [],
     snippets: [],
@@ -319,8 +317,6 @@ export const useApp = create<AppState>((set, get) => ({
     await get().patchSettings({ onboardingDone: true });
     set({ onboardingOpen: false });
   },
-  sidebarView: 'tree',
-  setSidebarView: (sidebarView) => set({ sidebarView }),
 
   upsertHost: async (host, parentId) => {
     const { tree } = get();

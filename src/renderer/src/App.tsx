@@ -104,7 +104,7 @@ export default function App(): React.JSX.Element {
       else if (command === 'help') {
         s.closeOnboarding();
         s.openDialog({ type: 'help' });
-      } else if (command === 'settings') s.setSidebarView('settings');
+      } else if (command === 'settings') s.openDialog({ type: 'settings' });
       else if (command === 'onboarding') {
         s.closeDialog();
         s.openOnboarding();

@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CheckResult } from '@shared/ipc-contract';
 import { defaultPort, type Host, type TreeNode } from '@shared/types';
-import { collectTags, countHosts, filterTree, findParent, flattenHosts, matchesHostQuery } from '@shared/tree';
+import { collectTags, countHosts, filterTree, findParent, matchesHostQuery } from '@shared/tree';
 import { useApp } from '../store';
 import ContextMenu, { type MenuItem } from './ContextMenu';
 import Icon from './Icon';
-import SettingsForm from './SettingsForm';
 import TreeView, { type HostStatusMap, type MenuRequest } from './TreeView';
 
 export default function Sidebar(): React.JSX.Element {
@@ -23,8 +22,6 @@ export default function Sidebar(): React.JSX.Element {
   const [tag, setTag] = useState<string | null>(null);
   const [menu, setMenu] = useState<MenuRequest | null>(null);
   const [rootDrop, setRootDrop] = useState(false);
-  const view = useApp((s) => s.sidebarView);
-  const setView = useApp((s) => s.setSidebarView);
 
   interface AvailState {
     seq: number;
@@ -42,13 +39,10 @@ export default function Sidebar(): React.JSX.Element {
   const activeCheck = useRef<{ port: string; ping: string } | null>(null);
 
   const [hostStatus, setHostStatus] = useState<HostStatusMap>({});
-  const bulkSeq = useRef(0);
-  const bulkReqs = useRef<Set<string>>(new Set());
-  const bulkChecking = Object.values(hostStatus).some((s) => s.status === 'checking');
 
   // Load persistent host statuses from settings for monitoring
   const hostStatuses = useApp((s) => s.settings.hostStatuses ?? []);
-  // Merge persistent statuses into the status map (bulk check takes priority)
+  // Merge persistent statuses into the status map
   const mergedStatusMap = useMemo(() => {
     const map: HostStatusMap = {};
     for (const hs of hostStatuses) {
@@ -56,27 +50,12 @@ export default function Sidebar(): React.JSX.Element {
         map[hs.hostId] = { status: hs.status, ms: hs.lastMs ?? undefined };
       }
     }
-    // Override with live bulk check statuses
+    // Override with fresh per-host availability checks
     for (const [id, info] of Object.entries(hostStatus)) {
       map[id] = info;
     }
     return map;
   }, [hostStatuses, hostStatus]);
-
-  // Auto-monitoring interval
-  const monitorInterval = useApp((s) => s.settings.monitorIntervalSec ?? 0);
-  const monitorCheckAll = useApp((s) => s.monitorCheckAll);
-  const patchSettings = useApp((s) => s.patchSettings);
-  const [autoMonitor, setAutoMonitor] = useState(monitorInterval > 0);
-
-  // Auto-refresh monitoring
-  useEffect(() => {
-    if (!autoMonitor) return;
-    const intervalSec = 60; // Check every 60 seconds
-    void patchSettings({ monitorIntervalSec: intervalSec });
-    const id = setInterval(() => void monitorCheckAll(), intervalSec * 1000);
-    return () => clearInterval(id);
-  }, [autoMonitor]);
 
   const tags = useMemo(() => collectTags(tree), [tree]);
 
@@ -144,56 +123,6 @@ export default function Sidebar(): React.JSX.Element {
     });
   };
 
-  const cancelBulk = (): void => {
-    if (bulkReqs.current.size > 0) {
-      void window.api.checkCancel([...bulkReqs.current]);
-      bulkReqs.current.clear();
-    }
-  };
-
-  const stopBulk = (): void => {
-    bulkSeq.current += 1;
-    cancelBulk();
-    setHostStatus({});
-  };
-
-  const checkAllHosts = async (): Promise<void> => {
-    const hosts = flattenHosts(tree);
-    if (hosts.length === 0) return;
-    cancelBulk();
-    const seq = ++bulkSeq.current;
-    const initial: HostStatusMap = {};
-    for (const h of hosts) initial[h.id] = { status: 'checking' };
-    setHostStatus(initial);
-
-    // Небольшой пул воркеров, чтобы не устраивать «шторм» из N×(TCP+ping) одновременно.
-    const queue = [...hosts];
-    const worker = async (): Promise<void> => {
-      while (queue.length > 0) {
-        const host = queue.shift();
-        if (!host || bulkSeq.current !== seq) return;
-        const portNum = host.port ?? defaultPort(host.protocol);
-        const portId = `bulk-${seq}-port-${host.id}`;
-        const pingId = `bulk-${seq}-ping-${host.id}`;
-        bulkReqs.current.add(portId);
-        bulkReqs.current.add(pingId);
-        const [port, ping] = await Promise.all([
-          window.api.checkPort({ host: host.host, port: portNum, requestId: portId }),
-          window.api.checkPing({ host: host.host, requestId: pingId })
-        ]);
-        bulkReqs.current.delete(portId);
-        bulkReqs.current.delete(pingId);
-        if (bulkSeq.current !== seq) return;
-        const ok = port.ok || ping.ok;
-        setHostStatus((m) => ({
-          ...m,
-          [host.id]: { status: ok ? 'ok' : 'fail', ms: ok ? (port.ms ?? ping.ms) : undefined }
-        }));
-      }
-    };
-    await Promise.all(Array.from({ length: Math.min(4, hosts.length) }, () => worker()));
-  };
-
   useEffect(() => {
     if (!avail) return;
     const close = (e: MouseEvent): void => {
@@ -215,8 +144,6 @@ export default function Sidebar(): React.JSX.Element {
   useEffect(
     () => () => {
       cancelCheck();
-      bulkSeq.current += 1;
-      cancelBulk();
     },
     []
   );
@@ -305,24 +232,6 @@ export default function Sidebar(): React.JSX.Element {
     <div className="sidebar-inner">
       <div className="sidebar-header">
         <span className="sidebar-title">Профили</span>
-        <button
-          className="btn btn--ghost btn--sm btn--icon"
-          title={autoMonitor ? 'Выключить мониторинг' : 'Включить мониторинг (проверка каждые 60 сек)'}
-          onClick={() => {
-            const next = !autoMonitor;
-            setAutoMonitor(next);
-            if (!next) void patchSettings({ monitorIntervalSec: 0 });
-          }}
-        >
-          {autoMonitor ? <Icon name="spinner" size={12} className="icon-spin" /> : <Icon name="power" size={12} />}
-        </button>
-        <button
-          className="btn btn--ghost btn--sm btn--icon"
-          title={bulkChecking ? 'Остановить проверку доступности' : 'Проверить доступность всех хостов'}
-          onClick={() => (bulkChecking ? stopBulk() : void checkAllHosts())}
-        >
-          {bulkChecking ? <Icon name="spinner" size={12} className="icon-spin" /> : <Icon name="refresh" size={12} />}
-        </button>
       </div>
 
       <div className="sidebar-search">
@@ -380,23 +289,11 @@ export default function Sidebar(): React.JSX.Element {
         )}
       </div>
 
-      {view === 'settings' && (
-        <div className="sidebar-settings-sheet">
-          <div className="sidebar-settings-sheet__head">
-            <span>Настройки</span>
-            <button className="btn btn--ghost btn--sm btn--icon" onClick={() => setView('tree')} title="Закрыть настройки">
-              <Icon name="close" size={12} />
-            </button>
-          </div>
-          <SettingsForm />
-        </div>
-      )}
-
       <div className="sidebar-footer">
-        <button className="btn btn--sm" onClick={() => openDialog({ type: 'group', group: null, parentId: null })}>
+        <button className="btn btn--sm btn--primary" onClick={() => openDialog({ type: 'group', group: null, parentId: null })}>
           <Icon name="folder-plus" size={13} /> Группа
         </button>
-        <button className="btn btn--sm" onClick={() => openDialog({ type: 'host', host: null, parentId: null })}>
+        <button className="btn btn--sm btn--primary" onClick={() => openDialog({ type: 'host', host: null, parentId: null })}>
           <Icon name="host" size={13} /> Хост
         </button>
         <button className="btn btn--sm" onClick={() => openDialog({ type: 'import' })}>
@@ -414,11 +311,7 @@ export default function Sidebar(): React.JSX.Element {
         <button className="btn btn--sm" title="Наборы учётных данных" onClick={() => openDialog({ type: 'credentials' })}>
           <Icon name="key" size={13} /> Учётные данные
         </button>
-        <button
-          className={`btn btn--sm${view === 'settings' ? ' btn--active' : ''}`}
-          title="Настройки"
-          onClick={() => setView(view === 'settings' ? 'tree' : 'settings')}
-        >
+        <button className="btn btn--sm" title="Настройки" onClick={() => openDialog({ type: 'settings' })}>
           <Icon name="gear" size={13} /> Настройки
         </button>
       </div>
