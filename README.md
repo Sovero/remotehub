@@ -52,6 +52,44 @@ npm run dist:sign
 (`http://timestamp.digicert.com`); при необходимости замените его на сервер вашего
 удостоверяющего центра.
 
+### Как получить «рабочую» подпись для автообновления
+
+1. Купите код-подписывающий сертификат в удостоверяющем центре (DigiCert, Sectigo,
+   GlobalSign и т.п.) — выдаётся только после проверки владельца, это платно.
+   Подойдёт и сертификат от Azure Trusted Signing (без PFX, через `azureSignOptions`).
+2. **CN (общее имя) сертификата должен быть `Remote Hub`** — по нему electron-updater
+   сверяет подпись с `build.win.signtoolOptions.publisherName`. Если CN другой,
+   поправьте `publisherName` на своё значение (и в `app-update.yml` после сборки
+   окажется именно оно).
+3. Экспортируйте сертификат в PFX (с приватным ключом, с паролем) и укажите его
+   в `cert.env`. Соберите: `npm run dist:sign`.
+4. Проверьте, что подпись читается: `Get-AuthenticodeSignature "release/Remote Hub Setup <версия>.exe"`
+   — `Status` должен быть `Valid`, `SignerCertificate.Subject` — `CN=Remote Hub`.
+
+Самоподписанный сертификат для автообновления **не подходит**: electron-updater
+требует `Status = Valid`, то есть цепочку до доверенного корня. У сертификата УЦ
+доверие автоматическое; у самоподписанного — только если вручную добавить его
+в корневые доверенные хранилища каждой машины.
+
+### Проверка пайплайна подписи без покупки сертификата
+
+`scripts/make-test-cert.ps1` генерирует самоподписанный тестовый сертификат
+`CN=Remote Hub` и экспортирует `certs/remote-hub-test.pfx` (пароль `remotehub-test`),
+чтобы проверить всю цепочку сборки — signtool, таймстамп, имя издателя:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/make-test-cert.ps1
+$env:CSC_LINK = "certs/remote-hub-test.pfx"
+$env:CSC_KEY_PASSWORD = "remotehub-test"
+npx electron-builder --win --x64 --config.directories.output=release-signed
+```
+
+Подпись появится (`Get-AuthenticodeSignature` покажет `CN=Remote Hub` и таймстамп),
+но `Status` останется `UnknownError`, пока тестовый корень не добавлен в доверенные
+(`-Trust` в скрипте). Для реального сертификата УЦ этот шаг не нужен.
+
+`certs/` и `release-signed/` в `.gitignore` — приватный ключ в git не попадает.
+
 ## Автообновление
 
 Приложение проверяет обновления в фоне (при старте и раз в 4 часа) и скачивает их
