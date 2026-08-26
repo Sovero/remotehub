@@ -92,10 +92,19 @@ const IronRdpView: React.FC<Props> = ({ sessionId, host, port, domain: requested
 
         const sb = new Backend.SessionBuilder();
         sb.proxyAddress(res.wsUrl);
+        // WASM-клиент требует auth_token при RDCleanPath-подключении
+        // (ironerror "auth_token missing"). Мост токен не проверяет — это
+        // просто строка в Request PDU (proxy_auth).
+        sb.authToken('remote-hub');
         sb.destination(res.destination ?? `${host}:${port}`);
         sb.username(username);
         sb.password(res.password ?? '');
         if (domain) sb.serverDomain(domain);
+        // Обязательные колбэки WASM-клиента: без них connect() падает с
+        // "set_cursor_style_callback missing". Курсором в smoke мы не управляем,
+        // поэтому колбэк-заглушка.
+        sb.setCursorStyleCallback(() => undefined);
+        sb.setCursorStyleCallbackContext(null);
         sb.renderCanvas(canvas);
         sb.desktopSize(new Backend.DesktopSize(width, height));
 
@@ -132,9 +141,21 @@ const IronRdpView: React.FC<Props> = ({ sessionId, host, port, domain: requested
           });
       } catch (e) {
         if (!disposed) {
+          let detail = String((e as Error)?.message ?? e);
+          // wasm-bindgen IronError: текст живёт в backtrace() на прототипе.
+          try {
+            const o = e as Record<string, (() => unknown) | undefined>;
+            const backtrace = o.backtrace;
+            if (typeof backtrace === 'function') {
+              const t = String(backtrace.call(e));
+              if (t && t !== 'undefined') detail = t;
+            }
+          } catch {
+            /* keep detail */
+          }
           useApp.getState().applySessionState(sessionId, {
             phase: 'error',
-            message: String((e as Error)?.message ?? e)
+            message: detail
           });
         }
       }

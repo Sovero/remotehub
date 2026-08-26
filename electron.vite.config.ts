@@ -18,6 +18,14 @@ const BUNDLED_DEPS = [
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin({ exclude: BUNDLED_DEPS })],
+    build: {
+      rollupOptions: {
+        // ws тянет bufferutil/utf-8-validate как опциональные нативные модули.
+        // Не бандлим их: тогда ws в рантайме сам выбирает native (из
+        // app.asar.unpacked) либо чистый JS fallback через свой try/catch.
+        external: ['bufferutil', 'utf-8-validate'],
+      },
+    },
     resolve: {
       alias: { '@shared': shared },
     },

@@ -82,6 +82,7 @@
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-search": "^0.16.0",
     "@xterm/addon-web-links": "^0.12.0",
+    "bufferutil": "^4.1.0",
     "electron-updater": "^6.8.9",
     "koffi": "^3.1.6",
     "nanoid": "^6.0.1",
@@ -91,6 +92,7 @@
     "react-dom": "^19.2.8",
     "ssh2": "^1.17.0",
     "telnet-client": "^2.2.14",
+    "utf-8-validate": "^6.0.6",
     "ws": "^8.21.3",
     "xterm": "^5.3.0",
     "zustand": "^5.0.15"
@@ -108,5 +110,9 @@
     "typescript": "^7.0.2",
     "vite": "^7.3.6",
     "vitest": "^4.1.11"
+  },
+  "allowScripts": {
+    "bufferutil@4.1.0": true,
+    "utf-8-validate@6.0.6": true
   }
 }
