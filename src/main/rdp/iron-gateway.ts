@@ -420,8 +420,11 @@ export class IronGateway {
       const cc = await readX224(chan, this.opts.x224TimeoutMs);
       if (!cc.confirm) return [];
 
+      // ВАЖНО: tls.TLSSocket(sock) поверх уже существующего сокета НЕ начинает
+      // рукопожатие (сервер так и не получает ClientHello). Только tls.connect
+      // с опцией socket инициирует TLS поверх установленного TCP-соединения.
       const tlsSock = await new Promise<tls.TLSSocket>((resolve, reject) => {
-        const wrapped = new tls.TLSSocket(probe, { isServer: false, rejectUnauthorized: false });
+        const wrapped = tls.connect({ socket: probe, rejectUnauthorized: false });
         const timer = setTimeout(() => {
           wrapped.destroy();
           reject(new Error('TLS-проба: таймаут'));
@@ -450,7 +453,8 @@ export class IronGateway {
       }
       tlsSock.destroy();
       return certs;
-    } catch {
+    } catch (e) {
+      console.error('[iron-gateway] probeCertificates failed:', (e as Error)?.message ?? e);
       return [];
     } finally {
       if (!probe.destroyed) probe.destroy();

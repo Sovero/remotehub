@@ -142,5 +142,30 @@ describe.skipIf(!host)('IronRDP E2E — реальный RDP-хост', () => {
     } else {
       expect(states).toContain('error');
     }
+  });
+
+  it(`возвращает цепочку сертификатов ${host}:${port} (нужна WASM-клиенту)`, async () => {
+    const gw = new IronGateway({
+      sessionId: 'e2e-cert',
+      host,
+      port,
+      connectTimeoutMs: 8000,
+      x224TimeoutMs: 8000,
+      probeTimeoutMs: 6000
+    });
+    await gw.start();
+    cleanups.push(() => gw.stop());
+
+    const ws = await wsConnect(gw.actualPort);
+    ws.send(encodeRequest(`${host}:${port}`, 'e2e', X224_CR_NEG));
+    const pdu = decodePdu(await nextWsMessage(ws));
+    ws.close();
+
+    // Сердце фикса probeCertificates: WASM-клиент IronRDP обрывает соединение
+    // с «server cert chain missing», если цепочка пустая. Живой хост обязан
+    // отдавать непустую цепочку (самоподписанный сертификат Windows RDP).
+    expect(pdu.errorCode, `ошибка моста: ${summarize(pdu)}`).toBeUndefined();
+    expect(pdu.x224?.[5]).toBe(0xd0);
+    expect(pdu.certChain?.length ?? 0, `пустая цепочка: ${summarize(pdu)}`).toBeGreaterThan(0);
   }, 30000);
 });
