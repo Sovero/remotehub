@@ -1,6 +1,6 @@
 {
   "name": "remote-hub",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "Remote Hub — Termius-подобное приложение для Windows: SSH, Telnet, RDP, VNC, SFTP",
   "repository": "https://github.com/Sovero/remotehub.git",
   "main": "./out/main/index.js",
