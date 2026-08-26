@@ -57,31 +57,34 @@ jobs:
       - name: Generate latest.yml
         shell: bash
         run: |
+          # GitHub нормализует имена ассетов со спецсимволами (пробелы → точки),
+          # поэтому latest.yml обязан ссылаться на нормализованное имя.
           VERSION="${{ steps.tag.outputs.version }}"
           EXE="release/Remote Hub Setup ${VERSION}.exe"
-          SHA=$(powershell -NoProfile -Command "(Get-FileHash -Algorithm SHA512 \"$EXE\").Hash.ToLower()")
-          SIZE=$(wc -c < "$EXE" | tr -d ' ')
-          DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-
+          NAME="Remote.Hub.Setup.${VERSION}.exe"
           node -e "
             const fs = require('fs');
-            const v = '$VERSION';
-            const sha = '$SHA';
-            const size = parseInt('$SIZE', 10);
-            const date = '$DATE';
-            const name = 'Remote Hub Setup ' + v + '.exe';
+            const crypto = require('crypto');
+            const v = process.argv[1];
+            const exe = process.argv[2];
+            const name = process.argv[3];
+            const buf = fs.readFileSync(exe);
+            // electron-updater сверяет sha512 как base64-дайджест (не hex).
+            const sha512 = crypto.createHash('sha512').update(buf).digest('base64');
+            const size = buf.length;
+            const date = new Date().toISOString();
             const yml =
               'version: ' + v + '\n' +
               'files:\n' +
               '  - url: ' + name + '\n' +
-              '    sha512: ' + sha + '\n' +
+              '    sha512: ' + sha512 + '\n' +
               '    size: ' + size + '\n' +
               'path: ' + name + '\n' +
-              'sha512: ' + sha + '\n' +
+              'sha512: ' + sha512 + '\n' +
               'releaseDate: \\'' + date + '\\'\n';
             fs.writeFileSync('release/latest.yml', yml);
             console.log(yml);
-          "
+          " "$VERSION" "$EXE" "$NAME"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
