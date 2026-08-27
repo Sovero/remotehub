@@ -28,8 +28,7 @@ import {
   type TunnelAddResult,
   type TunnelInfo,
   type UpdateStatus,
-  type VncErrorPayload,
-  type RdpCertificatePayload
+  type VncErrorPayload
 } from '../shared/ipc-contract';
 import type { ChangelogEntry } from '../shared/changelog';
 import type { Settings, TreeNode } from '../shared/types';
@@ -80,24 +79,6 @@ const api = {
     ipcRenderer.invoke(IPC.sessionClose, sessionId),
   sessionAuth: (req: SessionAuthRequest): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke(IPC.sessionAuth, req),
-  rdpLaunch: (req: { sessionId: string; host: import('../shared/types').Host }): Promise<{
-    ok: boolean;
-    error?: string;
-  }> => ipcRenderer.invoke(IPC.rdpLaunch, req),
-  /** Прямоугольник панели RDP-вкладки (CSS-пиксели) — main переведёт в физические. */
-  rdpSetRect: (sessionId: string, rect: { x: number; y: number; width: number; height: number }): void =>
-    ipcRenderer.send(IPC.rdpRect, { sessionId, rect }),
-  /** Переключение вкладок: показать встроенное окно сессии, спрятать остальные. */
-  rdpActivate: (sessionId: string): void => ipcRenderer.send(IPC.rdpActivate, sessionId),
-  /** Модальный диалог открыт/закрыт: встроенные окна временно прячутся. */
-  rdpOverlay: (active: boolean): void => ipcRenderer.send(IPC.rdpOverlay, active),
-  rdpAcceptCertificate: (sessionId: string): void => ipcRenderer.send(IPC.rdpCertificateAccept, sessionId),
-  rdpRejectCertificate: (sessionId: string): void => ipcRenderer.send(IPC.rdpCertificateReject, sessionId),
-  onRdpCertificate: (cb: (payload: RdpCertificatePayload) => void): (() => void) => {
-    const listener = (_e: unknown, payload: RdpCertificatePayload): void => cb(payload);
-    ipcRenderer.on(IPC.rdpCertificate, listener);
-    return () => ipcRenderer.removeListener(IPC.rdpCertificate, listener);
-  },
   vncOpen: (req: {
     sessionId: string;
     host: import('../shared/types').Host;
@@ -141,12 +122,6 @@ const api = {
     const listener = (_e: unknown, p: TransferProgress): void => cb(p);
     ipcRenderer.on(IPC.sftpProgress, listener);
     return () => ipcRenderer.removeListener(IPC.sftpProgress, listener);
-  },
-  onRdpExited: (cb: (payload: { sessionId: string; code: number | null; error?: string }) => void): (() => void) => {
-    const listener = (_e: unknown, payload: { sessionId: string; code: number | null; error?: string }): void =>
-      cb(payload);
-    ipcRenderer.on(IPC.rdpExited, listener);
-    return () => ipcRenderer.removeListener(IPC.rdpExited, listener);
   },
   checkForUpdates: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.updateCheck),
   downloadUpdate: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.updateDownload),

@@ -70,8 +70,6 @@ export interface SessionTab {
   protocol: string;
   kind: 'terminal' | 'vnc' | 'rdp' | 'sftp';
   state: SessionState;
-  /** Системное предупреждение RDP перенесено в UI вкладки, чтобы не было top-level окна. */
-  certificatePending?: boolean;
   /** Движок, на котором создана эта вкладка; настройка не меняет уже живую сессию. */
   rdpEngine?: RdpEngine;
   adHocHost: Host | null;
@@ -129,8 +127,6 @@ interface AppState {
   dismissToast: (id: number) => void;
   openDialog: (d: Exclude<DialogState, null>) => void;
   closeDialog: () => void;
-  /** Встроенные RDP-окна не должны перекрывать модальные диалоги/онбординг. */
-  setRdpOverlay: (active: boolean) => void;
   /** Онбординг-мастер: первый запуск или ручной вызов. */
   onboardingOpen: boolean;
   openOnboarding: () => void;
@@ -148,8 +144,6 @@ interface AppState {
   openSession: (host: Host, opts?: { password?: string; adHoc?: boolean }) => Promise<void>;
   openAdHoc: (host: Host) => Promise<void>;
   openRdp: (host: Host) => Promise<void>;
-  applyRdpOutcome: (sessionId: string, outcome: { ok: boolean; error?: string }) => void;
-  applyRdpCertificate: (sessionId: string, pending: boolean) => void;
   /**
    * Меняет опции RDP у профиля (разрешение/режим), сохраняет в дерево и
    * переподключает сессию с новыми настройками.
@@ -340,21 +334,16 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   openDialog: (d) => {
-    window.api.rdpOverlay(true);
     set({ dialog: d });
   },
   closeDialog: () => {
-    window.api.rdpOverlay(false);
     set({ dialog: null });
   },
-  setRdpOverlay: (active) => window.api.rdpOverlay(active),
   onboardingOpen: false,
   openOnboarding: () => {
-    window.api.rdpOverlay(true);
     set({ onboardingOpen: true, dialog: null });
   },
   closeOnboarding: () => {
-    window.api.rdpOverlay(false);
     set({ onboardingOpen: false });
   },
   finishOnboarding: async () => {
@@ -648,31 +637,6 @@ export const useApp = create<AppState>((set, get) => ({
     get().persistTabs();
   },
 
-  applyRdpCertificate: (sessionId, pending) => {
-    set((s) => ({
-      tabs: s.tabs.map((t) => (t.sessionId === sessionId ? { ...t, certificatePending: pending } : t))
-    }));
-  },
-
-  applyRdpOutcome: (sessionId, outcome: { ok: boolean; error?: string }) => {
-    set((s) => ({
-      tabs: s.tabs.map((t) =>
-        t.sessionId === sessionId
-          ? outcome.ok
-            ? {
-                ...t,
-                state: { phase: 'connected' },
-                // Событие rdp:certificate может прийти раньше результата IPC;
-                // не затираем pending, иначе ручное предупреждение исчезнет.
-                certificatePending: t.certificatePending ?? false,
-                startedAt: Date.now()
-              }
-            : { ...t, state: { phase: 'error', message: outcome.error ?? 'Не удалось запустить RDP' } }
-          : t
-      )
-    }));
-  },
-
   relaunchRdp: async (sessionId, rdpPatch) => {
     const { tabs, tree } = get();
     const tab = tabs.find((t) => t.sessionId === sessionId);
@@ -717,7 +681,7 @@ export const useApp = create<AppState>((set, get) => ({
       set((s) => ({
         tabs: s.tabs.map((t) =>
           t.sessionId === sessionId
-            ? { ...t, rdpEngine, state: { phase: 'connecting' }, certificatePending: false }
+            ? { ...t, rdpEngine, state: { phase: 'connecting' } }
             : t
         )
       }));
@@ -824,9 +788,6 @@ export const useApp = create<AppState>((set, get) => ({
 
   switchTab: (sessionId) => {
     set({ activeTabId: sessionId });
-    // Показываем встроенное окно активной RDP-сессии, прячем остальные.
-    const tab = get().tabs.find((t) => t.sessionId === sessionId);
-    if (tab?.kind === 'rdp') window.api.rdpActivate(sessionId);
   },
 
   submitPassword: async (sessionId, password) => {

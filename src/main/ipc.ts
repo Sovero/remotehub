@@ -1,7 +1,7 @@
 import { mkdirSync, renameSync, rmdirSync, unlinkSync, writeFileSync } from 'fs';
 import { readFile } from 'fs/promises';
 import { basename, join, posix } from 'path';
-import { BrowserWindow, dialog, ipcMain, screen } from 'electron';
+import { BrowserWindow, dialog, ipcMain } from 'electron';
 import { app } from 'electron';
 import { nanoid } from 'nanoid';
 import {
@@ -13,8 +13,6 @@ import {
   type CredentialSetInput,
   type ExportResult,
   type ImportResult,
-  type RdpLaunchRequest,
-  type RdpRectRequest,
   type RdpjsLaunchRequest,
   type RdpjsMouseEvent,
   type RdpjsMouseMoveEvent,
@@ -42,7 +40,6 @@ import {
   toDtoList,
   validateCredentialInput
 } from './credentials/dto';
-import { RdpManager } from './rdp/manager';
 import { RdpjsClientManager } from './rdp/rdpjs-client';
 import { SessionManager } from './sessions/manager';
 import { SftpManager } from './sftp/manager';
@@ -54,7 +51,6 @@ import type { Store } from './store';
 export function registerIpc(
   store: Store,
   sessions: SessionManager,
-  rdp: RdpManager,
   vnc: VncManager,
   sftp: SftpManager,
   tunnels: TunnelManager,
@@ -147,10 +143,6 @@ export function registerIpc(
     const rdpEngine = patch.rdpEngine === 'iron' || patch.rdpEngine === 'rdpjs' ? patch.rdpEngine : current.rdpEngine;
     const next: Settings = { ...current, ...patch, rdpEngine };
     store.saveSettings(next);
-    // Настройка RDP применяется к живым менеджеру сразу, без перезапуска.
-    if ('rdpAutoAcceptCert' in patch) {
-      rdp.setAutoAcceptCert(next.rdpAutoAcceptCert);
-    }
     return { ok: true, settings: next };
   });
 
@@ -253,7 +245,6 @@ export function registerIpc(
 
   ipcMain.handle(IPC.sessionClose, async (_e, sessionId: string) => {
     sessions.close(sessionId);
-    rdp.stop(sessionId);
     rdpjs.disconnect(sessionId);
     await stopIronGateway(sessionId);
     vnc.close(sessionId);
@@ -270,45 +261,6 @@ export function registerIpc(
       sessions.retryWithPassword(req.sessionId, req.password);
     }
     return { ok: true };
-  });
-
-  // ---- RDP ----
-  ipcMain.handle(IPC.rdpLaunch, (_e, req: RdpLaunchRequest) => {
-    const credential = req.host.credentialId
-      ? store.loadCredentials().data.find((c) => c.id === req.host.credentialId) ?? null
-      : null;
-    return rdp.launch(req.host, credential, req.sessionId);
-  });
-
-  // Прямоугольник панели вкладки (CSS-пиксели) → физические пиксели и в менеджер.
-  ipcMain.on(IPC.rdpRect, (e, req: RdpRectRequest) => {
-    const win = BrowserWindow.fromWebContents(e.sender);
-    if (!win || win.isDestroyed()) return;
-    const sf = screen.getDisplayMatching(win.getBounds()).scaleFactor;
-    rdp.setRect(req.sessionId, {
-      x: Math.round(req.rect.x * sf),
-      y: Math.round(req.rect.y * sf),
-      width: Math.round(req.rect.width * sf),
-      height: Math.round(req.rect.height * sf)
-    });
-  });
-
-  // Переключение вкладок: показать окно активной RDP-сессии, спрятать остальные.
-  ipcMain.on(IPC.rdpActivate, (_e, sessionId: string) => {
-    rdp.activate(sessionId);
-  });
-
-  ipcMain.on(IPC.rdpCertificateAccept, (_e, sessionId: string) => {
-    rdp.acceptCertificate(sessionId);
-  });
-
-  ipcMain.on(IPC.rdpCertificateReject, (_e, sessionId: string) => {
-    rdp.rejectCertificate(sessionId);
-  });
-
-  // Открытие/закрытие модального диалога: встроенные окна временно прячутся.
-  ipcMain.on(IPC.rdpOverlay, (_e, overlay: boolean) => {
-    rdp.setOverlay(overlay);
   });
 
   // ---- RDPJS (node-rdpjs) ----

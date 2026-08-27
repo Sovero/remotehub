@@ -41,14 +41,6 @@ export const IPC = {
   tunnelsAdd: 'tunnels:add',
   tunnelsStop: 'tunnels:stop',
   tunnelsList: 'tunnels:list',
-  rdpLaunch: 'rdp:launch',
-  rdpExited: 'rdp:exited',
-  rdpCertificate: 'rdp:certificate',
-  rdpCertificateAccept: 'rdp:certificate-accept',
-  rdpCertificateReject: 'rdp:certificate-reject',
-  rdpRect: 'rdp:rect',
-  rdpActivate: 'rdp:activate',
-  rdpOverlay: 'rdp:overlay',
   /** node-rdpjs: битмап из main в renderer */
   rdpjsBitmap: 'rdpjs:bitmap',
   /** node-rdpjs: состояние сессии */
@@ -209,34 +201,6 @@ export interface SessionStatePayload {
 export type SessionAuthRequest =
   | { sessionId: string; password: string }
   | { sessionId: string; hostKeyDecision: 'accept' | 'reject' };
-
-export interface RdpLaunchRequest {
-  sessionId: string;
-  host: import('./types').Host;
-}
-
-export interface RdpExitedPayload {
-  sessionId: string;
-  code: number | null;
-  error?: string;
-}
-
-export interface RdpCertificatePayload {
-  sessionId: string;
-  pending: boolean;
-}
-
-/** Результат запуска RDP: отдельного window-режима не существует. */
-export interface RdpLaunchResult {
-  ok: boolean;
-  error?: string;
-}
-
-/** Прямоугольник панели вкладки в CSS-пикселях (main переводит в физические). */
-export interface RdpRectRequest {
-  sessionId: string;
-  rect: { x: number; y: number; width: number; height: number };
-}
 
 /** Состояние автообновления, которое main шлёт в рендерер. */
 export type UpdateStatus =

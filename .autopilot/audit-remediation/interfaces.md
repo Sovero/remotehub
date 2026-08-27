@@ -78,7 +78,24 @@
   содержит `:` — сырые IPv6-литералы этой схемой не поддерживаются (не
   требовалось depth pass'ом спеки, см. отчёт).
 
-## Из тикета 02 — (заполняется после завершения)
+## Из тикета 02 — удаление COM-хоста
+
+- `RdpManager`, `rdp-com-host.exe` и весь `src/native/` больше не существуют.
+  `registerIpc(store, sessions, vnc, sftp, tunnels, updater, rdpjs)` — без
+  `rdp`-параметра (был третьим). `createWindow()` — без аргументов (был
+  `createWindow(rdp)`).
+- IPC-каналы `rdpLaunch/rdpExited/rdpCertificate/rdpCertificateAccept/
+  rdpCertificateReject/rdpRect/rdpActivate/rdpOverlay` удалены из `IPC`
+  и из `window.api` — не используй их, если понадобится что-то похожее для
+  iron/rdpjs, там уже есть свои каналы (`iron:*`, `rdpjs:*`).
+- Зависимость `koffi`/`@koromix` удалена из `package.json` (была нужна
+  только win32-embedding и smoke-проверке COM-пути) — не добавляй её
+  обратно без явной необходимости.
+- `Settings.rdpAutoAcceptCert` (shared/types.ts) **остался в типе и в
+  SettingsForm.tsx** — сознательно не тронут (не входил в тикет, схема
+  персистентных настроек — вне рамок этого захода), но теперь ни один
+  движок (iron/rdpjs) его не читает: это осиротевший no-op чекбокс,
+  вынесено в отчёт как остаточная находка, не мой тикет её чинить.
 
 ## Из тикета 03 — (заполняется после завершения)
 
