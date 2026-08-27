@@ -36,7 +36,8 @@
     "asarUnpack": [
       "node_modules/nanoid/**",
       "node_modules/bufferutil/**",
-      "node_modules/utf-8-validate/**"
+      "node_modules/utf-8-validate/**",
+      "node_modules/cpu-features/**"
     ],
     "publish": [
       {
