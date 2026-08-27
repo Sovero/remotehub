@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { LogEntry, LogLevel } from '@shared/ipc-contract';
+import type { LogEntry, LogLevel, LogSource } from '@shared/ipc-contract';
 import { useApp } from '../../store';
 import Icon from '../Icon';
 import Modal from './Modal';
@@ -11,10 +11,20 @@ const LEVELS: Array<{ value: 'all' | LogLevel; label: string }> = [
   { value: 'info', label: 'Всё' }
 ];
 
+/** Сколько записей показывать в списке (последние N отфильтрованных). */
+const RENDER_LIMIT = 300;
+/** Сколько последних записей полного журнала включать в диагностику. */
+const DIAGNOSTICS_ENTRIES = 500;
+
 function fmtTime(ts: number): string {
   const d = new Date(ts);
   const p = (n: number, l = 2): string => String(n).padStart(l, '0');
   return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}`;
+}
+
+/** Построчный формат записи — используется в копировании, экспорте и диагностике. */
+function formatEntry(e: LogEntry): string {
+  return `[${fmtTime(e.ts)}] [${e.level.toUpperCase()}] [${e.source}] ${e.message}`;
 }
 
 /** Цветная метка уровня записи журнала. */
@@ -27,6 +37,8 @@ export default function LogDialog(): React.JSX.Element {
   const closeDialog = useApp((s) => s.closeDialog);
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [levelFilter, setLevelFilter] = useState<'all' | LogLevel>('all');
+  const [sourceFilter, setSourceFilter] = useState<'all' | LogSource>('all');
+  const [search, setSearch] = useState('');
   const [autoScroll, setAutoScroll] = useState(true);
   const listRef = useRef<HTMLDivElement | null>(null);
 
@@ -45,11 +57,27 @@ export default function LogDialog(): React.JSX.Element {
     };
   }, []);
 
+  // Источники, реально встречающиеся в журнале — список строится из данных, не хардкодится.
+  const sources = useMemo(() => Array.from(new Set(entries.map((e) => e.source))).sort(), [entries]);
+
+  const filtered = useMemo(() => {
+    const order: Record<LogLevel, number> = { error: 0, warn: 1, info: 2 };
+    const query = search.trim().toLowerCase();
+    return entries.filter((e) => {
+      if (levelFilter !== 'all' && order[e.level] > order[levelFilter]) return false;
+      if (sourceFilter !== 'all' && e.source !== sourceFilter) return false;
+      if (query && !e.message.toLowerCase().includes(query)) return false;
+      return true;
+    });
+  }, [entries, levelFilter, sourceFilter, search]);
+
+  const visible = useMemo(() => filtered.slice(-RENDER_LIMIT), [filtered]);
+
   // Автопрокрутка к последней записи, пока пользователь не прокрутил вверх.
   useEffect(() => {
     const el = listRef.current;
     if (el && autoScroll) el.scrollTop = el.scrollHeight;
-  }, [entries, autoScroll]);
+  }, [visible, autoScroll]);
 
   const onScroll = (): void => {
     const el = listRef.current;
@@ -58,16 +86,14 @@ export default function LogDialog(): React.JSX.Element {
     setAutoScroll(nearBottom);
   };
 
-  const filtered = useMemo(() => {
-    if (levelFilter === 'all') return entries;
-    const order: Record<LogLevel, number> = { error: 0, warn: 1, info: 2 };
-    return entries.filter((e) => order[e.level] <= order[levelFilter]);
-  }, [entries, levelFilter]);
+  const resetFilters = (): void => {
+    setLevelFilter('all');
+    setSourceFilter('all');
+    setSearch('');
+  };
 
   const copyAll = async (): Promise<void> => {
-    const text = filtered
-      .map((e) => `[${fmtTime(e.ts)}] [${e.level.toUpperCase()}] [${e.source}] ${e.message}`)
-      .join('\n');
+    const text = filtered.map(formatEntry).join('\n');
     try {
       await navigator.clipboard.writeText(text);
       useApp.getState().pushToast('Журнал скопирован в буфер обмена');
@@ -76,13 +102,55 @@ export default function LogDialog(): React.JSX.Element {
     }
   };
 
+  const exportLog = async (): Promise<void> => {
+    const text = filtered.map(formatEntry).join('\n');
+    const res = await window.api.logsExport(text);
+    if (res.ok) {
+      useApp.getState().pushToast(`Журнал экспортирован: ${res.path}`);
+    } else if (!res.canceled) {
+      useApp.getState().pushToast(res.error ?? 'Не удалось экспортировать журнал');
+    }
+  };
+
+  const copyDiagnostics = async (): Promise<void> => {
+    try {
+      const info = await window.api.appInfo();
+      const settings = useApp.getState().settings;
+      const lastEntries = entries.slice(-DIAGNOSTICS_ENTRIES);
+      const lines = [
+        'Remote Hub — диагностика',
+        `Версия: ${info.version} (Electron ${info.electron}, ${info.arch})`,
+        '',
+        'Настройки:',
+        `  theme: ${settings.theme}`,
+        `  rdpEngine: ${settings.rdpEngine}`,
+        `  fontSize: ${settings.fontSize}`,
+        `  fontFamily: ${settings.fontFamily}`,
+        `  accent: ${settings.accent}`,
+        `  confirmOnDelete: ${settings.confirmOnDelete}`,
+        `  restoreTabs: ${settings.restoreTabs}`,
+        `  rdpAutoAcceptCert: ${settings.rdpAutoAcceptCert}`,
+        `  monitorIntervalSec: ${settings.monitorIntervalSec}`,
+        '',
+        `Записи журнала (последние ${lastEntries.length}):`,
+        ...lastEntries.map(formatEntry)
+      ];
+      await navigator.clipboard.writeText(lines.join('\n'));
+      useApp.getState().pushToast('Диагностика скопирована в буфер обмена');
+    } catch {
+      useApp.getState().pushToast('Не удалось скопировать диагностику');
+    }
+  };
+
   const clearAll = async (): Promise<void> => {
     await window.api.clearLogs();
     setEntries([]);
   };
 
+  const trimmedSearch = search.trim();
+
   return (
-    <Modal title="Журнал событий" onClose={closeDialog} width={760}>
+    <Modal title="Журнал событий" onClose={closeDialog} width={860}>
       <div className="log-panel">
         <div className="log-bar">
           <select
@@ -97,12 +165,46 @@ export default function LogDialog(): React.JSX.Element {
               </option>
             ))}
           </select>
+          <select
+            className="input"
+            value={sourceFilter}
+            onChange={(e) => setSourceFilter(e.target.value as 'all' | LogSource)}
+            title="Фильтр по источнику"
+          >
+            <option value="all">Все источники</option>
+            {sources.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+          <input
+            className="input input--search"
+            placeholder="Поиск по сообщению…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
           <span className="log-count" title="Записей в текущем фильтре">
             {filtered.length}
           </span>
           <span className="log-spacer" />
           <button className="btn btn--sm" onClick={() => void copyAll()} title="Скопировать видимые записи в буфер обмена">
             <Icon name="copy" size={12} /> Копировать
+          </button>
+          <button
+            className="btn btn--sm"
+            onClick={() => void exportLog()}
+            title="Сохранить отфильтрованный журнал в файл"
+            disabled={filtered.length === 0}
+          >
+            <Icon name="export" size={12} /> Экспорт
+          </button>
+          <button
+            className="btn btn--sm"
+            onClick={() => void copyDiagnostics()}
+            title="Скопировать версию, настройки и последние записи журнала в буфер обмена"
+          >
+            <Icon name="log" size={12} /> Скопировать диагностику
           </button>
           <button
             className="btn btn--sm btn--danger"
@@ -113,8 +215,13 @@ export default function LogDialog(): React.JSX.Element {
             <Icon name="trash" size={12} /> Очистить
           </button>
         </div>
+        {filtered.length > RENDER_LIMIT && (
+          <div className="log-limit-banner">
+            Показаны последние {RENDER_LIMIT} из {filtered.length}
+          </div>
+        )}
         <div className="log-list" ref={listRef} onScroll={onScroll}>
-          {filtered.length === 0 ? (
+          {entries.length === 0 ? (
             <div className="log-empty">
               <Icon name="log" size={30} />
               <p>Пока нет записей.</p>
@@ -122,8 +229,22 @@ export default function LogDialog(): React.JSX.Element {
                 Здесь появляются действия приложения и подключений — запуск сессий, переходы состояний, ошибки.
               </p>
             </div>
+          ) : filtered.length === 0 ? (
+            <div className="log-empty">
+              <Icon name={trimmedSearch ? 'search' : 'log'} size={30} />
+              {trimmedSearch ? (
+                <p>Ничего не найдено по «{trimmedSearch}».</p>
+              ) : sourceFilter !== 'all' ? (
+                <p>Нет записей источника «{sourceFilter}» с текущими фильтрами.</p>
+              ) : (
+                <p>Нет записей с текущими фильтрами.</p>
+              )}
+              <button className="btn btn--sm" onClick={resetFilters}>
+                Сбросить фильтры
+              </button>
+            </div>
           ) : (
-            filtered.map((e) => (
+            visible.map((e) => (
               <div key={e.id} className={`log-entry log-entry--${e.level}`}>
                 <span className="log-time">{fmtTime(e.ts)}</span>
                 <LevelBadge level={e.level} />

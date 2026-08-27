@@ -1,9 +1,11 @@
 import { readFileSync } from 'fs';
 import { nanoid } from 'nanoid';
+import type { HostVerifier } from 'ssh2';
 import type { SessionState } from '../../shared/ipc-contract';
 import type { CredentialSet, Host } from '../../shared/types';
 import type { Sealer } from '../store/crypto-format';
 import { buildSshConfig, buildTelnetConfig, resolveAuth } from './config';
+import { HostKeyStore } from './host-keys';
 import { SshSession } from './ssh-session';
 import { TelnetSession } from './telnet-session';
 import type { SessionTransport } from './types';
@@ -31,7 +33,8 @@ export class SessionManager {
 
   constructor(
     private readonly sealer: Sealer,
-    private readonly send: (channel: 'session:data' | 'session:state', payload: unknown) => void
+    private readonly send: (channel: 'session:data' | 'session:state', payload: unknown) => void,
+    private readonly hostKeyStore: HostKeyStore
   ) {}
 
   open(opts: OpenSessionOptions): string {
@@ -83,6 +86,15 @@ export class SessionManager {
     this.startTransport(managed, password, 80, 24);
   }
 
+  /** Ответ пользователя на диалог подтверждения host key сервера (см. SshSession.handleHostKey). */
+  resolveHostKey(id: string, accept: boolean): void {
+    const managed = this.sessions.get(id);
+    if (!managed || managed.disposed) return;
+    if (managed.transport instanceof SshSession) {
+      managed.transport.resolveHostKey(accept);
+    }
+  }
+
   private startTransport(managed: Managed, dialogPassword: string | undefined, cols: number, rows: number): void {
     if (managed.disposed) return;
 
@@ -102,15 +114,28 @@ export class SessionManager {
 
     // SSH
     const auth = resolveAuth(managed.credential, dialogPassword, this.sealer, (p) => readFileSync(p, 'utf8'));
-    const config = buildSshConfig(managed.host, auth);
-    const transport = new SshSession(config, { onData, onState: emit }, (message) => {
-      // Нет пароля для аутентификации — просим пользователя.
-      if (!managed.disposed && !managed.dialogPasswordUsed) {
-        emit({ phase: 'auth-required', detail: 'Введите пароль для подключения' });
-      } else {
-        emit({ phase: 'error', message });
-      }
-    });
+    // hostVerifier подключается к HostKeyStore и ведёт в SshSession.handleHostKey — ssh2 держит
+    // handshake до ответа через verify(); transport присваивается ниже, до открытия соединения.
+    let transport: SshSession;
+    const hostVerifier: HostVerifier = (keyBlob, verify) => {
+      transport.handleHostKey(keyBlob, verify);
+    };
+    const config = buildSshConfig(managed.host, auth, hostVerifier);
+    transport = new SshSession(
+      config,
+      { onData, onState: emit },
+      (message) => {
+        // Нет пароля для аутентификации — просим пользователя.
+        if (!managed.disposed && !managed.dialogPasswordUsed) {
+          emit({ phase: 'auth-required', detail: 'Введите пароль для подключения' });
+        } else {
+          emit({ phase: 'error', message });
+        }
+      },
+      this.hostKeyStore,
+      managed.host.host,
+      managed.host.port ?? 22
+    );
     managed.transport = transport;
     transport.open(cols, rows);
   }

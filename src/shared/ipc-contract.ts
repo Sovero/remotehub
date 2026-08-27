@@ -41,14 +41,6 @@ export const IPC = {
   tunnelsAdd: 'tunnels:add',
   tunnelsStop: 'tunnels:stop',
   tunnelsList: 'tunnels:list',
-  rdpLaunch: 'rdp:launch',
-  rdpExited: 'rdp:exited',
-  rdpCertificate: 'rdp:certificate',
-  rdpCertificateAccept: 'rdp:certificate-accept',
-  rdpCertificateReject: 'rdp:certificate-reject',
-  rdpRect: 'rdp:rect',
-  rdpActivate: 'rdp:activate',
-  rdpOverlay: 'rdp:overlay',
   /** node-rdpjs: битмап из main в renderer */
   rdpjsBitmap: 'rdpjs:bitmap',
   /** node-rdpjs: состояние сессии */
@@ -94,6 +86,8 @@ export const IPC = {
   logsGet: 'logs:get',
   /** журнал событий: очистить */
   logsClear: 'logs:clear',
+  /** журнал событий: экспорт в файл */
+  logsExport: 'logs:export',
   /** журнал событий: запись из renderer в main */
   logAdd: 'log:add',
   /** журнал событий: новая запись (main → окна) */
@@ -201,38 +195,14 @@ export interface SessionStatePayload {
   state: SessionState;
 }
 
-export interface SessionAuthRequest {
-  sessionId: string;
-  password: string;
-}
-
-export interface RdpLaunchRequest {
-  sessionId: string;
-  host: import('./types').Host;
-}
-
-export interface RdpExitedPayload {
-  sessionId: string;
-  code: number | null;
-  error?: string;
-}
-
-export interface RdpCertificatePayload {
-  sessionId: string;
-  pending: boolean;
-}
-
-/** Результат запуска RDP: отдельного window-режима не существует. */
-export interface RdpLaunchResult {
-  ok: boolean;
-  error?: string;
-}
-
-/** Прямоугольник панели вкладки в CSS-пикселях (main переводит в физические). */
-export interface RdpRectRequest {
-  sessionId: string;
-  rect: { x: number; y: number; width: number; height: number };
-}
+/**
+ * Ответ пользователя на диалог auth-required: либо пароль (keyboard-interactive/
+ * ручной ввод), либо решение по host key сервера (см. SessionState 'auth-required'
+ * с detail вида "host-key:new:..." / "host-key:changed:..." — HostKeyStore/SshSession).
+ */
+export type SessionAuthRequest =
+  | { sessionId: string; password: string }
+  | { sessionId: string; hostKeyDecision: 'accept' | 'reject' };
 
 /** Состояние автообновления, которое main шлёт в рендерер. */
 export type UpdateStatus =
@@ -437,6 +407,18 @@ export interface LogAddRequest {
   level: LogLevel;
   source: LogSource;
   message: string;
+}
+
+export interface LogsExportRequest {
+  /** Готовый текст журнала (уже отфильтрован рендерером), построчно. */
+  text: string;
+}
+
+export interface LogsExportResult {
+  ok: boolean;
+  path?: string;
+  canceled?: boolean;
+  error?: string;
 }
 
 // ---- rdpjs (node-rdpjs) ----

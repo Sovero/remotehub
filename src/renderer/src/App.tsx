@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { SessionState } from '@shared/ipc-contract';
 import type { RdpEngine } from '@shared/types';
 import { findNode } from '@shared/tree';
 import { useApp } from './store';
@@ -81,15 +80,6 @@ export default function App(): React.JSX.Element {
     const offState = window.api.onSessionState((payload) => {
       useApp.getState().applySessionState(payload.sessionId, payload.state);
     });
-    const offRdp = window.api.onRdpExited((payload) => {
-      const state: SessionState = payload.error
-        ? { phase: 'error', message: payload.error }
-        : { phase: 'closed', reason: `Сессия RDP завершена (код ${payload.code ?? '?'})` };
-      useApp.getState().applySessionState(payload.sessionId, state);
-    });
-    const offRdpCertificate = window.api.onRdpCertificate((payload) => {
-      useApp.getState().applyRdpCertificate(payload.sessionId, payload.pending);
-    });
     const offVncErr = window.api.onVncError((payload) => {
       useApp
         .getState()
@@ -128,8 +118,6 @@ export default function App(): React.JSX.Element {
     return () => {
       offData();
       offState();
-      offRdp();
-      offRdpCertificate();
       offRdpjsState?.();
       offVncErr();
       offNotify();
@@ -300,7 +288,6 @@ function RdpPane({
     title: string;
     state: { phase: string };
     rdpEngine?: RdpEngine;
-    certificatePending?: boolean;
   };
   active: boolean;
 }): React.JSX.Element {
