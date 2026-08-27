@@ -101,7 +101,7 @@ export default function TerminalPane({
 
     const unsubscribeData = window.api.onSessionData((payload) => {
       if (payload.sessionId === tab.sessionId) {
-        term.write(payload.data);
+        term.write(atobBytes(payload.data));
       }
     });
 
@@ -265,4 +265,17 @@ function btoaUnicode(str: string): string {
   let bin = '';
   for (const b of bytes) bin += String.fromCharCode(b);
   return btoa(bin);
+}
+
+/**
+ * base64 → сырые байты для xterm.write(). Байты, а не decoded-строка:
+ * поток может разрезать многобайтовый UTF-8-символ между двумя чанками
+ * IPC-сообщений, xterm сам буферизует незавершённые последовательности
+ * на границах write() — decode здесь через TextDecoder потерял бы их.
+ */
+function atobBytes(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
 }

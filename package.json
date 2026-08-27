@@ -17,8 +17,8 @@
     "test:e2e:rdp": "vitest run tests/rdp-iron-e2e.test.ts",
     "help:shots": "node scripts/capture-help.mjs",
     "smoke:rdp:iron": "node scripts/smoke-rdp-iron.mjs",
-    "dist": "node scripts/bump-version.mjs && npm run build && electron-builder --win --x64 && node scripts/upload-latest-yml.mjs",
-    "dist:sign": "node scripts/bump-version.mjs && npm run build && node scripts/sign.mjs"
+    "dist": "node scripts/bump-version.mjs && electron-builder install-app-deps && npm run build && electron-builder --win --x64 && node scripts/upload-latest-yml.mjs",
+    "dist:sign": "node scripts/bump-version.mjs && electron-builder install-app-deps && npm run build && node scripts/sign.mjs"
   },
   "build": {
     "appId": "com.remotehub.app",
