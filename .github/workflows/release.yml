@@ -24,6 +24,27 @@ jobs:
           node-version: 20
           cache: npm
 
+      # package.json's "allowScripts" allowlists only bufferutil/utf-8-validate —
+      # everything else's install/postinstall scripts, including ssh2's own
+      # `node install.js`, are meant to be blocked. The npm that ships with
+      # actions/setup-node's node-version: 20 predates npm's allowScripts
+      # enforcement and runs every script regardless, silently ignoring that
+      # policy. That's how ssh2's install.js (lib/protocol/crypto's own
+      # `node-gyp rebuild --target=${process.version}`, hardcoded to whatever
+      # Node runs the script — never Electron's) got to compile its optional
+      # native crypto binding, and its optional cpu-features dependency, both
+      # against this runner's plain Node.js ABI. @electron/rebuild never
+      # rebuilds either afterwards — its dependency walker doesn't recognize
+      # ssh2's self-managed crypto build or cpu-features as needing a redo —
+      # so the wrong-ABI binaries shipped as-is in v0.1.15 through v0.1.19.
+      # Both are purely optional performance accelerators with a full pure-JS
+      # fallback already coded (see ssh2/lib/protocol/crypto's own try/catch
+      # and cpu-features' own guarded require in ssh2/lib/protocol/constants.js) —
+      # never building them is strictly safer than building them for the
+      # wrong runtime. A current npm enforces the allowlist already declared
+      # in package.json, so this npm ci simply never runs those scripts.
+      - run: npm install -g npm@11
+
       - run: npm ci
 
       - name: Determine version from tag
