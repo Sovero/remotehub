@@ -17,6 +17,34 @@ import { Updater } from './updater';
 import { RdpjsClientManager } from './rdp/rdpjs-client';
 import { installSmokeHooks } from './smoke';
 
+// Страховка от падения всего процесса из-за необязательного нативного модуля
+// (bufferutil/utf-8-validate у ws, и т.п.) — такой сбой не должен убивать
+// всё приложение диалогом Electron «A JavaScript error occurred». Основная
+// защита — try/catch внутри самих модулей (ws) плюс явный asarUnpack для их
+// .node-файлов; это — последний рубеж, если что-то всё же проскочит.
+process.on('uncaughtException', (err) => {
+  console.error('[fatal] uncaughtException:', err.stack || err.message);
+  try {
+    writeFileSync(
+      join(app.getPath('userData'), 'crash.log'),
+      `uncaughtException: ${err.stack || err.message}`
+    );
+  } catch {
+    // userData может быть недоступен на этом этапе — лог в консоль остаётся.
+  }
+  dialog.showErrorBox(
+    'Remote Hub — неожиданная ошибка',
+    'Приложение столкнулось с внутренней ошибкой и не может продолжить работу.\n\n' +
+      'Подробности сохранены в crash.log рядом с профилем приложения — приложите ' +
+      'этот файл, если сообщаете о проблеме.'
+  );
+  app.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+  const message = reason instanceof Error ? reason.stack || reason.message : String(reason);
+  console.error('[fatal] unhandledRejection:', message);
+});
+
 let mainWindow: BrowserWindow | null = null;
 let store: Store;
 
