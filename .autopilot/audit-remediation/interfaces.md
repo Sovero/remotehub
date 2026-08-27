@@ -113,4 +113,12 @@
 - `src/main/index.ts` теперь 389 строк — только реальный запуск приложения.
   `createWindow()` — без аргументов (RdpManager убран тикетом 02).
 
-## Из тикета 04 — (заполняется после завершения)
+## Из тикета 04 — LogDialog: поиск/фильтр/экспорт
+
+- `IPC.logsExport = 'logs:export'`; `LogsExportRequest { text }`;
+  `LogsExportResult { ok; path?; canceled?; error? }`;
+  `window.api.logsExport(text): Promise<LogsExportResult>`.
+- `formatEntry(e: LogEntry): string` в `LogDialog.tsx` — единый построчный
+  формат для копирования/экспорта/диагностики, не дублируй его.
+- Тикет — последний в этом заходе; после него все требования из манифеста
+  закрыты, кроме R06 (вне рамок).

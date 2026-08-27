@@ -86,6 +86,8 @@ export const IPC = {
   logsGet: 'logs:get',
   /** журнал событий: очистить */
   logsClear: 'logs:clear',
+  /** журнал событий: экспорт в файл */
+  logsExport: 'logs:export',
   /** журнал событий: запись из renderer в main */
   logAdd: 'log:add',
   /** журнал событий: новая запись (main → окна) */
@@ -405,6 +407,18 @@ export interface LogAddRequest {
   level: LogLevel;
   source: LogSource;
   message: string;
+}
+
+export interface LogsExportRequest {
+  /** Готовый текст журнала (уже отфильтрован рендерером), построчно. */
+  text: string;
+}
+
+export interface LogsExportResult {
+  ok: boolean;
+  path?: string;
+  canceled?: boolean;
+  error?: string;
 }
 
 // ---- rdpjs (node-rdpjs) ----

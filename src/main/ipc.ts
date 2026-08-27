@@ -24,7 +24,9 @@ import {
   type TunnelAddRequest,
   type VncOpenRequest,
   type IronStartRequest,
-  type LogAddRequest
+  type LogAddRequest,
+  type LogsExportRequest,
+  type LogsExportResult
 } from '../shared/ipc-contract';
 import type { CredentialSet, Settings, TreeNode, HistoryEntry, Runbook, HostStatus } from '../shared/types';
 import { parseChangelog } from '../shared/changelog';
@@ -73,6 +75,25 @@ export function registerIpc(
   ipcMain.handle(IPC.logsClear, () => {
     clearLogs();
     return { ok: true };
+  });
+
+  ipcMain.handle(IPC.logsExport, async (e, req: LogsExportRequest): Promise<LogsExportResult> => {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    const options: Electron.SaveDialogOptions = {
+      title: 'Экспорт журнала',
+      defaultPath: 'remote-hub-log.txt',
+      filters: [{ name: 'Текстовый файл', extensions: ['txt'] }]
+    };
+    const { canceled, filePath } = win
+      ? await dialog.showSaveDialog(win, options)
+      : await dialog.showSaveDialog(options);
+    if (canceled || !filePath) return { ok: false, canceled: true };
+    try {
+      writeFileSync(filePath, req.text, 'utf8');
+      return { ok: true, path: filePath };
+    } catch (err) {
+      return { ok: false, error: `Не удалось записать файл: ${(err as Error).message}` };
+    }
   });
 
   // Записи из renderer (переходы состояний сессий, ошибки UI) попадают в тот же журнал.

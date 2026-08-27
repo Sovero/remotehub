@@ -200,6 +200,8 @@ const api = {
   getLogs: (): Promise<{ entries: import('../shared/ipc-contract').LogEntry[] }> =>
     ipcRenderer.invoke(IPC.logsGet),
   clearLogs: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.logsClear),
+  logsExport: (text: string): Promise<import('../shared/ipc-contract').LogsExportResult> =>
+    ipcRenderer.invoke(IPC.logsExport, { text }),
   addLog: (req: import('../shared/ipc-contract').LogAddRequest): void =>
     ipcRenderer.send(IPC.logAdd, req),
   onLogEntry: (cb: (entry: import('../shared/ipc-contract').LogEntry) => void): (() => void) => {
