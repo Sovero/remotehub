@@ -51,6 +51,20 @@ jobs:
             fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + '\n');
           "
 
+      - name: Rebuild native modules for Electron's ABI
+        run: npx electron-builder install-app-deps
+
+      # electron-vite build (dальше) копирует нативные .node-бинарники,
+      # на которые ссылаются забандленные зависимости (ssh2 → cpu-features,
+      # ssh2 → его собственный sshcrypto.node), внутрь чанков бандла — и
+      # переписывает их require() мимо try/catch, которым сами зависимости
+      # их оборачивают. Если на этот момент бинарники ещё собраны под
+      # Node.js раннера (после npm ci), а не под Electron, скопированная
+      # копия так и останется с чужим ABI навсегда — electron-builder'овский
+      # автоматический @electron/rebuild чуть позже увидит и починит только
+      # оригиналы в node_modules, а не эту уже сделанную копию. Явный
+      # install-app-deps здесь, до сборки бандла, гарантирует, что копировать
+      # будет уже нечего чинить.
       - name: Build renderer and main bundles
         run: npm run build
 
