@@ -1,52 +1,30 @@
 {
-  "slug": "embedded-only-connections",
-  "title": "Все подключения только внутри окна",
+  "slug": "audit-remediation",
+  "title": "Устранение находок аудита Remote Hub",
   "mode": "full",
   "depth": "deep",
-  "tier": "T0",
-  "startedAt": "2026-08-23T09:40:00+03:00",
-  "updatedAt": "2026-08-23T12:19:00+03:00",
-  "finishedAt": "2026-08-23T12:19:00+03:00",
+  "tier": "T2",
+  "startedAt": "2026-08-27T09:40:00+03:00",
+  "updatedAt": "2026-08-27T10:22:00+03:00",
+  "finishedAt": null,
   "requirements": {
-    "total": 8,
-    "done": 8,
-    "inTicket": 0,
-    "inSpec": 0,
-    "placeholder": 0,
-    "deferred": 0,
-    "dropped": 0
+    "total": 12, "done": 0, "inTicket": 12, "inSpec": 0,
+    "placeholder": 0, "deferred": 1, "dropped": 0
   },
   "tickets": [
-    {
-      "id": "01",
-      "title": "Только встроенные подключения",
-      "requirements": ["R01", "R02", "R03", "R04", "R05", "R06", "R07", "R08"],
-      "blockedBy": [],
-      "wave": 1,
-      "status": "done",
-      "startedAt": "2026-08-23T09:41:00+03:00",
-      "finishedAt": "2026-08-23T12:18:00+03:00",
-      "retries": 0,
-      "files": [
-        "src/main/rdp/manager.ts",
-        "src/main/rdp/generator.ts",
-        "src/main/rdp/launcher.ts",
-        "src/main/rdp/embed.ts",
-        "src/main/rdp/win32-engine.ts",
-        "src/shared/ipc-contract.ts",
-        "src/preload/index.ts",
-        "src/renderer/src/store.ts",
-        "src/renderer/src/App.tsx",
-        "src/renderer/src/styles/global.css",
-        "src/renderer/src/components/dialogs/helpContent.tsx",
-        "src/main/index.ts",
-        "src/main/ipc.ts",
-        "tests/rdp-embed.test.ts",
-        "tests/rdp.test.ts",
-        "CHANGELOG.md",
-        "package.json"
-      ]
-    }
+    { "id": "01", "title": "Проверка host key при SSH-подключении", "requirements": ["R01", "R01i.1", "R01i.2", "R01.1"], "blockedBy": [], "wave": 1, "status": "pending" },
+    { "id": "02", "title": "Удаление неиспользуемого COM-хоста RDP", "requirements": ["R02"], "blockedBy": [], "wave": 1, "status": "pending" },
+    { "id": "03", "title": "Разгрузка main/index.ts и откат мёртвой правки сборки", "requirements": ["R03", "R03i.1", "R04"], "blockedBy": ["02"], "wave": 2, "status": "pending" },
+    { "id": "04", "title": "Поиск, фильтр по источнику и экспорт в журнале событий", "requirements": ["R05.1", "R05.2", "R05.3", "R05.4", "R05.5"], "blockedBy": [], "wave": 1, "status": "pending" }
   ],
-  "wave": 1
+  "debt": {
+    "placeholders": [],
+    "assumptions": [
+      "ASSUMPTION-1: COM-хост/MsRdpClient9 удаляется целиком, а не остаётся fallback-движком (spec §2)",
+      "ASSUMPTION-2: незакоммиченная правка electron.vite.config.ts откатывается, а не достраивается (spec §4)"
+    ],
+    "emptyEnv": []
+  },
+  "additions": [],
+  "blind": null
 }
