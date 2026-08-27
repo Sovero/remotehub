@@ -34,7 +34,9 @@
       "CHANGELOG.md"
     ],
     "asarUnpack": [
-      "node_modules/nanoid/**"
+      "node_modules/nanoid/**",
+      "node_modules/bufferutil/**",
+      "node_modules/utf-8-validate/**"
     ],
     "publish": [
       {
