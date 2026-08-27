@@ -51,6 +51,9 @@ jobs:
             fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + '\n');
           "
 
+      - name: Build renderer and main bundles
+        run: npm run build
+
       - name: Build installer
         run: npx electron-builder --win --x64 --publish never
 
