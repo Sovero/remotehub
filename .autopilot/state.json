@@ -5,17 +5,17 @@
   "depth": "deep",
   "tier": "T2",
   "startedAt": "2026-08-27T09:40:00+03:00",
-  "updatedAt": "2026-08-27T10:22:00+03:00",
-  "finishedAt": null,
+  "updatedAt": "2026-08-27T11:58:00+03:00",
+  "finishedAt": "2026-08-27T11:58:00+03:00",
   "requirements": {
-    "total": 12, "done": 0, "inTicket": 12, "inSpec": 0,
+    "total": 12, "done": 12, "inTicket": 0, "inSpec": 0,
     "placeholder": 0, "deferred": 1, "dropped": 0
   },
   "tickets": [
-    { "id": "01", "title": "Проверка host key при SSH-подключении", "requirements": ["R01", "R01i.1", "R01i.2", "R01.1"], "blockedBy": [], "wave": 1, "status": "pending" },
-    { "id": "02", "title": "Удаление неиспользуемого COM-хоста RDP", "requirements": ["R02"], "blockedBy": [], "wave": 1, "status": "pending" },
-    { "id": "03", "title": "Разгрузка main/index.ts и откат мёртвой правки сборки", "requirements": ["R03", "R03i.1", "R04"], "blockedBy": ["02"], "wave": 2, "status": "pending" },
-    { "id": "04", "title": "Поиск, фильтр по источнику и экспорт в журнале событий", "requirements": ["R05.1", "R05.2", "R05.3", "R05.4", "R05.5"], "blockedBy": [], "wave": 1, "status": "pending" }
+    { "id": "01", "title": "Проверка host key при SSH-подключении", "requirements": ["R01", "R01i.1", "R01i.2", "R01.1"], "blockedBy": [], "wave": 1, "status": "done", "commit": "2d5ef87" },
+    { "id": "02", "title": "Удаление неиспользуемого COM-хоста RDP", "requirements": ["R02"], "blockedBy": [], "wave": 1, "status": "done", "commit": "b606cfd" },
+    { "id": "03", "title": "Разгрузка main/index.ts и откат мёртвой правки сборки", "requirements": ["R03", "R03i.1", "R04"], "blockedBy": ["02"], "wave": 2, "status": "done", "commit": "afe9ade" },
+    { "id": "04", "title": "Поиск, фильтр по источнику и экспорт в журнале событий", "requirements": ["R05.1", "R05.2", "R05.3", "R05.4", "R05.5"], "blockedBy": [], "wave": 1, "status": "done", "commit": "9b1b62f" }
   ],
   "debt": {
     "placeholders": [],
@@ -26,5 +26,13 @@
     "emptyEnv": []
   },
   "additions": [],
-  "blind": null
+  "blind": {
+    "checkedAt": "2026-08-27T11:58:00+03:00",
+    "agreedWithManifest": 5,
+    "drift": 0,
+    "notes": [
+      "R05.5: рендер-лимит (не буквальная виртуализация) — осознанная замена из spec §5, не расхождение по сути.",
+      "R06 (deferred) подтверждён блайндом как «не реализовано» — ожидаемо."
+    ]
+  }
 }
