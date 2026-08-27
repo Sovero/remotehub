@@ -201,10 +201,14 @@ export interface SessionStatePayload {
   state: SessionState;
 }
 
-export interface SessionAuthRequest {
-  sessionId: string;
-  password: string;
-}
+/**
+ * Ответ пользователя на диалог auth-required: либо пароль (keyboard-interactive/
+ * ручной ввод), либо решение по host key сервера (см. SessionState 'auth-required'
+ * с detail вида "host-key:new:..." / "host-key:changed:..." — HostKeyStore/SshSession).
+ */
+export type SessionAuthRequest =
+  | { sessionId: string; password: string }
+  | { sessionId: string; hostKeyDecision: 'accept' | 'reject' };
 
 export interface RdpLaunchRequest {
   sessionId: string;

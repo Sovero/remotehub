@@ -1,4 +1,4 @@
-import type { ConnectConfig } from 'ssh2';
+import type { ConnectConfig, HostVerifier } from 'ssh2';
 import type { CredentialSet, Host } from '../../shared/types';
 import { unsealSecret, type Sealer } from '../store/crypto-format';
 
@@ -53,8 +53,12 @@ export function effectiveUsername(host: Host, credential: CredentialSet | null):
   return credential?.username || host.username || '';
 }
 
-/** Опции ssh2 из хоста и разрешённой аутентификации. */
-export function buildSshConfig(host: Host, auth: AuthResolution): ConnectConfig {
+/**
+ * Опции ssh2 из хоста и разрешённой аутентификации.
+ * hostVerifier — проверка host key сервера (TOFU через HostKeyStore), см.
+ * SshSession.handleHostKey/resolveHostKey.
+ */
+export function buildSshConfig(host: Host, auth: AuthResolution, hostVerifier?: HostVerifier): ConnectConfig {
   return {
     host: host.host,
     port: host.port ?? 22,
@@ -67,7 +71,8 @@ export function buildSshConfig(host: Host, auth: AuthResolution): ConnectConfig 
     passphrase: auth.passphrase,
     agent: auth.agent,
     // allowAgentAuthForOnly: true,
-    algorithms: undefined
+    algorithms: undefined,
+    hostVerifier
   };
 }
 

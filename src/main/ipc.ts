@@ -264,7 +264,11 @@ export function registerIpc(
   });
 
   ipcMain.handle(IPC.sessionAuth, (_e, req: SessionAuthRequest) => {
-    sessions.retryWithPassword(req.sessionId, req.password);
+    if ('hostKeyDecision' in req) {
+      sessions.resolveHostKey(req.sessionId, req.hostKeyDecision === 'accept');
+    } else {
+      sessions.retryWithPassword(req.sessionId, req.password);
+    }
     return { ok: true };
   });
 

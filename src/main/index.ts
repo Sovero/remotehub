@@ -6,6 +6,7 @@ import { registerIpc } from './ipc';
 import { RdpManager } from './rdp/manager';
 import { stopAllIronGateways } from './rdp/iron-sessions';
 import { SessionManager } from './sessions/manager';
+import { HostKeyStore } from './sessions/host-keys';
 import { SftpManager } from './sftp/manager';
 import { TunnelManager } from './tunnels/manager';
 import { VncManager } from './vnc/manager';
@@ -2034,7 +2035,12 @@ if (!gotLock) {
         win.webContents.send(channel, payload);
       }
     };
-    const sessions = new SessionManager(dpapiSealer, broadcast as (c: 'session:data' | 'session:state', p: unknown) => void);
+    const hostKeyStore = new HostKeyStore(join(app.getPath('userData'), 'hostkeys.json'));
+    const sessions = new SessionManager(
+      dpapiSealer,
+      broadcast as (c: 'session:data' | 'session:state', p: unknown) => void,
+      hostKeyStore
+    );
     const getParentHwnd = (): bigint | null => {
       if (!mainWindow || mainWindow.isDestroyed()) return null;
       try {

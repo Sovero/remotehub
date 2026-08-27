@@ -38,6 +38,31 @@ export function appLog(
   }
 }
 
+export interface HostKeyPrompt {
+  kind: 'new' | 'changed';
+  host: string;
+  port: string;
+  algo: string;
+  /** Без префикса "SHA256:" — его добавляет только отображение. */
+  fingerprint: string;
+  /** Только для kind: 'changed' — отпечаток, который был сохранён раньше. */
+  oldFingerprint?: string;
+}
+
+/**
+ * Распознаёт SessionState.detail вида "host-key:new:<host>:<port>:<algo>:<fingerprint>"
+ * или "host-key:changed:<host>:<port>:<algo>:<fingerprint>:<oldFingerprint>" — формат,
+ * которым main (SshSession.handleHostKey) сообщает об auth-required из-за проверки
+ * host key. Возвращает null для обычного запроса пароля.
+ */
+export function parseHostKeyDetail(detail: string | undefined): HostKeyPrompt | null {
+  if (!detail || !detail.startsWith('host-key:')) return null;
+  const parts = detail.split(':');
+  const [, kindRaw, host, port, algo, fingerprint, oldFingerprint] = parts;
+  if ((kindRaw !== 'new' && kindRaw !== 'changed') || !host || !port || !algo || !fingerprint) return null;
+  return { kind: kindRaw, host, port, algo, fingerprint, oldFingerprint };
+}
+
 export interface SessionTab {
   sessionId: string;
   hostId: string | null;
@@ -138,6 +163,8 @@ interface AppState {
   closeTab: (sessionId: string, force?: boolean) => Promise<void>;
   switchTab: (sessionId: string) => void;
   submitPassword: (sessionId: string, password: string) => Promise<void>;
+  /** Ответ пользователя на диалог подтверждения host key сервера (см. parseHostKeyDetail). */
+  submitHostKeyDecision: (sessionId: string, accept: boolean) => Promise<void>;
   applySessionState: (sessionId: string, state: SessionState) => void;
   saveAdHocAsProfile: (sessionId: string) => Promise<void>;
   persistTabs: () => void;
@@ -803,12 +830,23 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   submitPassword: async (sessionId, password) => {
-    await window.api.sessionAuth(sessionId, password);
+    await window.api.sessionAuth({ sessionId, password });
     set((s) => ({
       tabs: s.tabs.map((t) =>
         t.sessionId === sessionId ? { ...t, state: { phase: 'connecting' } } : t
       )
     }));
+  },
+
+  submitHostKeyDecision: async (sessionId, accept) => {
+    await window.api.sessionAuth({ sessionId, hostKeyDecision: accept ? 'accept' : 'reject' });
+    if (accept) {
+      // Отказ переводит сессию в error — это состояние придёт по IPC от SshSession.
+      // Принятие продолжает тот же handshake, поэтому обновляем фазу оптимистично сами.
+      set((s) => ({
+        tabs: s.tabs.map((t) => (t.sessionId === sessionId ? { ...t, state: { phase: 'connecting' } } : t))
+      }));
+    }
   },
 
   applySessionState: (sessionId, state) => {
@@ -841,10 +879,16 @@ export const useApp = create<AppState>((set, get) => ({
     if (state.phase === 'auth-required') {
       const tab = get().tabs.find((t) => t.sessionId === sessionId);
       if (tab) {
+        const hostKey = parseHostKeyDetail(state.detail);
+        const title = !hostKey
+          ? `Пароль: ${tab.title}`
+          : hostKey.kind === 'changed'
+            ? `Внимание: ключ сервера изменился — ${tab.title}`
+            : `Новый сервер: ${tab.title}`;
         get().openDialog({
           type: 'password',
           sessionId,
-          title: `Пароль: ${tab.title}`,
+          title,
           detail: state.detail ?? 'Введите пароль'
         });
       }

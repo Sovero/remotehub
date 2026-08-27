@@ -16,6 +16,7 @@ import {
   type RunbookRunRequest,
   type RunbookStepResultPayload,
   type RunbookStopRequest,
+  type SessionAuthRequest,
   type SessionDataPayload,
   type SessionOpenRequest,
   type SessionStatePayload,
@@ -77,8 +78,8 @@ const api = {
     ipcRenderer.send(IPC.sessionResize, { sessionId, cols, rows }),
   sessionClose: (sessionId: string): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke(IPC.sessionClose, sessionId),
-  sessionAuth: (sessionId: string, password: string): Promise<{ ok: boolean }> =>
-    ipcRenderer.invoke(IPC.sessionAuth, { sessionId, password }),
+  sessionAuth: (req: SessionAuthRequest): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IPC.sessionAuth, req),
   rdpLaunch: (req: { sessionId: string; host: import('../shared/types').Host }): Promise<{
     ok: boolean;
     error?: string;

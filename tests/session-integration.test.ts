@@ -1,9 +1,18 @@
 import { generateKeyPairSync } from 'crypto';
 import { once } from 'events';
+import { mkdtempSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { Server } from 'ssh2';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { SessionState } from '../src/shared/ipc-contract';
+import { HostKeyStore } from '../src/main/sessions/host-keys';
 import { SshSession } from '../src/main/sessions/ssh-session';
+
+// Конфиг в этом файле не задаёт hostVerifier — ssh2 принимает host key сервера
+// по умолчанию (без проверки), поэтому HostKeyStore здесь никогда не читается
+// и достаточно временного файла — сама TOFU-логика проверяется в host-keys.test.ts.
+const hostKeyStore = new HostKeyStore(join(mkdtempSync(join(tmpdir(), 'remotehub-ssh-session-')), 'hostkeys.json'));
 
 function makeHostKey(): string {
   return generateKeyPairSync('rsa', { modulusLength: 1024 })
@@ -79,7 +88,10 @@ function makeHarness(config: { port: number; password?: string }) {
     },
     () => {
       authRequired = true;
-    }
+    },
+    hostKeyStore,
+    '127.0.0.1',
+    config.port
   );
   return { session, states, data, isAuthRequired: () => authRequired };
 }
