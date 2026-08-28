@@ -13,9 +13,9 @@ import TerminalPane from './components/TerminalPane';
 import SessionOverlay from './components/SessionOverlay';
 import SftpPane from './components/SftpPane';
 import VncViewer from './components/VncViewer';
-import UpdateBar from './components/UpdateBar';
 import RdpCanvas from './components/RdpCanvas';
 import IronRdpView from './components/IronRdpView';
+import LegacyRdpView from './components/LegacyRdpView';
 import Icon from './components/Icon';
 
 export default function App(): React.JSX.Element {
@@ -28,7 +28,15 @@ export default function App(): React.JSX.Element {
   const accent = useApp((s) => s.settings.accent);
   const settings = useApp((s) => s.settings);
 
+  const dialog = useApp((s) => s.dialog);
   const onboardingOpen = useApp((s) => s.onboardingOpen);
+  // Пока модальный диалог/онбординг открыт поверх встроенного нативного окна
+  // legacy-движка RDP, оно выше Chromium в Z-порядке и перехватывает клики —
+  // без этого не закрываются диалоги и падает navigator.clipboard.writeText()
+  // (документ теряет фокус). Прячем встроенные окна на время показа диалога.
+  useEffect(() => {
+    window.api.rdpLegacyOverlay?.(dialog !== null || onboardingOpen);
+  }, [dialog, onboardingOpen]);
   // Авто-открытие мастера при первом запуске: один раз за сессию и не поверх открытого диалога.
   const tourAutoOpened = useRef(false);
   useEffect(() => {
@@ -103,6 +111,14 @@ export default function App(): React.JSX.Element {
     const offUpdate = window.api.onUpdateState((state) => {
       useApp.getState().applyUpdateState(state);
     });
+    const offRdpLegacyExited = window.api.onRdpLegacyExited?.((payload) => {
+      const s = useApp.getState();
+      if (payload.error) {
+        s.applySessionState(payload.sessionId, { phase: 'error', message: payload.error });
+      } else {
+        s.applySessionState(payload.sessionId, { phase: 'closed', reason: 'RDP-сессия завершена' });
+      }
+    });
     const offRdpjsState = window.api.onRdpjsState?.((payload) => {
       const s = useApp.getState();
       const phase = payload.state === 'connected' ? 'connected'
@@ -119,6 +135,7 @@ export default function App(): React.JSX.Element {
       offData();
       offState();
       offRdpjsState?.();
+      offRdpLegacyExited?.();
       offVncErr();
       offNotify();
       offMenu();
@@ -179,7 +196,6 @@ export default function App(): React.JSX.Element {
       </aside>
       <main className="workspace">
         <TabBar />
-        <UpdateBar />
         <section className="content">
           {tabs.length === 0 ? (
             tree.length === 0 ? (
@@ -270,14 +286,6 @@ function EmptyWorkspace(): React.JSX.Element {
   );
 }
 
-const RDP_RESOLUTIONS = [
-  [1024, 768],
-  [1280, 800],
-  [1366, 768],
-  [1600, 900],
-  [1920, 1080]
-] as const;
-
 function RdpPane({
   tab,
   active
@@ -292,8 +300,6 @@ function RdpPane({
   active: boolean;
 }): React.JSX.Element {
   const reconnectTab = useApp((s) => s.reconnectTab);
-  const relaunchRdp = useApp((s) => s.relaunchRdp);
-  const saveRdpResolution = useApp((s) => s.saveRdpResolution);
   const tree = useApp((s) => s.tree);
   const selectedRdpEngine = useApp((s) => s.settings.rdpEngine);
   const rdpEngine = tab.rdpEngine ?? selectedRdpEngine;
@@ -303,24 +309,8 @@ function RdpPane({
     const node = findNode(tree, tab.hostId);
     return node && node.kind === 'host' ? node : null;
   }, [tree, tab.hostId]);
-  const [immersive, setImmersive] = useState(() => host?.rdp.screenMode === 'fullscreen');
 
-  useEffect(() => {
-    setImmersive(host?.rdp.screenMode === 'fullscreen');
-  }, [host?.rdp.screenMode]);
-
-  const currentRes = host ? `${host.rdp.width}×${host.rdp.height}` : '';
-  const resOptions = [...RDP_RESOLUTIONS.map(([w, h]) => `${w}×${h}`)];
-  if (currentRes && !resOptions.includes(currentRes)) resOptions.unshift(currentRes);
-
-  const setResolution = (value: string): void => {
-    const [w, h] = value.split('×').map(Number);
-    if (w && h && (w !== host?.rdp.width || h !== host?.rdp.height)) {
-      void saveRdpResolution(tab.sessionId, w, h);
-    }
-  };
-
-  if (rdpEngine !== 'iron' && tab.state.phase !== 'connected') {
+  if (rdpEngine !== 'iron' && rdpEngine !== 'legacy' && tab.state.phase !== 'connected') {
     return (
       <div className="placeholder-panel">
         <div className="placeholder-icon">
@@ -332,42 +322,17 @@ function RdpPane({
     );
   }
 
-  const toggleImmersive = (): void => {
-    if (!host) return;
-    const next = !immersive;
-    setImmersive(next);
-    void relaunchRdp(tab.sessionId, { screenMode: next ? 'fullscreen' : 'window' });
-  };
-
   const rdpWidth = host?.rdp.width ?? 1366;
   const rdpHeight = host?.rdp.height ?? 768;
 
   return (
-    <div className={`rdp-pane rdp-pane--embedded${immersive ? ' rdp-pane--immersive' : ''}`}>
+    <div className="rdp-pane rdp-pane--embedded">
       <div className="rdp-toolbar">
-        <label className="rdp-control" title="Новое разрешение применится при следующем подключении — текущая сессия не перезапускается">
-          <span className="rdp-control-label">Разрешение</span>
-          <select className="input" value={currentRes} onChange={(e) => setResolution(e.target.value)}>
-            {resOptions.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
-        </label>
         {host?.rdp.multiMonitor && (
           <span className="rdp-mode-note" title="Режим всех мониторов адаптирован к одной встроенной сцене">
             <Icon name="window" size={12} /> Все мониторы · внутри вкладки
           </span>
         )}
-        <button
-          className="btn btn--sm"
-          title={immersive ? 'Вернуть оконный режим внутри приложения' : 'Развернуть RDP на рабочую область приложения'}
-          onClick={toggleImmersive}
-        >
-          <Icon name={immersive ? 'window' : 'expand'} size={13} />
-          {immersive ? 'Окно' : 'На весь экран'}
-        </button>
         <button
           className="btn btn--sm"
           title="Переподключить сессию заново"
@@ -395,6 +360,28 @@ function RdpPane({
                 <>
                   <Icon name="spinner" size={30} className="icon-spin" />
                   <span>Подключение через IronRDP…</span>
+                </>
+              ) : (
+                <span>
+                  {tab.state.phase === 'error'
+                    ? ((tab.state as { message?: string }).message ?? 'Ошибка RDP')
+                    : ((tab.state as { reason?: string }).reason ?? 'Сессия завершена')}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      ) : rdpEngine === 'legacy' ? (
+        <div className="iron-rdp-stage">
+          {host && <LegacyRdpView sessionId={tab.sessionId} host={host} active={active} />}
+          {tab.state.phase !== 'connected' && (
+            <div
+              className={`iron-rdp-overlay${tab.state.phase === 'error' ? ' iron-rdp-overlay--error' : ''}`}
+            >
+              {tab.state.phase === 'connecting' ? (
+                <>
+                  <Icon name="spinner" size={30} className="icon-spin" />
+                  <span>Подключение через системный RDP…</span>
                 </>
               ) : (
                 <span>

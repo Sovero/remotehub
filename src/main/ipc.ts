@@ -1,7 +1,7 @@
 import { mkdirSync, renameSync, rmdirSync, unlinkSync, writeFileSync } from 'fs';
 import { readFile } from 'fs/promises';
 import { basename, join, posix } from 'path';
-import { BrowserWindow, dialog, ipcMain } from 'electron';
+import { BrowserWindow, dialog, ipcMain, screen } from 'electron';
 import { app } from 'electron';
 import { nanoid } from 'nanoid';
 import {
@@ -26,13 +26,16 @@ import {
   type IronStartRequest,
   type LogAddRequest,
   type LogsExportRequest,
-  type LogsExportResult
+  type LogsExportResult,
+  type RdpLegacyLaunchRequest,
+  type RdpLegacyRectRequest
 } from '../shared/ipc-contract';
 import type { CredentialSet, Settings, TreeNode, HistoryEntry, Runbook, HostStatus } from '../shared/types';
 import { parseChangelog } from '../shared/changelog';
 import { addLog, clearLogs, getLogs, onLog } from './log';
 import { resolveAuth } from './sessions/config';
 import { startIronGateway, stopIronGateway } from './rdp/iron-sessions';
+import type { RdpManager } from './rdp/manager';
 import { readFileSync } from 'fs';
 import { buildExport, parseProfileExport } from '../shared/tree';
 import { checkPort, pingHost } from './availability';
@@ -57,7 +60,8 @@ export function registerIpc(
   sftp: SftpManager,
   tunnels: TunnelManager,
   updater: Updater,
-  rdpjs: RdpjsClientManager
+  rdpjs: RdpjsClientManager,
+  rdpLegacy: RdpManager
 ): void {
   const resolveCredential = (host: { credentialId?: string | null }): CredentialSet | null =>
     host.credentialId ? store.loadCredentials().data.find((c) => c.id === host.credentialId) ?? null : null;
@@ -268,6 +272,7 @@ export function registerIpc(
     sessions.close(sessionId);
     rdpjs.disconnect(sessionId);
     await stopIronGateway(sessionId);
+    rdpLegacy.stop(sessionId);
     vnc.close(sessionId);
     sftp.close(sessionId);
     tunnels.stopAll(sessionId);
@@ -373,6 +378,56 @@ export function registerIpc(
     await stopIronGateway(sessionId);
     addLog('info', 'iron', `IronRDP: мост сессии ${sessionId} остановлен`);
     return { ok: true };
+  });
+
+  // ---- legacy (MsRdpClient ActiveX, встроенный HWND — запасной движок для
+  // серверов с сертификатом, несовместимым с TLS-стеком IronRDP) ----
+  ipcMain.handle(IPC.rdpLegacyLaunch, async (_e, req: RdpLegacyLaunchRequest) => {
+    const credential = resolveCredential(req.host);
+    const res = await rdpLegacy.launch(req.host, credential, req.sessionId);
+    addLog(
+      res.ok ? 'info' : 'error',
+      'rdp',
+      res.ok
+        ? `RDP (legacy): сессия ${req.sessionId} запущена для ${req.host.host}:${req.host.port ?? 3389}`
+        : `RDP (legacy): не удалось запустить сессию ${req.sessionId} — ${res.error ?? 'неизвестная ошибка'}`
+    );
+    return res;
+  });
+
+  ipcMain.on(IPC.rdpLegacyStop, (_e, sessionId: string) => {
+    rdpLegacy.stop(sessionId);
+  });
+
+  // Прямоугольник панели вкладки (CSS-пиксели) → физические пиксели и в менеджер.
+  ipcMain.on(IPC.rdpLegacyRect, (e, req: RdpLegacyRectRequest) => {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    if (!win || win.isDestroyed()) return;
+    const sf = screen.getDisplayMatching(win.getBounds()).scaleFactor;
+    rdpLegacy.setRect(req.sessionId, {
+      x: Math.round(req.rect.x * sf),
+      y: Math.round(req.rect.y * sf),
+      width: Math.round(req.rect.width * sf),
+      height: Math.round(req.rect.height * sf)
+    });
+  });
+
+  // Переключение вкладок: показать окно активной legacy-сессии, спрятать остальные.
+  ipcMain.on(IPC.rdpLegacyActivate, (_e, sessionId: string) => {
+    rdpLegacy.activate(sessionId);
+  });
+
+  ipcMain.on(IPC.rdpLegacyHide, (_e, sessionId: string) => {
+    rdpLegacy.hide(sessionId);
+  });
+
+  // Модальный диалог/онбординг открыт поверх встроенного нативного окна: пока
+  // он виден, окно нужно спрятать — иначе, будучи выше Chromium в Z-порядке,
+  // оно перехватывает клики и держит клавиатурный фокус на себе, из-за чего
+  // диалоги не закрываются и navigator.clipboard.writeText() падает как
+  // "документ не в фокусе".
+  ipcMain.on(IPC.rdpLegacyOverlay, (_e, overlay: boolean) => {
+    rdpLegacy.setOverlay(overlay);
   });
 
   // ---- VNC ----

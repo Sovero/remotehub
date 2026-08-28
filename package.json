@@ -37,7 +37,15 @@
       "node_modules/nanoid/**",
       "node_modules/bufferutil/**",
       "node_modules/utf-8-validate/**",
-      "node_modules/cpu-features/**"
+      "node_modules/cpu-features/**",
+      "node_modules/koffi/**",
+      "node_modules/@koromix/**"
+    ],
+    "extraResources": [
+      {
+        "from": "src/native/rdp-com-host.exe",
+        "to": "rdp-com-host.exe"
+      }
     ],
     "publish": [
       {
@@ -78,6 +86,7 @@
     "@xterm/addon-web-links": "^0.12.0",
     "bufferutil": "^4.1.0",
     "electron-updater": "^6.8.9",
+    "koffi": "^3.1.6",
     "nanoid": "^6.0.1",
     "node-rdpjs": "^0.3.0",
     "node-rdpjs-2": "^0.3.5",
@@ -106,6 +115,7 @@
   },
   "allowScripts": {
     "bufferutil@4.1.0": true,
-    "utf-8-validate@6.0.6": true
+    "utf-8-validate@6.0.6": true,
+    "koffi@3.1.6": true
   }
 }

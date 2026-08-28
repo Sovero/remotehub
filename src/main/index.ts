@@ -15,7 +15,9 @@ import { dpapiSealer } from './store/crypto';
 import { sealSecret } from './store/crypto-format';
 import { Updater } from './updater';
 import { RdpjsClientManager } from './rdp/rdpjs-client';
+import { RdpManager } from './rdp/manager';
 import { installSmokeHooks } from './smoke';
+import { addLog } from './log';
 
 // Страховка от падения всего процесса из-за необязательного нативного модуля
 // (bufferutil/utf-8-validate у ws, и т.п.) — такой сбой не должен убивать
@@ -227,6 +229,19 @@ function createWindow(): void {
     }
   });
 
+  // Всё, что renderer пишет в console (включая внутренний лог WASM-клиента
+  // IronRDP — он подробно логирует X.224/TLS/CredSSP/NLA через console.*),
+  // попадает в журнал приложения: без этого шаги протокола после того, как
+  // шлюз отрапортовал "connected", были видны только в devtools, недоступных
+  // обычному пользователю при диагностике зависшего подключения.
+  mainWindow.webContents.on('console-message', (_event, level, message) => {
+    if (!message) return;
+    // Chromium ConsoleMessageLevel: 0=verbose,1=info,2=warning,3=error.
+    const mapped = level >= 3 ? 'error' : level === 2 ? 'warn' : 'info';
+    const source = /iron|rdp/i.test(message) ? 'iron' : 'app';
+    addLog(mapped, source, `[renderer] ${message}`);
+  });
+
   mainWindow.once('ready-to-show', () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.show();
@@ -366,12 +381,36 @@ if (!gotLock) {
     const sftp = new SftpManager(dpapiSealer);
     const tunnels = new TunnelManager(dpapiSealer);
     const updater = new Updater(broadcast);
+    const getParentHwnd = (): bigint | null => {
+      if (!mainWindow || mainWindow.isDestroyed()) return null;
+      try {
+        const handle = mainWindow.getNativeWindowHandle();
+        if (handle.length >= 8 && typeof handle.readBigUInt64LE === 'function') {
+          return handle.readBigUInt64LE(0);
+        }
+        return BigInt(handle.readUInt32LE(0));
+      } catch {
+        return null;
+      }
+    };
+    const getParentOrigin = (): { x: number; y: number } | null => {
+      if (!mainWindow || mainWindow.isDestroyed()) return null;
+      const bounds = mainWindow.getContentBounds();
+      return { x: bounds.x, y: bounds.y };
+    };
+    const rdpLegacy = new RdpManager({
+      sealer: dpapiSealer,
+      send: broadcast as (c: 'rdp-legacy:exited', p: unknown) => void,
+      getParentHwnd,
+      getParentOrigin
+    });
     installMenu(updater);
-    registerIpc(store, sessions, vnc, sftp, tunnels, updater, rdpjs);
+    registerIpc(store, sessions, vnc, sftp, tunnels, updater, rdpjs, rdpLegacy);
     app.on('before-quit', () => {
       void stopAllIronGateways();
       sessions.closeAll();
       rdpjs.closeAll();
+      rdpLegacy.closeAll();
       vnc.closeAll();
       sftp.closeAll();
       tunnels.closeAll();
@@ -394,6 +433,15 @@ if (!gotLock) {
       return;
     }
     if (mainWindow) installSmokeHooks(mainWindow, store);
+    if (mainWindow) {
+      // Псевдо-встроенные legacy RDP-окна (owned, не WS_CHILD — см. win32-engine.ts)
+      // не следуют за родителем автоматически: без этого синхронизация позиции/
+      // видимости с главным окном сломалась бы при перетаскивании/сворачивании.
+      mainWindow.on('move', () => rdpLegacy.refreshLayout());
+      mainWindow.on('resize', () => rdpLegacy.refreshLayout());
+      mainWindow.on('minimize', () => rdpLegacy.setMinimized(true));
+      mainWindow.on('restore', () => rdpLegacy.setMinimized(false));
+    }
     updater.start();
 
     app.on('activate', () => {

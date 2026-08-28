@@ -1,7 +1,7 @@
 export type Protocol = 'ssh' | 'telnet' | 'rdp' | 'vnc';
 
 /** Реализация RDP-клиента, выбираемая в настройках приложения. */
-export type RdpEngine = 'rdpjs' | 'iron';
+export type RdpEngine = 'rdpjs' | 'iron' | 'legacy';
 
 export interface SshOptions {
   keepalive: number; // seconds, 0 = off

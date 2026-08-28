@@ -59,6 +59,20 @@ export const IPC = {
   ironStart: 'iron:start',
   /** iron: остановка моста */
   ironStop: 'iron:stop',
+  /** legacy (MsRdpClient ActiveX): запуск встроенной сессии */
+  rdpLegacyLaunch: 'rdp-legacy:launch',
+  /** legacy: остановка сессии */
+  rdpLegacyStop: 'rdp-legacy:stop',
+  /** legacy: прямоугольник панели вкладки (CSS px) → встраиваемое окно */
+  rdpLegacyRect: 'rdp-legacy:rect',
+  /** legacy: переключение вкладок — показать активную, спрятать остальные */
+  rdpLegacyActivate: 'rdp-legacy:activate',
+  /** legacy: спрятать окно конкретной сессии (вкладка стала неактивной) */
+  rdpLegacyHide: 'rdp-legacy:hide',
+  /** legacy: модальный диалог открыт/закрыт — временно прятать/показывать встроенные окна */
+  rdpLegacyOverlay: 'rdp-legacy:overlay',
+  /** legacy: сессия завершилась (main → renderer) */
+  rdpLegacyExited: 'rdp-legacy:exited',
   /** node-rdpjs: запуск сессии */
   rdpjsLaunch: 'rdpjs:launch',
   /** node-rdpjs: закрытие сессии */
@@ -216,6 +230,36 @@ export type UpdateStatus =
 
 export interface UpdateStatePayload {
   state: UpdateStatus;
+}
+
+// ---- legacy (MsRdpClient ActiveX, встроенный HWND) ----
+
+export interface RdpLegacyLaunchRequest {
+  sessionId: string;
+  host: import('./types').Host;
+}
+
+export interface RdpLegacyLaunchResult {
+  ok: boolean;
+  error?: string;
+}
+
+export interface RdpLegacyRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface RdpLegacyRectRequest {
+  sessionId: string;
+  rect: RdpLegacyRect;
+}
+
+export interface RdpLegacyExitedPayload {
+  sessionId: string;
+  code: number | null;
+  error?: string;
 }
 
 export interface VncOpenRequest {

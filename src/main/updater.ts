@@ -57,6 +57,9 @@ export class Updater {
       const msg = (err as Error).message ?? '';
       if (msg.includes('ENOENT') && msg.includes('app-update.yml')) {
         console.info('[updater] app-update.yml отсутствует — автообновление отключено в этой сборке');
+        // Баннер не должен зависать на «Проверка обновлений…» навсегда —
+        // тихо считаем это «обновлений нет» (баннер скрывается сам).
+        this.push({ status: 'not-available' });
         return;
       }
       this.push({ status: 'error', message: msg });
