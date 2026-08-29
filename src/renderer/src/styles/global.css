@@ -1109,6 +1109,15 @@ textarea.input {
   flex-direction: column;
 }
 
+/* Диалоги с плотным содержимым (журнал, история) — можно тянуть за угол. */
+.modal--resizable {
+  resize: both;
+  overflow: hidden;
+  min-width: 420px;
+  min-height: 280px;
+  max-width: 95vw;
+}
+
 .modal-header {
   display: flex;
   align-items: center;
@@ -1136,6 +1145,8 @@ textarea.input {
 .modal-body {
   padding: 16px;
   overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 .modal-actions {
@@ -2927,8 +2938,8 @@ textarea.input {
 .history-panel {
   display: flex;
   flex-direction: column;
+  height: 100%;
   min-height: 320px;
-  max-height: 60vh;
 }
 
 .history-bar {
@@ -3197,7 +3208,8 @@ textarea.input {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  height: 420px;
+  height: 100%;
+  min-height: 0;
 }
 
 .log-bar {

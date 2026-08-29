@@ -63,7 +63,7 @@ export default function DialogRoot(): React.JSX.Element | null {
       return <TunnelsDialog sessionId={dialog.sessionId} title={dialog.title} host={dialog.host} onClose={closeDialog} />;
     case 'history':
       return (
-        <Modal title="История подключений" onClose={closeDialog} width={640}>
+        <Modal title="История подключений" onClose={closeDialog} width={640} height={520} resizable>
           <HistoryPanel />
         </Modal>
       );
