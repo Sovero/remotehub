@@ -434,7 +434,7 @@ if (!gotLock) {
     }
     if (mainWindow) installSmokeHooks(mainWindow, store);
     if (mainWindow) {
-      // Псевдо-встроенные legacy RDP-окна (owned, не WS_CHILD — см. win32-engine.ts)
+      // Псевдо-встроенные legacy RDP-окна (owned, не WS_CHILD — см. rdp/embed.ts)
       // не следуют за родителем автоматически: без этого синхронизация позиции/
       // видимости с главным окном сломалась бы при перетаскивании/сворачивании.
       mainWindow.on('move', () => rdpLegacy.refreshLayout());
