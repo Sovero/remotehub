@@ -3,7 +3,7 @@ import { readFileSync } from 'fs';
 import type { CredentialSet, Host } from '../../shared/types';
 import type { Sealer } from '../store/crypto-format';
 import { resolveAuth } from '../sessions/config';
-import { createEmbedEngine, type EmbedRect, type RdpEmbedEngine } from './embed';
+import type { EmbedRect } from './embed';
 import { rdpOptionsFromHost } from './generator';
 import { spawnComRdp, type RdpComSpawn } from './com-launcher';
 
@@ -38,7 +38,7 @@ interface ActiveRdp {
 export interface RdpManagerDeps {
   sealer: Sealer;
   send: (channel: 'rdp-legacy:exited', payload: unknown) => void;
-  /** HWND окна Electron, в которое встраиваем COM-хост. BigInt — 64-битный указатель. */
+  /** HWND окна Electron, которому COM-хост становится owned-окном. BigInt — 64-битный указатель. */
   getParentHwnd: () => bigint | null;
   /**
    * Экранные координаты левого верхнего угла content area родителя — нужны,
@@ -46,7 +46,6 @@ export interface RdpManagerDeps {
    * координаты для owned-окна (см. embed.ts).
    */
   getParentOrigin: () => { x: number; y: number } | null;
-  engine?: RdpEmbedEngine;
   /** Внедряемые зависимости для тестов: реальные используются по умолчанию. */
   comSpawn?: (opts: ReturnType<typeof rdpOptionsFromHost>, password: string | null) => Promise<RdpComSpawn>;
   /** Период сторожа в мс (тесты ставят меньше). */
@@ -57,17 +56,23 @@ export interface RdpManagerDeps {
 
 /**
  * Legacy-движок RDP: MsRdpClient ActiveX (тот же mstscax.dll, что и у mstsc.exe
- * и Devolutions RDM на Windows) встраивается child HWND в главное окно Electron.
+ * и Devolutions RDM на Windows) псевдо-встраивается в главное окно Electron
+ * (owned window через GWLP_HWNDPARENT — настоящий WS_CHILD не отображается
+ * из-за DirectComposition-композитинга Chromium, см. embed.ts).
  *
  * Существует как ручной запасной вариант рядом с IronRDP: у некоторых RDP-серверов
  * сертификат несовместим с rustls (нет digitalSignature в Key Usage — сервер может
  * предложить только классический RSA-обмен ключей, который rustls принципиально не
  * реализует ни в одной версии TLS). SChannel такие сертификаты терпит ради обратной
  * совместимости, поэтому этот движок подключается там, где IronRDP не может.
+ *
+ * Все Win32-манипуляции с окном COM-хоста (embed/setrect/show/hide/focus) —
+ * текстовые команды в его собственный stdin, а не FFI из этого процесса: они
+ * всегда адресованы СОБСТВЕННОМУ окну rdp-com-host.exe, так что делать их
+ * изнутри самого процесса и проще, и надёжнее (без стороннего native-addon).
  */
 export class RdpManager {
   private readonly active = new Map<string, ActiveRdp>();
-  private readonly engine: RdpEmbedEngine;
   private readonly comSpawnImpl: (
     opts: ReturnType<typeof rdpOptionsFromHost>,
     password: string | null
@@ -88,7 +93,6 @@ export class RdpManager {
   }
 
   constructor(private readonly deps: RdpManagerDeps) {
-    this.engine = deps.engine ?? createEmbedEngine();
     this.comSpawnImpl = deps.comSpawn ?? spawnComRdp;
     this.killGraceMs = deps.killGraceMs ?? KILL_GRACE_MS;
     this.watchdog = setInterval(() => this.tick(), deps.watchdogInterval ?? WATCHDOG_INTERVAL);
@@ -154,7 +158,7 @@ export class RdpManager {
     active.hwnd = comSpawn.hwnd;
 
     this.trackChild(sessionId, active, comSpawn);
-    this.embedWindow(sessionId, active);
+    this.embedWindow(active);
     return { ok: true };
   }
 
@@ -184,9 +188,9 @@ export class RdpManager {
 
   /** Сторож: перевстраивает окно, если родительский HWND ещё не готов при запуске. */
   private tick(): void {
-    for (const [sessionId, active] of this.active) {
+    for (const active of this.active.values()) {
       if (active.closing || active.hwnd === null) continue;
-      if (!active.embedded) this.embedWindow(sessionId, active);
+      if (!active.embedded) this.embedWindow(active);
     }
   }
 
@@ -200,29 +204,26 @@ export class RdpManager {
     if (active.embedded) this.applyRect(active);
   }
 
-  /** Привязывает найденный HWND к главному окну Electron (owner). */
-  private embedWindow(sessionId: string, active: ActiveRdp): boolean {
+  /** Отправляет текстовую команду в stdin COM-хоста этой сессии. */
+  private sendCommand(active: ActiveRdp, command: string): void {
+    try {
+      active.child?.stdin?.write(`${command}\n`);
+    } catch {
+      // stdin уже закрыт — процесс завершается
+    }
+  }
+
+  /** Просит COM-хост привязать своё окно к главному окну Electron (owner). */
+  private embedWindow(active: ActiveRdp): boolean {
     if (active.hwnd === null || active.embedded) return active.embedded;
     const parentHwnd = this.deps.getParentHwnd();
     if (parentHwnd == null) return false;
-    try {
-      this.engine.hide(active.hwnd);
-      this.engine.embed(active.hwnd, parentHwnd);
-      active.embedded = true;
-      this.applyRect(active);
-      if (active.visible && this.canShow) this.engine.show(active.hwnd);
-      return true;
-    } catch (err) {
-      active.closing = true;
-      this.active.delete(sessionId);
-      this.killChild(active);
-      this.deps.send('rdp-legacy:exited', {
-        sessionId,
-        code: null,
-        error: `Не удалось встроить Remote Desktop во вкладку: ${(err as Error).message}`
-      });
-      return false;
-    }
+    this.sendCommand(active, 'hide');
+    this.sendCommand(active, `embed ${parentHwnd.toString(16)}`);
+    active.embedded = true;
+    this.applyRect(active);
+    if (active.visible && this.canShow) this.sendCommand(active, 'show');
+    return true;
   }
 
   /** Переключение вкладок: показать окно активной сессии, спрятать остальные. */
@@ -232,18 +233,18 @@ export class RdpManager {
       active.visible = id === sessionId;
       if (active.hwnd === null) continue;
       if (!active.embedded) {
-        this.engine.hide(active.hwnd);
+        this.sendCommand(active, 'hide');
         continue;
       }
       if (id === sessionId && this.canShow) {
         this.applyRect(active);
-        this.engine.show(active.hwnd);
-        this.engine.setForeground(active.hwnd);
+        this.sendCommand(active, 'show');
+        this.sendCommand(active, 'foreground');
         // Клавиатура должна попадать в COM-хост сразу после переключения вкладки:
         // без явного SetFocus её перехватывает Chromium.
-        this.engine.focus(active.hwnd);
+        this.sendCommand(active, 'focus');
       } else {
-        this.engine.hide(active.hwnd);
+        this.sendCommand(active, 'hide');
       }
     }
   }
@@ -257,7 +258,7 @@ export class RdpManager {
     const active = this.active.get(sessionId);
     if (!active) return;
     active.visible = false;
-    if (active.hwnd !== null) this.engine.hide(active.hwnd);
+    if (active.hwnd !== null) this.sendCommand(active, 'hide');
   }
 
   /** Открытие/закрытие модального диалога: временно прячем встроенные окна. */
@@ -266,10 +267,10 @@ export class RdpManager {
     for (const active of this.active.values()) {
       if (active.hwnd === null || !active.embedded) continue;
       if (overlay) {
-        this.engine.hide(active.hwnd);
+        this.sendCommand(active, 'hide');
       } else if (active.visible && this.canShow) {
         this.applyRect(active);
-        this.engine.show(active.hwnd);
+        this.sendCommand(active, 'show');
       }
     }
   }
@@ -285,10 +286,10 @@ export class RdpManager {
     for (const active of this.active.values()) {
       if (active.hwnd === null || !active.embedded) continue;
       if (minimized) {
-        this.engine.hide(active.hwnd);
+        this.sendCommand(active, 'hide');
       } else if (active.visible && this.canShow) {
         this.applyRect(active);
-        this.engine.show(active.hwnd);
+        this.sendCommand(active, 'show');
       }
     }
   }
@@ -314,10 +315,7 @@ export class RdpManager {
       active.resizeTimer = null;
     }
     this.active.delete(sessionId);
-    if (active.hwnd !== null) {
-      this.engine.close(active.hwnd);
-      this.engine.hide(active.hwnd);
-    }
+    if (active.hwnd !== null) this.sendCommand(active, 'hide');
     if (active.child) {
       active.killTimer = setTimeout(() => this.killChild(active), this.killGraceMs);
       active.killTimer.unref?.();
@@ -344,13 +342,12 @@ export class RdpManager {
     if (!active.embedded || active.hwnd === null || active.rect === null) return;
     const origin = this.deps.getParentOrigin();
     if (origin === null) return;
-    this.engine.setRect(active.hwnd, {
-      x: origin.x + active.rect.x,
-      y: origin.y + active.rect.y,
-      width: active.rect.width,
-      height: active.rect.height
-    });
-    if (active.visible && this.canShow) this.engine.show(active.hwnd);
+    const x = Math.round(origin.x + active.rect.x);
+    const y = Math.round(origin.y + active.rect.y);
+    const w = Math.max(1, Math.round(active.rect.width));
+    const h = Math.max(1, Math.round(active.rect.height));
+    this.sendCommand(active, `setrect ${x} ${y} ${w} ${h}`);
+    if (active.visible && this.canShow) this.sendCommand(active, 'show');
     // COM-хост: с debounce отправляем «resize W H» в stdin, чтобы RDP-контроль
     // адаптировал разрешение удалённого рабочего стола под новый размер.
     this.scheduleComResize(active);
@@ -370,13 +367,9 @@ export class RdpManager {
     active.resizeTimer = setTimeout(() => {
       active.resizeTimer = null;
       if (active.closing || !active.child) return;
-      try {
-        active.child.stdin?.write(`resize ${w} ${h}\n`);
-        active.lastResizeW = w;
-        active.lastResizeH = h;
-      } catch {
-        // stdin уже закрыт — процесс завершается
-      }
+      this.sendCommand(active, `resize ${w} ${h}`);
+      active.lastResizeW = w;
+      active.lastResizeH = h;
     }, RESIZE_DEBOUNCE_MS);
     active.resizeTimer.unref?.();
   }
