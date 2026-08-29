@@ -68,6 +68,11 @@ export interface WindowBounds {
   height: number;
 }
 
+export interface DialogSize {
+  width: number;
+  height: number;
+}
+
 export interface Snippet {
   id: string;
   name: string;
@@ -153,6 +158,10 @@ export interface Settings {
   helpErrorShown: boolean;
   /** Версия, в которой пользователь уже видел «Что нового»; null — ещё никогда. */
   lastSeenVersion: string | null;
+  /** Размер диалога «Журнал событий», запомненный при последнем закрытии. */
+  logDialogSize: DialogSize | null;
+  /** Размер диалога «История подключений», запомненный при последнем закрытии. */
+  historyDialogSize: DialogSize | null;
 }
 
 export interface ProfilesFile {
@@ -190,7 +199,9 @@ export const DEFAULT_SETTINGS: Settings = {
   hostStatuses: [],
   onboardingDone: false,
   helpErrorShown: false,
-  lastSeenVersion: null
+  lastSeenVersion: null,
+  logDialogSize: null,
+  historyDialogSize: null
 };
 
 export const DEFAULT_SSH: SshOptions = { keepalive: 30, agent: false, timeout: 10 };

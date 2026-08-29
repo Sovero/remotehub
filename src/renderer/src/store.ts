@@ -200,7 +200,9 @@ export const useApp = create<AppState>((set, get) => ({
     hostStatuses: [],
     onboardingDone: false,
     helpErrorShown: false,
-    lastSeenVersion: null
+    lastSeenVersion: null,
+    logDialogSize: null,
+    historyDialogSize: null
   },
   appInfo: null,
   ready: false,

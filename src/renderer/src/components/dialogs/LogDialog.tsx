@@ -31,6 +31,8 @@ function LevelBadge({ level }: { level: LogLevel }): React.JSX.Element {
 
 export default function LogDialog(): React.JSX.Element {
   const closeDialog = useApp((s) => s.closeDialog);
+  const patchSettings = useApp((s) => s.patchSettings);
+  const savedSize = useApp((s) => s.settings.logDialogSize);
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [levelFilter, setLevelFilter] = useState<Record<LogLevel, boolean>>({ error: true, warn: true, info: true });
   const [excludedSources, setExcludedSources] = useState<Set<LogSource>>(new Set());
@@ -158,7 +160,14 @@ export default function LogDialog(): React.JSX.Element {
   const trimmedSearch = search.trim();
 
   return (
-    <Modal title="Журнал событий" onClose={closeDialog} width={860} height={560} resizable>
+    <Modal
+      title="Журнал событий"
+      onClose={closeDialog}
+      width={savedSize?.width ?? 860}
+      height={savedSize?.height ?? 560}
+      resizable
+      onResize={(size) => void patchSettings({ logDialogSize: size })}
+    >
       <div className="log-panel">
         <div className="log-bar">
           <div className="log-filter-group" title="Фильтр по уровню важности">

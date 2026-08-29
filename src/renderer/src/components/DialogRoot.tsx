@@ -21,6 +21,8 @@ import Modal from './dialogs/Modal';
 export default function DialogRoot(): React.JSX.Element | null {
   const dialog = useApp((s) => s.dialog);
   const closeDialog = useApp((s) => s.closeDialog);
+  const patchSettings = useApp((s) => s.patchSettings);
+  const historyDialogSize = useApp((s) => s.settings.historyDialogSize);
 
   if (!dialog) return null;
   switch (dialog.type) {
@@ -63,7 +65,14 @@ export default function DialogRoot(): React.JSX.Element | null {
       return <TunnelsDialog sessionId={dialog.sessionId} title={dialog.title} host={dialog.host} onClose={closeDialog} />;
     case 'history':
       return (
-        <Modal title="История подключений" onClose={closeDialog} width={640} height={520} resizable>
+        <Modal
+          title="История подключений"
+          onClose={closeDialog}
+          width={historyDialogSize?.width ?? 640}
+          height={historyDialogSize?.height ?? 520}
+          resizable
+          onResize={(size) => void patchSettings({ historyDialogSize: size })}
+        >
           <HistoryPanel />
         </Modal>
       );
