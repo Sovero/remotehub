@@ -75,17 +75,28 @@ jobs:
       - name: Rebuild native modules for Electron's ABI
         run: npx electron-builder install-app-deps
 
-      # electron-vite build (dальше) копирует нативные .node-бинарники,
-      # на которые ссылаются забандленные зависимости (ssh2 → cpu-features,
-      # ssh2 → его собственный sshcrypto.node), внутрь чанков бандла — и
-      # переписывает их require() мимо try/catch, которым сами зависимости
-      # их оборачивают. Если на этот момент бинарники ещё собраны под
-      # Node.js раннера (после npm ci), а не под Electron, скопированная
-      # копия так и останется с чужим ABI навсегда — electron-builder'овский
-      # автоматический @electron/rebuild чуть позже увидит и починит только
-      # оригиналы в node_modules, а не эту уже сделанную копию. Явный
-      # install-app-deps здесь, до сборки бандла, гарантирует, что копировать
-      # будет уже нечего чинить.
+      # @electron/rebuild's dependency walker only recognizes top-level
+      # node_modules packages with their own prebuild-install/node-gyp-build
+      # convention (confirmed in these very logs: it lists bufferutil/
+      # cpu-features/dtrace-provider/utf-8-validate, never ssh2) — it never
+      # revisits ssh2's self-managed nested build at lib/protocol/crypto/,
+      # so a sshcrypto.node left there (compiled against this runner's plain
+      # Node.js ABI, not Electron's — v0.1.20 through v0.1.22 all shipped it
+      # this way despite allowScripts blocking ssh2's OWN install script;
+      # something in npm ci's dependency resolution still produces this
+      # directory) never gets fixed by the step above. electron-vite build
+      # (next) then finds that mismatched-ABI binary sitting on disk and
+      # copies it into a bundle chunk, permanently baking in the wrong ABI.
+      # ssh2 already wraps this require in a try/catch with a full pure-JS
+      # fallback (lib/protocol/crypto.js) — deleting the build output here
+      # forces that fallback instead of shipping a binary that can never
+      # load in Electron.
+      - name: Remove ssh2's unrebuildable native crypto binding
+        shell: bash
+        run: |
+          find node_modules/ssh2/lib/protocol/crypto -type f 2>&1 || true
+          rm -rf node_modules/ssh2/lib/protocol/crypto/build
+
       - name: Build renderer and main bundles
         run: npm run build
 
