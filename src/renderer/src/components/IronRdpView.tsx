@@ -15,9 +15,15 @@ import { Backend, init } from '@devolutions/iron-remote-desktop-rdp';
 import { useApp } from '../store';
 
 let initPromise: Promise<void> | null = null;
-/** WASM грузится один раз на процесс (встроен в бандл как base64 data URI). */
+/**
+ * WASM грузится один раз на процесс (встроен в бандл как base64 data URI).
+ * 'debug' — не 'info': стадии X.224/TLS/CredSSP/NLA внутри WASM-клиента
+ * видны только на этом уровне, а именно они нужны, чтобы понять, на чём
+ * зависает подключение после того, как шлюз уже отчитался "connected".
+ * Console-хук в main (src/main/index.ts) переносит это в журнал приложения.
+ */
 function ensureInit(): Promise<void> {
-  initPromise ??= init('info');
+  initPromise ??= init('debug');
   return initPromise;
 }
 
@@ -106,7 +112,15 @@ const IronRdpView: React.FC<Props> = ({ sessionId, host, port, domain: requested
         sb.setCursorStyleCallback(() => undefined);
         sb.setCursorStyleCallbackContext(null);
         sb.renderCanvas(canvas);
-        sb.desktopSize(new Backend.DesktopSize(width, height));
+        // Разрешение хоста (width/height) — только запасной вариант на случай,
+        // если панель ещё не отрисована. Подключаемся сразу под фактический
+        // размер вкладки, чтобы не было видимого шага «подключились мелко,
+        // тут же ResizeObserver растянул» — сессия должна сразу выглядеть
+        // так, будто она всегда подгонялась под окно.
+        const panelRect = wrapRef.current?.getBoundingClientRect();
+        const initialWidth = panelRect && panelRect.width >= 320 ? Math.round(panelRect.width) : width;
+        const initialHeight = panelRect && panelRect.height >= 240 ? Math.round(panelRect.height) : height;
+        sb.desktopSize(new Backend.DesktopSize(initialWidth, initialHeight));
 
         const session = (await sb.connect()) as unknown as IronSession;
         if (disposed) {

@@ -28,6 +28,7 @@
 import * as net from 'node:net';
 import * as tls from 'node:tls';
 import { WebSocketServer, type WebSocket } from 'ws';
+import { addLog } from '../log';
 
 export const RDCLEANPATH_VERSION = 3390; // BASE_VERSION(3389) + 1
 export const GENERAL_ERROR_CODE = 1;
@@ -326,6 +327,8 @@ export interface IronGatewayOptions {
   connectTimeoutMs?: number;
   x224TimeoutMs?: number;
   probeTimeoutMs?: number;
+  /** Если сервер не прислал ни байта в туннеле за это время — считаем соединение зависшим. */
+  tunnelSilenceTimeoutMs?: number;
   onState?: (sessionId: string, state: IronGatewayState) => void;
 }
 
@@ -337,7 +340,9 @@ interface PendingConn {
  * Один экземпляр = одна RDP-сессия. Слушает только 127.0.0.1.
  */
 export class IronGateway {
-  private readonly opts: Required<Pick<IronGatewayOptions, 'connectTimeoutMs' | 'x224TimeoutMs' | 'probeTimeoutMs'>> &
+  private readonly opts: Required<
+    Pick<IronGatewayOptions, 'connectTimeoutMs' | 'x224TimeoutMs' | 'probeTimeoutMs' | 'tunnelSilenceTimeoutMs'>
+  > &
     IronGatewayOptions;
   private wss: WebSocketServer | null = null;
   private server: net.Server | null = null;
@@ -353,6 +358,7 @@ export class IronGateway {
       connectTimeoutMs: 8000,
       x224TimeoutMs: 8000,
       probeTimeoutMs: 6000,
+      tunnelSilenceTimeoutMs: 15000,
       ...options
     };
   }
@@ -423,8 +429,21 @@ export class IronGateway {
       // ВАЖНО: tls.TLSSocket(sock) поверх уже существующего сокета НЕ начинает
       // рукопожатие (сервер так и не получает ClientHello). Только tls.connect
       // с опцией socket инициирует TLS поверх установленного TCP-соединения.
+      //
+      // maxVersion: 'TLSv1.2' — самогенерированные сертификаты RDP-хостов
+      // (в т.ч. штатный self-signed от Windows) часто несут keyUsage только
+      // под RSA key exchange (keyEncipherment), без digitalSignature,
+      // которого требует (EC)DHE в TLS 1.3. BoringSSL в Electron проверяет
+      // keyUsage строго и на TLS 1.3 роняет рукопожатие с
+      // KEY_USAGE_BIT_INCORRECT ещё до того, как отдаст сертификат — проба
+      // тогда не получает цепочку вовсе, и IronRDP-клиент считает её
+      // отсутствующей вместо best-effort валидации на своей стороне.
+      // TLS 1.2 допускает RSA-обмен ключами, совместимый с таким keyUsage.
+      // Это влияет только на пробу (нужен сертификат, не канал данных) —
+      // сам RDP-трафик идёт по сырому релею и TLS/CredSSP внутри него
+      // ведёт WASM-клиент независимо от этой пробы.
       const tlsSock = await new Promise<tls.TLSSocket>((resolve, reject) => {
-        const wrapped = tls.connect({ socket: probe, rejectUnauthorized: false });
+        const wrapped = tls.connect({ socket: probe, rejectUnauthorized: false, maxVersion: 'TLSv1.2' });
         const timer = setTimeout(() => {
           wrapped.destroy();
           reject(new Error('TLS-проба: таймаут'));
@@ -451,10 +470,21 @@ export class IronGateway {
             .issuerCertificate ?? null;
         if (cur && seen.has(cur.fingerprint)) break;
       }
+      const cipher = tlsSock.getCipher();
+      const protocol = tlsSock.getProtocol();
       tlsSock.destroy();
+      addLog(
+        certs.length > 0 ? 'info' : 'warn',
+        'iron',
+        `IronRDP: TLS-проба ${this.opts.host}:${this.opts.port} — получено сертификатов: ${certs.length}` +
+          (certs.length === 0 ? ' (цепочка пуста, хотя проба не бросила исключение)' : '') +
+          `, протокол=${protocol}, шифр=${cipher?.name ?? '?'} (${cipher?.standardName ?? '?'})`
+      );
       return certs;
     } catch (e) {
-      console.error('[iron-gateway] probeCertificates failed:', (e as Error)?.message ?? e);
+      const message = (e as Error)?.message ?? String(e);
+      console.error('[iron-gateway] probeCertificates failed:', message);
+      addLog('warn', 'iron', `IronRDP: TLS-проба ${this.opts.host}:${this.opts.port} провалилась — ${message}`);
       return [];
     } finally {
       if (!probe.destroyed) probe.destroy();
@@ -545,16 +575,57 @@ export class IronGateway {
     this.sendWs(ws, encodeResponse(cc.bytes, certs, addr));
     this.pending = null;
 
+    // Сторож тишины: TLS/CredSSP внутри туннеля клиент ведёт сам, и если сервер
+    // (или устройство на сетевом пути) молча роняет хендшейк вместо явного alert —
+    // соединение виснет навсегда без единой ошибки. Частая причина именно такой
+    // немоты: сертификат сервера без бита digitalSignature в Key Usage — сервер
+    // может предложить только классический RSA-обмен ключей (см. лог TLS-пробы
+    // выше), а TLS-стек клиента (rustls в WASM) в принципе не реализует RSA-обмен
+    // ключей — ни в одной версии TLS. У клиента и сервера тогда нет ни одного
+    // общего шифра, и это не фатальная TLS-ошибка, а полное отсутствие ответа.
+    let settled = false;
+    let silenceTimer: NodeJS.Timeout | undefined;
+    const settleOnce = (apply: () => void): void => {
+      if (this.closed || settled) return;
+      settled = true;
+      clearTimeout(silenceTimer);
+      apply();
+    };
+    const armSilenceTimer = (): void => {
+      clearTimeout(silenceTimer);
+      silenceTimer = setTimeout(() => {
+        const secs = this.opts.tunnelSilenceTimeoutMs / 1000;
+        const msg =
+          `сервер ${addr} не прислал ни байта за ${secs} с после начала TLS/CredSSP — вероятно, ` +
+          'сертификат сервера несовместим с TLS-клиентом (нет digitalSignature в Key Usage, см. шифр в логе TLS-пробы выше) ' +
+          'либо сетевое устройство молча блокирует хендшейк';
+        addLog('error', 'iron', `IronRDP: ${msg}`);
+        settleOnce(() => {
+          this.report({ phase: 'error', message: msg });
+          try { ws.close(); } catch { /* ignore */ }
+          if (!relay.destroyed) relay.destroy();
+        });
+      }, this.opts.tunnelSilenceTimeoutMs);
+    };
+    armSilenceTimer();
+
     ws.on('message', (data) => {
-      relay.write(toBuf(data));
+      const buf = toBuf(data);
+      addLog('info', 'iron', `IronRDP: тоннель клиент→сервер, ${buf.length} байт`);
+      relay.write(buf);
     });
     // Накопленное с момента согласования и весь дальнейший поток — клиенту.
-    chan.startTunneling((chunk: Buffer) => this.sendWs(ws, chunk));
+    chan.startTunneling((chunk: Buffer) => {
+      armSilenceTimer(); // сервер откликнулся — соединение живо, взводим сторож заново
+      addLog('info', 'iron', `IronRDP: тоннель сервер→клиент, ${chunk.length} байт`);
+      this.sendWs(ws, chunk);
+    });
     const teardown = (why: string): void => {
-      if (this.closed) return;
-      this.report({ phase: 'closed', message: why });
-      try { ws.close(); } catch { /* ignore */ }
-      if (!relay.destroyed) relay.destroy();
+      settleOnce(() => {
+        this.report({ phase: 'closed', message: why });
+        try { ws.close(); } catch { /* ignore */ }
+        if (!relay.destroyed) relay.destroy();
+      });
     };
     ws.on('close', () => teardown('клиент отключился'));
     ws.on('error', () => teardown('ошибка websocket'));

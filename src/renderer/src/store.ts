@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { nanoid } from 'nanoid';
-import type { Group, Host, HistoryEntry, RdpEngine, RdpOptions, Runbook, Settings, Snippet, TreeNode } from '@shared/types';
+import type { Group, Host, HistoryEntry, RdpEngine, Runbook, Settings, Snippet, TreeNode } from '@shared/types';
 import { createGroup, createHost } from '@shared/types';
 import type { SessionState, UpdateStatus } from '@shared/ipc-contract';
 import {
@@ -144,16 +144,14 @@ interface AppState {
   openSession: (host: Host, opts?: { password?: string; adHoc?: boolean }) => Promise<void>;
   openAdHoc: (host: Host) => Promise<void>;
   openRdp: (host: Host) => Promise<void>;
-  /**
-   * Меняет опции RDP у профиля (разрешение/режим), сохраняет в дерево и
-   * переподключает сессию с новыми настройками.
-   */
-  relaunchRdp: (sessionId: string, rdpPatch: Partial<RdpOptions>) => Promise<void>;
-  /** Сохраняет разрешение RDP в профиль без переподключения сессии. */
-  saveRdpResolution: (sessionId: string, width: number, height: number) => Promise<void>;
   openVnc: (host: Host) => Promise<void>;
   openSftp: (host: Host) => Promise<void>;
   reconnectTab: (sessionId: string) => Promise<void>;
+  /**
+   * Переключает вкладку на запасной RDP-движок (MsRdpClient ActiveX, встроенный
+   * HWND) — для серверов, чей сертификат несовместим с TLS-стеком IronRDP.
+   */
+  useLegacyRdpEngine: (sessionId: string) => Promise<void>;
   closeTab: (sessionId: string, force?: boolean) => Promise<void>;
   switchTab: (sessionId: string) => void;
   submitPassword: (sessionId: string, password: string) => Promise<void>;
@@ -637,31 +635,6 @@ export const useApp = create<AppState>((set, get) => ({
     get().persistTabs();
   },
 
-  relaunchRdp: async (sessionId, rdpPatch) => {
-    const { tabs, tree } = get();
-    const tab = tabs.find((t) => t.sessionId === sessionId);
-    if (!tab || tab.kind !== 'rdp') return;
-    const node = tab.hostId ? findNode(tree, tab.hostId) : null;
-    if (!node || node.kind !== 'host') return;
-    const host = createHost({ ...node, rdp: { ...node.rdp, ...rdpPatch } });
-    const next = replaceNode(tree, host.id, host);
-    await window.api.saveProfiles(next);
-    set({ tree: next });
-    await get().reconnectTab(sessionId);
-  },
-
-  saveRdpResolution: async (sessionId, width, height) => {
-    const { tabs, tree } = get();
-    const tab = tabs.find((t) => t.sessionId === sessionId);
-    if (!tab || tab.kind !== 'rdp') return;
-    const node = tab.hostId ? findNode(tree, tab.hostId) : null;
-    if (!node || node.kind !== 'host') return;
-    const host = createHost({ ...node, rdp: { ...node.rdp, width, height } });
-    const next = replaceNode(tree, host.id, host);
-    await window.api.saveProfiles(next);
-    set({ tree: next });
-  },
-
   reconnectTab: async (sessionId) => {
     const { tabs } = get();
     const tab = tabs.find((t) => t.sessionId === sessionId);
@@ -677,7 +650,9 @@ export const useApp = create<AppState>((set, get) => ({
       return;
     }
     if (tab.kind === 'rdp') {
-      const rdpEngine = get().settings.rdpEngine;
+      // Ручной выбор движка (legacy) переживает переподключение — не откатываем
+      // на глобальную настройку, если пользователь явно переключился на неё.
+      const rdpEngine = tab.rdpEngine === 'legacy' ? 'legacy' : get().settings.rdpEngine;
       set((s) => ({
         tabs: s.tabs.map((t) =>
           t.sessionId === sessionId
@@ -688,6 +663,11 @@ export const useApp = create<AppState>((set, get) => ({
       if (rdpEngine === 'iron') {
         // Движок iron: перезапуск соединения выполняет IronRdpView по событию.
         window.dispatchEvent(new CustomEvent(`iron-reconnect-${sessionId}`));
+        return;
+      }
+      if (rdpEngine === 'legacy') {
+        // Движок legacy: перезапуск выполняет LegacyRdpView по событию.
+        window.dispatchEvent(new CustomEvent(`legacy-reconnect-${sessionId}`));
         return;
       }
       const res = await window.api.rdpjsLaunch({
@@ -757,6 +737,19 @@ export const useApp = create<AppState>((set, get) => ({
       }));
     }
     get().persistTabs();
+  },
+
+  useLegacyRdpEngine: async (sessionId) => {
+    const { tabs } = get();
+    const tab = tabs.find((t) => t.sessionId === sessionId);
+    if (!tab || tab.kind !== 'rdp') return;
+    // Останавливает текущую сессию движка (iron-мост и т.п.) перед переключением.
+    await window.api.sessionClose(sessionId);
+    set((s) => ({
+      tabs: s.tabs.map((t) =>
+        t.sessionId === sessionId ? { ...t, rdpEngine: 'legacy', state: { phase: 'connecting' } } : t
+      )
+    }));
   },
 
   closeTab: async (sessionId, force) => {

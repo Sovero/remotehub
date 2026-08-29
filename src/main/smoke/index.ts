@@ -3,7 +3,7 @@ import { writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import type { Store } from '../store';
 import { runCaptureHelpFlow } from './capture-help';
-import { runRdpIronFlow, runRdpResolutionFlow } from './rdp-flows';
+import { runRdpIronFlow } from './rdp-flows';
 import { runVncFlow, runVncErrorFlow, runSftpFlow, runSftpTunnelsFlow } from './vnc-sftp';
 import { runIconsFlow } from './ui-icons';
 import { runUpdateFlow, runContrastFlow } from './ui-update-contrast';
@@ -149,8 +149,6 @@ export function installSmokeHooks(mainWindow: BrowserWindow, store: Store): void
         // передача с иконкой направления и завершение с галочкой.
         if (await runSftpFlow(mainWindow, watchdog)) return;
         if (await runRdpIronFlow(mainWindow, watchdog)) return;
-        // Управление разрешением и режимом встроенной RDP-сессии прямо из вкладки.
-        if (await runRdpResolutionFlow(mainWindow, watchdog)) return;
         if (await runCredFlow(mainWindow, watchdog)) return;
         if (await runSnipsFlow(mainWindow, watchdog)) return;
         // Сценарий «Проверить доступность»: контекстное меню хоста → тултип с результатом.

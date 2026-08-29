@@ -6,6 +6,7 @@ import { useApp } from '../store';
 import ContextMenu, { type MenuItem } from './ContextMenu';
 import Icon from './Icon';
 import TreeView, { type HostStatusMap, type MenuRequest } from './TreeView';
+import UpdateBar from './UpdateBar';
 
 export default function Sidebar(): React.JSX.Element {
   const tree = useApp((s) => s.tree);
@@ -318,6 +319,8 @@ export default function Sidebar(): React.JSX.Element {
           <Icon name="gear" size={13} /> Настройки
         </button>
       </div>
+
+      <UpdateBar />
 
       {menu && <ContextMenu x={menu.x} y={menu.y} items={buildMenu(menu.node)} onClose={() => setMenu(null)} />}
 

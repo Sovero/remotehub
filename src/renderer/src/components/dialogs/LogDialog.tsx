@@ -4,12 +4,8 @@ import { useApp } from '../../store';
 import Icon from '../Icon';
 import Modal from './Modal';
 
-const LEVELS: Array<{ value: 'all' | LogLevel; label: string }> = [
-  { value: 'all', label: 'Все уровни' },
-  { value: 'error', label: 'Только ошибки' },
-  { value: 'warn', label: 'Ошибки и предупреждения' },
-  { value: 'info', label: 'Всё' }
-];
+const ALL_LEVELS: LogLevel[] = ['error', 'warn', 'info'];
+const LEVEL_LABELS: Record<LogLevel, string> = { error: 'Ошибки', warn: 'Предупреждения', info: 'События' };
 
 /** Сколько записей показывать в списке (последние N отфильтрованных). */
 const RENDER_LIMIT = 300;
@@ -36,8 +32,8 @@ function LevelBadge({ level }: { level: LogLevel }): React.JSX.Element {
 export default function LogDialog(): React.JSX.Element {
   const closeDialog = useApp((s) => s.closeDialog);
   const [entries, setEntries] = useState<LogEntry[]>([]);
-  const [levelFilter, setLevelFilter] = useState<'all' | LogLevel>('all');
-  const [sourceFilter, setSourceFilter] = useState<'all' | LogSource>('all');
+  const [levelFilter, setLevelFilter] = useState<Record<LogLevel, boolean>>({ error: true, warn: true, info: true });
+  const [excludedSources, setExcludedSources] = useState<Set<LogSource>>(new Set());
   const [search, setSearch] = useState('');
   const [autoScroll, setAutoScroll] = useState(true);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -61,15 +57,14 @@ export default function LogDialog(): React.JSX.Element {
   const sources = useMemo(() => Array.from(new Set(entries.map((e) => e.source))).sort(), [entries]);
 
   const filtered = useMemo(() => {
-    const order: Record<LogLevel, number> = { error: 0, warn: 1, info: 2 };
     const query = search.trim().toLowerCase();
     return entries.filter((e) => {
-      if (levelFilter !== 'all' && order[e.level] > order[levelFilter]) return false;
-      if (sourceFilter !== 'all' && e.source !== sourceFilter) return false;
+      if (!levelFilter[e.level]) return false;
+      if (excludedSources.has(e.source)) return false;
       if (query && !e.message.toLowerCase().includes(query)) return false;
       return true;
     });
-  }, [entries, levelFilter, sourceFilter, search]);
+  }, [entries, levelFilter, excludedSources, search]);
 
   const visible = useMemo(() => filtered.slice(-RENDER_LIMIT), [filtered]);
 
@@ -86,9 +81,22 @@ export default function LogDialog(): React.JSX.Element {
     setAutoScroll(nearBottom);
   };
 
+  const toggleLevel = (level: LogLevel): void => {
+    setLevelFilter((prev) => ({ ...prev, [level]: !prev[level] }));
+  };
+
+  const toggleSource = (source: LogSource): void => {
+    setExcludedSources((prev) => {
+      const next = new Set(prev);
+      if (next.has(source)) next.delete(source);
+      else next.add(source);
+      return next;
+    });
+  };
+
   const resetFilters = (): void => {
-    setLevelFilter('all');
-    setSourceFilter('all');
+    setLevelFilter({ error: true, warn: true, info: true });
+    setExcludedSources(new Set());
     setSearch('');
   };
 
@@ -153,31 +161,30 @@ export default function LogDialog(): React.JSX.Element {
     <Modal title="Журнал событий" onClose={closeDialog} width={860}>
       <div className="log-panel">
         <div className="log-bar">
-          <select
-            className="input"
-            value={levelFilter}
-            onChange={(e) => setLevelFilter(e.target.value as 'all' | LogLevel)}
-            title="Фильтр по уровню важности"
-          >
-            {LEVELS.map((l) => (
-              <option key={l.value} value={l.value}>
-                {l.label}
-              </option>
+          <div className="log-filter-group" title="Фильтр по уровню важности">
+            {ALL_LEVELS.map((level) => (
+              <label
+                key={level}
+                className={`log-filter-chip log-filter-chip--${level}${levelFilter[level] ? ' log-filter-chip--active' : ''}`}
+              >
+                <input type="checkbox" checked={levelFilter[level]} onChange={() => toggleLevel(level)} />
+                {LEVEL_LABELS[level]}
+              </label>
             ))}
-          </select>
-          <select
-            className="input"
-            value={sourceFilter}
-            onChange={(e) => setSourceFilter(e.target.value as 'all' | LogSource)}
-            title="Фильтр по источнику"
-          >
-            <option value="all">Все источники</option>
-            {sources.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
+          </div>
+          {sources.length > 0 && (
+            <div className="log-filter-group" title="Фильтр по источнику">
+              {sources.map((s) => (
+                <label
+                  key={s}
+                  className={`log-filter-chip${!excludedSources.has(s) ? ' log-filter-chip--active' : ''}`}
+                >
+                  <input type="checkbox" checked={!excludedSources.has(s)} onChange={() => toggleSource(s)} />
+                  {s}
+                </label>
+              ))}
+            </div>
+          )}
           <input
             className="input input--search"
             placeholder="Поиск по сообщению…"
@@ -234,8 +241,6 @@ export default function LogDialog(): React.JSX.Element {
               <Icon name={trimmedSearch ? 'search' : 'log'} size={30} />
               {trimmedSearch ? (
                 <p>Ничего не найдено по «{trimmedSearch}».</p>
-              ) : sourceFilter !== 'all' ? (
-                <p>Нет записей источника «{sourceFilter}» с текущими фильтрами.</p>
               ) : (
                 <p>Нет записей с текущими фильтрами.</p>
               )}

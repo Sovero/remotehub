@@ -4,9 +4,13 @@ import Icon from './Icon';
 export default function SessionOverlay({ tab }: { tab: SessionTab }): React.JSX.Element | null {
   const reconnectTab = useApp((s) => s.reconnectTab);
   const closeTab = useApp((s) => s.closeTab);
+  const useLegacyRdpEngine = useApp((s) => s.useLegacyRdpEngine);
+  const globalRdpEngine = useApp((s) => s.settings.rdpEngine);
   const state = tab.state;
 
   if (state.phase === 'error' || state.phase === 'closed') {
+    const rdpEngine = tab.rdpEngine ?? globalRdpEngine;
+    const canFallBackToLegacy = tab.kind === 'rdp' && state.phase === 'error' && rdpEngine === 'iron';
     return (
       <div className="session-overlay">
         <div className="session-overlay-icon">{state.phase === 'error' ? '⚠' : '⏻'}</div>
@@ -24,6 +28,15 @@ export default function SessionOverlay({ tab }: { tab: SessionTab }): React.JSX.
             <Icon name="close" size={13} /> Закрыть вкладку
           </button>
         </div>
+        {canFallBackToLegacy && (
+          <button
+            className="btn session-overlay-fallback"
+            title="Подключиться через системный RDP-движок Windows (mstscax) — тот же движок, что у mstsc.exe и Devolutions RDM. Помогает, когда сертификат сервера несовместим с TLS-клиентом IronRDP"
+            onClick={() => void useLegacyRdpEngine(tab.sessionId)}
+          >
+            <Icon name="window" size={13} /> Подключиться через системный RDP
+          </button>
+        )}
       </div>
     );
   }

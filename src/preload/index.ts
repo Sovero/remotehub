@@ -176,6 +176,21 @@ const api = {
   ironStart: (req: import('../shared/ipc-contract').IronStartRequest): Promise<import('../shared/ipc-contract').IronStartResult> =>
     ipcRenderer.invoke(IPC.ironStart, req),
   ironStop: (sessionId: string): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.ironStop, sessionId),
+  // ---- legacy (MsRdpClient ActiveX, встроенный HWND) ----
+  rdpLegacyLaunch: (
+    req: import('../shared/ipc-contract').RdpLegacyLaunchRequest
+  ): Promise<import('../shared/ipc-contract').RdpLegacyLaunchResult> => ipcRenderer.invoke(IPC.rdpLegacyLaunch, req),
+  rdpLegacyStop: (sessionId: string): void => ipcRenderer.send(IPC.rdpLegacyStop, sessionId),
+  rdpLegacyRect: (sessionId: string, rect: import('../shared/ipc-contract').RdpLegacyRect): void =>
+    ipcRenderer.send(IPC.rdpLegacyRect, { sessionId, rect }),
+  rdpLegacyActivate: (sessionId: string): void => ipcRenderer.send(IPC.rdpLegacyActivate, sessionId),
+  rdpLegacyHide: (sessionId: string): void => ipcRenderer.send(IPC.rdpLegacyHide, sessionId),
+  rdpLegacyOverlay: (overlay: boolean): void => ipcRenderer.send(IPC.rdpLegacyOverlay, overlay),
+  onRdpLegacyExited: (cb: (payload: import('../shared/ipc-contract').RdpLegacyExitedPayload) => void): (() => void) => {
+    const listener = (_e: unknown, payload: import('../shared/ipc-contract').RdpLegacyExitedPayload): void => cb(payload);
+    ipcRenderer.on(IPC.rdpLegacyExited, listener);
+    return () => ipcRenderer.removeListener(IPC.rdpLegacyExited, listener);
+  },
   // ---- rdpjs (node-rdpjs) ----
   rdpjsLaunch: (req: import('../shared/ipc-contract').RdpjsLaunchRequest): Promise<import('../shared/ipc-contract').RdpjsLaunchResult> =>
     ipcRenderer.invoke(IPC.rdpjsLaunch, req),

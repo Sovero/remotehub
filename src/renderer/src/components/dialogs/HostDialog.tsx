@@ -78,6 +78,22 @@ export default function HostDialog({
     void window.api.getCredentials().then((res) => setCredentialSets(res.sets));
   }, []);
 
+  // Набор учётных данных сам несёт пользователя (и, через DOMAIN\user, домен) —
+  // при подключении именно он побеждает поля профиля (см. main/ipc.ts:ironStart,
+  // main/rdp/manager.ts:launch). Поля «Пользователь»/«Домен» синхронизируем
+  // с выбранным набором и блокируем на редактирование, чтобы не показывать
+  // значение, которое всё равно будет проигнорировано при подключении.
+  useEffect(() => {
+    if (!form.credentialId) return;
+    const c = credentialSets.find((s) => s.id === form.credentialId);
+    if (!c) return;
+    const slash = c.username.indexOf('\\');
+    const domain = slash > 0 ? c.username.slice(0, slash) : '';
+    const username = slash > 0 ? c.username.slice(slash + 1) : c.username;
+    setForm((f) => (f.username === username && f.domain === domain ? f : { ...f, username, domain }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.credentialId, credentialSets]);
+
   const set = <K extends keyof FormState>(key: K, value: FormState[K]): void => {
     setForm((f) => ({ ...f, [key]: value }));
   };
@@ -92,13 +108,6 @@ export default function HostDialog({
     if (!form.host.trim()) errs.push('Укажите адрес хоста');
     const port = Number(form.port);
     if (!Number.isInteger(port) || port < 1 || port > 65535) errs.push('Порт — целое число от 1 до 65535');
-    if (form.protocol === 'rdp' && form.screenMode === 'window') {
-      const w = Number(form.width);
-      const h = Number(form.height);
-      if (!Number.isInteger(w) || w < 320 || !Number.isInteger(h) || h < 200) {
-        errs.push('Разрешение — целые числа (мин. 320×200)');
-      }
-    }
     return errs;
   }, [form]);
 
@@ -198,6 +207,8 @@ export default function HostDialog({
               value={form.username}
               onChange={(e) => set('username', e.target.value)}
               placeholder="root, admin…"
+              disabled={!!form.credentialId}
+              title={form.credentialId ? 'Задаётся выбранными учётными данными' : undefined}
             />
           </div>
           <div className="form-col">
@@ -263,43 +274,16 @@ export default function HostDialog({
 
         {form.protocol === 'rdp' && (
           <div className="form-section">
-            <div className="form-row form-row--cols">
-              <div className="form-col">
-                <label className="form-label">Домен</label>
-                <input className="input" value={form.domain} onChange={(e) => set('domain', e.target.value)} />
-              </div>
-              <div className="form-col">
-                <label className="form-label">Режим экрана</label>
-                <select
-                  className="input"
-                  value={form.screenMode}
-                  onChange={(e) => set('screenMode', e.target.value as 'window' | 'fullscreen')}
-                >
-                  <option value="window">Окно</option>
-                  <option value="fullscreen">Полный экран</option>
-                </select>
-              </div>
+            <div className="form-row">
+              <label className="form-label">Домен</label>
+              <input
+                className="input"
+                value={form.domain}
+                onChange={(e) => set('domain', e.target.value)}
+                disabled={!!form.credentialId}
+                title={form.credentialId ? 'Задаётся выбранными учётными данными (DOMAIN\\user)' : undefined}
+              />
             </div>
-            {form.screenMode === 'window' && (
-              <div className="form-row form-row--cols">
-                <div className="form-col">
-                  <label className="form-label">Ширина</label>
-                  <input
-                    className="input"
-                    value={form.width}
-                    onChange={(e) => set('width', e.target.value.replace(/[^\d]/g, ''))}
-                  />
-                </div>
-                <div className="form-col">
-                  <label className="form-label">Высота</label>
-                  <input
-                    className="input"
-                    value={form.height}
-                    onChange={(e) => set('height', e.target.value.replace(/[^\d]/g, ''))}
-                  />
-                </div>
-              </div>
-            )}
             <label className="check">
               <input type="checkbox" checked={form.multiMonitor} onChange={(e) => set('multiMonitor', e.target.checked)} />
               Использовать все мониторы
