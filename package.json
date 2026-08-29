@@ -113,6 +113,7 @@
   },
   "allowScripts": {
     "bufferutil@4.1.0": true,
-    "utf-8-validate@6.0.6": true
+    "utf-8-validate@6.0.6": true,
+    "electron@43.4.0": true
   }
 }

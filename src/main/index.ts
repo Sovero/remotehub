@@ -393,10 +393,16 @@ if (!gotLock) {
         return null;
       }
     };
+    // getContentBounds() всегда в DIP, а rdp-com-host.exe — PER_MONITOR_AWARE_V2
+    // (см. rdp-com-host.cs) и ждёт SetWindowPos в физических экранных пикселях.
+    // Сам rect вкладки (ipc.ts, IPC.rdpLegacyRect) уже переведён из CSS-px в
+    // физические той же формулой (* scaleFactor) до того, как попасть сюда —
+    // конвертировать нужно только origin окна, иначе координаты складываются
+    // из разных единиц и встроенное окно оказывается смещено/не того размера.
     const getParentOrigin = (): { x: number; y: number } | null => {
       if (!mainWindow || mainWindow.isDestroyed()) return null;
       const bounds = mainWindow.getContentBounds();
-      return { x: bounds.x, y: bounds.y };
+      return screen.dipToScreenPoint({ x: bounds.x, y: bounds.y });
     };
     const rdpLegacy = new RdpManager({
       sealer: dpapiSealer,
