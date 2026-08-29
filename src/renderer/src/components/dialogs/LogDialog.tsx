@@ -158,7 +158,7 @@ export default function LogDialog(): React.JSX.Element {
   const trimmedSearch = search.trim();
 
   return (
-    <Modal title="Журнал событий" onClose={closeDialog} width={860}>
+    <Modal title="Журнал событий" onClose={closeDialog} width={860} height={560} resizable>
       <div className="log-panel">
         <div className="log-bar">
           <div className="log-filter-group" title="Фильтр по уровню важности">
