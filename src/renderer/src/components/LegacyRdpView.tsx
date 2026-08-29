@@ -81,7 +81,12 @@ const LegacyRdpView: React.FC<Props> = ({ sessionId, host, active }) => {
       window.clearTimeout(timer);
       ro.disconnect();
     };
-  }, [sessionId]);
+    // attempt: при переподключении хост-процесс перезапускается с чистым
+    // ActiveRdp.rect = null — без переотправки текущего rect здесь окно
+    // остаётся в старой позиции, пока пользователь не подвинет/не изменит
+    // размер главного окна (это и триггерит ResizeObserver случайно).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, attempt]);
 
   return <div className="legacy-rdp-view" ref={wrapRef} />;
 };
