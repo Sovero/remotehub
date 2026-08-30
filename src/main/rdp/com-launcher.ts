@@ -83,22 +83,31 @@ export async function spawnComRdp(opts: RdpFileOptions, password: string | null)
     log(`cmdkey injected: ${passwordInjected ? 'ok' : 'failed'}`);
   }
 
+  // Пароль НЕ входит в args: argv процесса виден любому другому процессу на
+  // машине (Win32_Process.CommandLine, диспетчер задач, Process Explorer) —
+  // без повышенных прав и пока процесс жив, то есть весь RDP-сеанс. Вместо
+  // этого он пишется первой строкой в stdin сразу после спавна (см. шапку
+  // rdp-com-host.cs) — так его видит только сам дочерний процесс.
   const args: string[] = [
     opts.host,
     String(opts.port ?? 3389),
     opts.domain ? `${opts.domain}\\${opts.username}` : opts.username,
-    password ?? '',
     opts.domain ?? '',
     String(opts.width ?? 1024),
     String(opts.height ?? 768)
   ];
 
-  log(`spawn ${exePath} ${args.map((a, i) => (i === 3 ? '***' : a)).join(' ')}`);
+  log(`spawn ${exePath} ${args.join(' ')}`);
 
   const child = spawn(exePath, args, {
     stdio: ['pipe', 'pipe', 'pipe'],
     windowsHide: true
   });
+  try {
+    child.stdin?.write(`${password ?? ''}\n`);
+  } catch {
+    // stdin недоступен — процесс уже завершился/не запустился, обработается ниже по коду выхода
+  }
 
   let stderrBuf = '';
   child.stderr?.on('data', (chunk: Buffer) => {

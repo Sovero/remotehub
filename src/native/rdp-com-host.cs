@@ -30,9 +30,15 @@
 //       rdp-com-host.cs MsTscAxInterop.cs /out:rdp-com-host.exe
 //
 // Запуск и протокол:
-//   rdp-com-host.exe <host> <port> <username> <password> [domain] [width] [height]
+//   rdp-com-host.exe <host> <port> <username> [domain] [width] [height]
+//   → stdin (первая строка, сразу после спавна): пароль в открытом виде.
+//     Пароль НЕ передаётся аргументом командной строки — argv процесса
+//     виден любому другому процессу на машине без повышенных прав через
+//     Win32_Process.CommandLine / диспетчер задач (колонка «Командная
+//     строка») / Process Explorer, пока процесс жив (а он живёт весь RDP-
+//     сеанс). stdin таким способом не читается.
 //   → stdout: "HWND:1a2b3c4d"
-//   → stdin:  "quit" / "resize W H" / "embed <ownerHwndHex>" / "setrect x y w h"
+//   → stdin (далее):  "quit" / "resize W H" / "embed <ownerHwndHex>" / "setrect x y w h"
 //             / "show" / "hide" / "foreground" / "focus"
 
 using System;
@@ -100,19 +106,24 @@ internal static class Program
     {
         try { SetProcessDpiAwarenessContext(PerMonitorV2); } catch { /* недоступно на старых сборках — не критично */ }
 
-        if (args.Length < 4)
+        if (args.Length < 3)
         {
-            Console.Error.WriteLine("Usage: rdp-com-host <host> <port> <user> <pass> [domain] [w] [h]");
+            Console.Error.WriteLine("Usage: rdp-com-host <host> <port> <user> [domain] [w] [h]  (пароль читается первой строкой stdin)");
             return 1;
         }
         string host = args[0];
         int port = int.Parse(args[1]);
         string username = args[2];
-        string password = args[3];
-        string domain = args.Length > 4 ? args[4] : "";
+        string domain = args.Length > 3 ? args[3] : "";
         int w0, h0;
-        int width = args.Length > 5 && int.TryParse(args[5], out w0) ? Math.Max(100, w0) : 1024;
-        int height = args.Length > 6 && int.TryParse(args[6], out h0) ? Math.Max(100, h0) : 768;
+        int width = args.Length > 4 && int.TryParse(args[4], out w0) ? Math.Max(100, w0) : 1024;
+        int height = args.Length > 5 && int.TryParse(args[5], out h0) ? Math.Max(100, h0) : 768;
+
+        // Пароль — первая строка stdin, а не аргумент командной строки (см.
+        // комментарий в шапке файла). Родитель пишет её сразу после спавна,
+        // до любых остальных stdin-команд, поэтому чтение блокирующее и без
+        // таймаута: она уже либо в буфере пайпа, либо появится очень скоро.
+        string password = Console.In.ReadLine() ?? "";
 
         Application.EnableVisualStyles();
 
