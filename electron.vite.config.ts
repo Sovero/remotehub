@@ -10,7 +10,7 @@ const BUNDLED_DEPS = [
   'electron-updater',
   'ssh2',
   'ws',
-  'node-rdpjs',
+  'node-rdpjs-2',
   'telnet-client',
   'nanoid',
 ];
