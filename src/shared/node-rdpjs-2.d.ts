@@ -1,4 +1,4 @@
-declare module 'node-rdpjs' {
+declare module 'node-rdpjs-2' {
   import type { EventEmitter } from 'events';
 
   interface RdpClient extends EventEmitter {

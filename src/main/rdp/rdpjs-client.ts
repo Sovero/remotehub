@@ -5,7 +5,7 @@
  * Битмапы отдаются в renderer для рендеринга на Canvas.
  * Никакого mstsc.exe, SetParent, HWND — только DOM.
  */
-import type { RdpClient } from 'node-rdpjs';
+import type { RdpClient } from 'node-rdpjs-2';
 
 interface RdpjsSession {
   client: RdpClient;
@@ -54,7 +54,7 @@ export class RdpjsClientManager {
 
   async connect(sessionId: string, opts: RdpjsConnectOptions): Promise<{ ok: boolean; error?: string }> {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const rdp = require('node-rdpjs') as { createClient: (cfg: Record<string, unknown>) => RdpClient };
+    const rdp = require('node-rdpjs-2') as { createClient: (cfg: Record<string, unknown>) => RdpClient };
 
     const w = opts.width ?? 1366;
     const h = opts.height ?? 768;
