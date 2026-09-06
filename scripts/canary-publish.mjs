@@ -75,7 +75,7 @@ console.log(`canary-publish: ассеты на месте: ${exeAsset.name}, lat
 // того, что реально опубликовано в draft.
 let yml;
 try {
-  gh(['release', 'download', tag, '--pattern', 'latest.yml', '--dir', resolve(root, 'release')]);
+  gh(['release', 'download', tag, '--pattern', 'latest.yml', '--dir', resolve(root, 'release'), '--clobber']);
   yml = readFileSync(resolve(root, 'release', 'latest.yml'), 'utf8');
 } catch (e) {
   die(`не удалось скачать latest.yml из draft: ${(e)?.message ?? e}`);
@@ -90,7 +90,7 @@ if (ymlVersion !== tag.slice(1)) {
 // Дайджест считаем по скачанному exe — только так сверка честная.
 console.log('canary-publish: скачиваю exe для сверки sha512 (может занять минуту)...');
 const exePath = resolve(root, 'release', exeAsset.name);
-gh(['release', 'download', tag, '--pattern', exeAsset.name, '--dir', resolve(root, 'release')]);
+gh(['release', 'download', tag, '--pattern', exeAsset.name, '--dir', resolve(root, 'release'), '--clobber']);
 const actualSha = createHash('sha512').update(readFileSync(exePath)).digest('base64');
 if (actualSha !== ymlSha) {
   die(`sha512 не сходится: latest.yml=${ymlSha}, фактический=${actualSha} — ассет побит?`);
