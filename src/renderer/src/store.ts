@@ -202,7 +202,8 @@ export const useApp = create<AppState>((set, get) => ({
     helpErrorShown: false,
     lastSeenVersion: null,
     logDialogSize: null,
-    historyDialogSize: null
+    historyDialogSize: null,
+    sidebarCollapsed: false
   },
   appInfo: null,
   ready: false,

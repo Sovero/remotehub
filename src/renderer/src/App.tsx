@@ -180,6 +180,13 @@ export default function App(): React.JSX.Element {
         }
         return;
       }
+      // Ctrl+B — свернуть/развернуть левую панель (работает и из полей ввода,
+      // конфликтов с браузерными хоткеями нет: B без модификаторов текст не меняет).
+      if (e.key.toLowerCase() === 'b' && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        void s.patchSettings({ sidebarCollapsed: !s.settings.sidebarCollapsed });
+        return;
+      }
       if (inAppInput) return;
 
       if (e.key === 'W') {
@@ -209,7 +216,7 @@ export default function App(): React.JSX.Element {
   }
 
   return (
-    <div className="app">
+    <div className={`app${settings.sidebarCollapsed ? ' app--sidebar-collapsed' : ''}`}>
       <aside className="sidebar">
         <Sidebar />
       </aside>

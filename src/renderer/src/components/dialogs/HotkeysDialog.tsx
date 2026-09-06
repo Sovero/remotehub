@@ -1,6 +1,7 @@
 import Modal from './Modal';
 
 const HOTKEYS: [string, string][] = [
+  ['Ctrl+B', 'Свернуть/развернуть левую панель'],
   ['Ctrl+Shift+T', 'Новая сессия'],
   ['Ctrl+W', 'Закрыть вкладку'],
   ['Ctrl+Tab', 'Следующая вкладка'],

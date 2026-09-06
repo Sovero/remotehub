@@ -8,6 +8,7 @@ import { runVncFlow, runVncErrorFlow, runSftpFlow, runSftpTunnelsFlow } from './
 import { runIconsFlow } from './ui-icons';
 import { runUpdateFlow, runContrastFlow } from './ui-update-contrast';
 import { runScreenshotFlow } from './ui-screenshot';
+import { runSidebarCollapseFlow } from './ui-sidebar';
 import {
   runCredFlow,
   runSnipsFlow,
@@ -133,6 +134,8 @@ export function installSmokeHooks(mainWindow: BrowserWindow, store: Store): void
           return;
         }
         if (await runScreenshotFlow(mainWindow)) return;
+        // Схлопывание левой панели: рельс с иконками, персистентность, Ctrl+B.
+        if (await runSidebarCollapseFlow(mainWindow, store)) return;
         if (await runVncFlow(mainWindow, watchdog)) return;
         // Ошибка рукопожатия VNC: сервер молчит → вкладка показывает понятный оверлей.
         if (await runVncErrorFlow(mainWindow, watchdog)) return;

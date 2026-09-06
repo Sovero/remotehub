@@ -23,6 +23,9 @@ export default function Sidebar(): React.JSX.Element {
   const [tag, setTag] = useState<string | null>(null);
   const [menu, setMenu] = useState<MenuRequest | null>(null);
   const [rootDrop, setRootDrop] = useState(false);
+  // Свёрнутый рельс: одна колонка иконок — кнопки остаются доступными с тултипами.
+  const collapsed = useApp((s) => s.settings.sidebarCollapsed);
+  const patchSettings = useApp((s) => s.patchSettings);
 
   interface AvailState {
     seq: number;
@@ -229,13 +232,37 @@ export default function Sidebar(): React.JSX.Element {
     </span>
   );
 
+  const toggleCollapsed = (): void => {
+    void patchSettings({ sidebarCollapsed: !collapsed });
+  };
+
   return (
-    <div className="sidebar-inner">
+    <div className={`sidebar-inner${collapsed ? ' sidebar-inner--collapsed' : ''}`}>
       <div className="sidebar-header">
-        <span className="sidebar-title">Профили</span>
+        {collapsed && (
+          <button
+            className="btn btn--sm btn--icon"
+            title="Развернуть панель (Ctrl+B)"
+            aria-label="Развернуть панель"
+            onClick={toggleCollapsed}
+          >
+            <Icon name="arrow-right" size={14} />
+          </button>
+        )}
+        {!collapsed && <span className="sidebar-title">Профили</span>}
+        {!collapsed && (
+          <button
+            className="btn btn--sm btn--icon"
+            title="Свернуть панель (Ctrl+B)"
+            aria-label="Свернуть панель"
+            onClick={toggleCollapsed}
+          >
+            <Icon name="arrow-left" size={14} /></button>
+        )}
       </div>
 
-      <div className="sidebar-search">
+      {!collapsed && (
+        <div className="sidebar-search">
         <input
           className="input input--search"
           placeholder="Поиск: имя, адрес, тег…"
@@ -252,8 +279,10 @@ export default function Sidebar(): React.JSX.Element {
             ))}
           </select>
         )}
-      </div>
+        </div>
+      )}
 
+      {!collapsed && (
       <div
         className={`sidebar-body${rootDrop ? ' sidebar-body--drop' : ''}`}
         onDragOver={(e) => {
@@ -289,7 +318,9 @@ export default function Sidebar(): React.JSX.Element {
           <TreeView nodes={filtered} parentId={null} onMenu={(req) => setMenu(req)} statusMap={mergedStatusMap} />
         )}
       </div>
+      )}
 
+      {!collapsed ? (
       <div className="sidebar-footer">
         <button className="btn btn--sm btn--primary" onClick={() => openDialog({ type: 'group', group: null, parentId: null })}>
           <Icon name="folder-plus" size={13} /> Группа
@@ -319,6 +350,37 @@ export default function Sidebar(): React.JSX.Element {
           <Icon name="gear" size={13} /> Настройки
         </button>
       </div>
+      ) : (
+        <div className="sidebar-footer sidebar-footer--collapsed">
+          <button className="btn btn--sm btn--icon" title="Добавить группу" onClick={() => openDialog({ type: 'group', group: null, parentId: null })}>
+            <Icon name="folder-plus" size={14} />
+          </button>
+          <button className="btn btn--sm btn--icon" title="Добавить хост" onClick={() => openDialog({ type: 'host', host: null, parentId: null })}>
+            <Icon name="host" size={14} />
+          </button>
+          <button className="btn btn--sm btn--icon" title="Импорт профилей" onClick={() => openDialog({ type: 'import' })}>
+            <Icon name="import" size={14} />
+          </button>
+          <button className="btn btn--sm btn--icon" title="Экспорт профилей" onClick={() => void exportTree()}>
+            <Icon name="export" size={14} />
+          </button>
+          <button className="btn btn--sm btn--icon" title="История подключений" onClick={() => openDialog({ type: 'history' })}>
+            <Icon name="history" size={14} />
+          </button>
+          <button className="btn btn--sm btn--icon" title="Журнал событий" onClick={() => openDialog({ type: 'logs' })}>
+            <Icon name="log" size={14} />
+          </button>
+          <button className="btn btn--sm btn--icon" title="Runbook-скрипты" onClick={() => openDialog({ type: 'runbooks' })}>
+            <Icon name="script" size={14} />
+          </button>
+          <button className="btn btn--sm btn--icon" title="Наборы учётных данных" onClick={() => openDialog({ type: 'credentials' })}>
+            <Icon name="key" size={14} />
+          </button>
+          <button className="btn btn--sm btn--icon" title="Настройки" onClick={() => openDialog({ type: 'settings' })}>
+            <Icon name="gear" size={14} />
+          </button>
+        </div>
+      )}
 
       <UpdateBar />
 

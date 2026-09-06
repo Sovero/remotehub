@@ -162,6 +162,8 @@ export interface Settings {
   logDialogSize: DialogSize | null;
   /** Размер диалога «История подключений», запомненный при последнем закрытии. */
   historyDialogSize: DialogSize | null;
+  /** Левая панель свёрнута в узкий рельс с иконками (кнопки остаются доступны). */
+  sidebarCollapsed: boolean;
 }
 
 export interface ProfilesFile {
@@ -201,7 +203,8 @@ export const DEFAULT_SETTINGS: Settings = {
   helpErrorShown: false,
   lastSeenVersion: null,
   logDialogSize: null,
-  historyDialogSize: null
+  historyDialogSize: null,
+  sidebarCollapsed: false
 };
 
 export const DEFAULT_SSH: SshOptions = { keepalive: 30, agent: false, timeout: 10 };

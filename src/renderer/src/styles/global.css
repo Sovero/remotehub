@@ -3383,3 +3383,57 @@ textarea.input {
   max-width: 380px;
   font-family: var(--font-sans, inherit);
 }
+
+/* ---------- свёрнутая левая панель (рельс с иконками) ---------- */
+
+/* Сетка .app: 280px колонка панели → 46px рельс. */
+.app--sidebar-collapsed {
+  grid-template-columns: 46px 1fr;
+}
+
+/* Заголовок рельса: одна кнопка-иконка по центру. */
+.sidebar-inner--collapsed .sidebar-header {
+  justify-content: center;
+  padding: 8px 4px;
+}
+
+/* Тело рельса: сетка иконок 2×N с переносом. */
+.sidebar-inner--collapsed .sidebar-body {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  align-content: start;
+  justify-items: stretch;
+}
+
+.sidebar-inner--collapsed .sidebar-body .btn--icon {
+  width: 100%;
+  justify-content: center;
+  padding: 6px 0;
+}
+
+/* Подвал рельса: одна колонка иконок. */
+.sidebar-footer--collapsed {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 4px;
+}
+
+.sidebar-footer--collapsed .btn {
+  width: 100%;
+  justify-content: center;
+  padding: 6px 0;
+}
+
+/* Полоса автообновления не должна ломать рельс. */
+.sidebar-inner--collapsed .update-bar {
+  padding: 4px;
+  font-size: 0;
+  gap: 2px;
+}
+
+.sidebar-inner--collapsed .update-bar__text {
+  display: none;
+  }
+
