@@ -3,6 +3,23 @@
 Все заметные изменения проекта. Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 версионирование — семантическое (MAJOR.MINOR.PATCH).
 
+## [0.1.34] — 2026-09-06
+
+### Добавлено
+- **Canary-контур релизов** — первый шаг staged rollout
+  (`docs/canary-process.md`, §7 release-playbook):
+  - `release.yml` создаёт релиз **черновиком** (`draft: true`,
+    `make_latest: "false"`) — electron-updater не видит draft-релизы, поэтому
+    автобновление никому не прилетает до явной публикации; ассеты и latest.yml
+    при этом уже в draft, в step summary CI печатает дальнейшие шаги;
+  - `scripts/canary-publish.mjs` — read-only верификация draft (ассеты,
+    версия в latest.yml, sha512 base64 vs фактически скачанный exe — та же
+    сверка, что делает electron-updater) и публикация одной командой с
+    `--publish` и опциональной заменой notes (`--notes`); всё через `gh`
+    без shell;
+  - чек-лист пилота и роли мейнтейнера/пилотов — в `docs/canary-process.md`;
+    откат на canary-этапе тривиален (draft просто удаляется).
+
 ## [0.1.33] — 2026-09-06
 
 ### Добавлено

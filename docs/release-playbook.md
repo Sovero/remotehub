@@ -22,7 +22,9 @@ git tag vX.Y.Z && git push origin vX.Y.Z
   ├─ npm run build
   ├─ npx electron-builder --win --x64 --publish never
   ├─ генерация release/latest.yml (sha512 base64, нормализованное имя ассета)
-  └─ softprops/action-gh-release → публикует exe + latest.yml, generate_release_notes
+  └─ softprops/action-gh-release → создаёт DRAFT-релиз (canary-ворота,
+      docs/canary-process.md): exe + latest.yml на месте, но апдейтер
+      черновики не видит — раздача начнётся только после публикации
 ```
 
 Локальный путь `npm run dist` (для ручной сборки): `bump-version.mjs` (patch-бамп
@@ -79,13 +81,21 @@ git tag vX.Y.Z && git push origin vX.Y.Z
 4. **Тег.** `git tag vX.Y.Z && git push origin vX.Y.Z`. Именно push тега —
    триггер. Аннотированный (`git tag -a`) тоже сработает.
 5. **Наблюдение.** `gh run watch` (или вкладка Actions). Сборка ~5–10 мин.
-6. **Проверка релиза.**
-   `gh release view vX.Y.Z --repo Sovero/remotehub` — должны быть два ассета:
-   `Remote.Hub.Setup.X.Y.Z.exe` и `latest.yml`. Убедиться, что в latest.yml
-   `version: X.Y.Z` и sha512 совпадает с exe (апдейтер сверяет base64-дайджест).
-7. **Notes.** CI создаёт релиз с `generate_release_notes: true` (авто-PR-list).
-   При желании — `gh release edit vX.Y.Z --notes-file ...` с текстом из
-   CHANGELOG-секции поверх автогенерации.
+6. **Canary-проверка.** Релиз создаётся **черновиком** (с 0.1.34): проверьте
+   `gh release view vX.Y.Z` — два ассета (`Remote.Hub.Setup.X.Y.Z.exe` и
+   `latest.yml`), в latest.yml `version: X.Y.Z` и sha512 совпадает с exe.
+   Или сразу скриптом (read-only, ничего не публикует):
+   `node scripts/canary-publish.mjs --tag vX.Y.Z`.
+7. **Пилоты.** Раздайте exe из draft, соберите чек-лист из
+   `docs/canary-process.md`. Пилоты ставят вручную — автообновление в этот
+   момент молчит.
+8. **Публикация.** После вердикта:
+   `node scripts/canary-publish.mjs --tag vX.Y.Z --notes
+   .github/release-notes-vX.Y.Z.md --publish` — draft становится published,
+   и только с этого момента electron-updater начинает раздавать обновление.
+   Автосгенерированные notes при желании уже заменены на подготовленные
+   (`--notes`); можно править и после публикации
+   (`gh release edit vX.Y.Z --notes-file ...`).
 
 ## 4. Ловушки этого репозитория (все — реальные)
 
@@ -135,16 +145,17 @@ git tag vX.Y.Z && git push origin vX.Y.Z
 - [ ] CHANGELOG-секция `[X.Y.Z]` заполнена (ru, Keep-a-Changelog формат)
 - [ ] версия ≥ последнего тега (или смирились с CI-перезаписью)
 - [ ] тег `vX.Y.Z` запушен → CI зелёный
-- [ ] у релиза 2 ассета: exe + latest.yml; `version:` в yml = X.Y.Z
-- [ ] release notes: автогенерация или REPLACE из CHANGELOG-секции
-- [ ] после релиза: `npm run smoke:rdp:iron` на живом хосте — можно и позже
+- [ ] у draft-релиза 2 ассета: exe + latest.yml; `version:` в yml = X.Y.Z
+- [ ] canary-верификация: `node scripts/canary-publish.mjs --tag vX.Y.Z` (read-only)
+- [ ] пилоты прошли чек-лист (docs/canary-process.md), вердикт ОК
+- [ ] публикация: `canary-publish.mjs --tag vX.Y.Z --notes ... --publish`
+- [ ] после публикации: `npm run smoke:rdp:iron` на живом хосте — можно и позже
 - [ ] если релиз неудачный: draft/delete + откат по §5
 
 ## 7. Что из навыка можно взять на будущее (не сейчас)
 
-- **draft-релиз как canary**: создать draft, отдать 1–2 пилотам, публиковать
-  после подтверждения. Это единственная реалистичная «staged rollout» для
-  electron-updater без изменения инфраструктуры.
+- **draft-релиз как canary**: ✅ внедрено в 0.1.34 — релиз создаётся черновиком,
+  пилотный чек-лист и скрипт публикации в `docs/canary-process.md`.
 - **changelog-агент**: `gh api repos/Sovero/remotehub/compare/vLAST...main
   --jq '.commits[].commit.message'` — полуфабрикат для ручного черновика
   CHANGELOG-секции (авто-категоризацию придётся делать руками или отдельным

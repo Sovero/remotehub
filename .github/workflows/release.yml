@@ -156,12 +156,39 @@ jobs:
             console.log(yml);
           " "$VERSION" "$EXE" "$NAME"
 
-      - name: Create GitHub Release
+      # Canary-ворота (docs/canary-process.md): релиз создаётся DRAFT'ом и
+      # make_latest=false — electron-updater не видит draft-релизы, поэтому
+      # автобновление ни одному пользователю не прилетает, пока пилоты не
+      # проверят сборку и мейнтейнер не опубликует draft вручную (скрипт
+      # scripts/canary-publish.mjs) или через интерфейс GitHub. Ассеты и
+      # latest.yml при этом уже на месте — публикация меняет только видимость.
+      - name: Create draft canary release (invisible to auto-update until published)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: ${{ steps.tag.outputs.tag }}
           generate_release_notes: true
+          draft: true
+          make_latest: "false"
           files: |
             release/Remote Hub Setup ${{ steps.tag.outputs.version }}.exe
             release/latest.yml
+
+      - name: Canary next steps
+        shell: bash
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          cat <<EOF >> "$GITHUB_STEP_SUMMARY"
+          ## Canary release $TAG готов к пилотной проверке
+
+          Релиз создан **черновиком** — автообновление его не раздаёт.
+
+          1. Раздайте установщик пилотам (ассет в draft-релизе или артефакт сборки).
+          2. Соберите чек-лист пилота: docs/canary-process.md.
+          3. Публикация после вердикта:
+
+          node scripts/canary-publish.mjs --tag $TAG --notes .github/release-notes-vX.Y.Z.md
+
+          Скрипт сверит ассеты и sha512 из latest.yml, подставит notes и опубликует
+          релиз — с этого момента electron-updater начнёт раздавать обновление.
+          EOF
