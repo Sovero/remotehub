@@ -34,7 +34,8 @@ import type { CredentialSet, Settings, TreeNode, HistoryEntry, Runbook, HostStat
 import { parseChangelog } from '../shared/changelog';
 import { addLog, clearLogs, getLogs, onLog } from './log';
 import { resolveAuth } from './sessions/config';
-import { startIronGateway, stopIronGateway } from './rdp/iron-sessions';
+import type { RdpEngineHub } from './rdp/engine-hub';
+import type { RdpEngineConnectRequest } from '../shared/rdp-engine';
 import type { RdpManager } from './rdp/manager';
 import { readFileSync } from 'fs';
 import { buildExport, parseProfileExport } from '../shared/tree';
@@ -61,7 +62,8 @@ export function registerIpc(
   tunnels: TunnelManager,
   updater: Updater,
   rdpjs: RdpjsClientManager,
-  rdpLegacy: RdpManager
+  rdpLegacy: RdpManager,
+  engineHub: RdpEngineHub
 ): void {
   const resolveCredential = (host: { credentialId?: string | null }): CredentialSet | null =>
     host.credentialId ? store.loadCredentials().data.find((c) => c.id === host.credentialId) ?? null : null;
@@ -270,9 +272,9 @@ export function registerIpc(
 
   ipcMain.handle(IPC.sessionClose, async (_e, sessionId: string) => {
     sessions.close(sessionId);
-    rdpjs.disconnect(sessionId);
-    await stopIronGateway(sessionId);
-    rdpLegacy.stop(sessionId);
+    // Закрываем РОВНО движок-владелец сессии (раньше здесь дёргались disconnect
+    // всех трёх RDP-движков подряд на каждую сессию — латентный кросс-движковый баг).
+    engineHub.disconnect(sessionId);
     vnc.close(sessionId);
     sftp.close(sessionId);
     tunnels.stopAll(sessionId);
@@ -302,7 +304,11 @@ export function registerIpc(
         password = auth.password ?? '';
       }
     }
-    const result = await rdpjs.connect(req.sessionId, {
+    // Через хаб: успех фиксирует владельца сессии (engine attribution),
+    // closeTab/sessionClose потом закроют ровно этот движок.
+    const norm: RdpEngineConnectRequest = {
+      sessionId: req.sessionId,
+      engine: 'rdpjs',
       host: req.host,
       port: req.port,
       username,
@@ -310,33 +316,33 @@ export function registerIpc(
       domain: req.domain,
       width: req.width,
       height: req.height
-    });
-    return result;
+    };
+    return await engineHub.connect(norm);
   });
 
   ipcMain.handle(IPC.rdpjsClose, (_e, sessionId: string) => {
-    rdpjs.disconnect(sessionId);
+    engineHub.disconnect(sessionId);
     return { ok: true };
   });
 
   ipcMain.on(IPC.rdpjsMouse, (_e, event: RdpjsMouseEvent) => {
-    rdpjs.sendMouse(event.sessionId, event.x, event.y, event.button, event.isPressed);
+    engineHub.sendMouse(event.sessionId, event.x, event.y, event.button, event.isPressed);
   });
 
   ipcMain.on(IPC.rdpjsMouseMove, (_e, event: RdpjsMouseMoveEvent) => {
-    rdpjs.sendMouse(event.sessionId, event.x, event.y, 0, false);
+    engineHub.sendMouseMove(event.sessionId, event.x, event.y);
   });
 
   ipcMain.on(IPC.rdpjsWheel, (_e, event: RdpjsWheelEvent) => {
-    rdpjs.sendWheel(event.sessionId, event.x, event.y, event.step, event.isNegative, event.isHorizontal);
+    engineHub.sendWheel(event.sessionId, event.x, event.y, event.step, event.isNegative, event.isHorizontal);
   });
 
   ipcMain.on(IPC.rdpjsKeyUnicode, (_e, event: RdpjsKeyEvent) => {
-    rdpjs.sendKeyUnicode(event.sessionId, event.code, event.isPressed);
+    engineHub.sendKeyUnicode(event.sessionId, event.code, event.isPressed);
   });
 
   ipcMain.on(IPC.rdpjsKeyScancode, (_e, event: RdpjsKeyEvent) => {
-    rdpjs.sendKeyScancode(event.sessionId, event.code, event.isPressed);
+    engineHub.sendKeyScancode(event.sessionId, event.code, event.isPressed);
   });
 
   // ---- iron (локальный RDCleanPath-мост для @devolutions/iron-remote-desktop) ----
@@ -353,35 +359,33 @@ export function registerIpc(
         password = auth.password ?? '';
       }
     }
-    try {
-      const endpoint = await startIronGateway({
-        sessionId: req.sessionId,
-        host: req.host,
-        port: req.port ?? 3389
-      });
-      // endpoint.wsUrl уже содержит одноразовый токен сессии в query
-      // (ws://127.0.0.1:<port>/?token=…), authToken — тот же секрет отдельно
-      // для SessionBuilder.authToken. В лог — только host:port реального
-      // сервера, сам токен не пишем (секрет сессии).
-      addLog('info', 'iron', `IronRDP: мост для ${req.host}:${req.port ?? 3389} поднят (127.0.0.1, доступ по токену сессии)`);
-      return {
-        ok: true,
-        wsUrl: endpoint.wsUrl,
-        authToken: endpoint.authToken,
-        destination: `${req.host}:${req.port ?? 3389}`,
-        username,
-        password,
-        domain
-      };
-    } catch (e) {
-      addLog('error', 'iron', `IronRDP: не удалось поднять мост — ${(e as Error)?.message ?? 'неизвестная ошибка'}`);
-      return { ok: false, error: (e as Error)?.message ?? 'Не удалось поднять RDCleanPath-мост' };
+    const norm: RdpEngineConnectRequest = {
+      sessionId: req.sessionId,
+      engine: 'iron',
+      host: req.host,
+      port: req.port ?? 3389,
+      username,
+      password,
+      domain
+    };
+    const res = await engineHub.connect(norm);
+    // res.bridge.wsUrl уже содержит одноразовый токен сессии в query
+    // (ws://127.0.0.1:<port>/?token=…), authToken — тот же секрет отдельно
+    // для SessionBuilder.authToken. В лог — только host:port реального
+    // сервера, сам токен не пишем (секрет сессии).
+    if (!res.ok) {
+      addLog('error', 'iron', `IronRDP: не удалось поднять мост — ${res.error ?? 'неизвестная ошибка'}`);
+      return { ok: false, error: res.error ?? 'Не удалось поднять RDCleanPath-мост' };
     }
+    addLog('info', 'iron', `IronRDP: мост для ${req.host}:${req.port ?? 3389} поднят (127.0.0.1, доступ по токену сессии)`);
+    return { ok: true, ...(res.bridge as NonNullable<typeof res.bridge>) };
   });
 
   ipcMain.handle(IPC.ironStop, async (_e, sessionId: string) => {
-    await stopIronGateway(sessionId);
-    addLog('info', 'iron', `IronRDP: мост сессии ${sessionId} остановлен`);
+    // Через хаб: закрывает движок-владелец сессии (для iron — мост).
+    const engine = engineHub.engineOf(sessionId);
+    engineHub.disconnect(sessionId);
+    addLog('info', 'iron', `IronRDP: сессия ${sessionId}${engine ? ` (движок ${engine})` : ''} остановлена`);
     return { ok: true };
   });
 
@@ -389,7 +393,16 @@ export function registerIpc(
   // серверов с сертификатом, несовместимым с TLS-стеком IronRDP) ----
   ipcMain.handle(IPC.rdpLegacyLaunch, async (_e, req: RdpLegacyLaunchRequest) => {
     const credential = resolveCredential(req.host);
-    const res = await rdpLegacy.launch(req.host, credential, req.sessionId);
+    // Через хаб: успех фиксирует владельца сессии (legacy), ввод/оконные
+    // команды потом маршрутизируются по capability-флагам движка.
+    const res = await engineHub.connect({
+      sessionId: req.sessionId,
+      engine: 'legacy',
+      host: req.host.host,
+      port: req.host.port ?? 3389,
+      hostProfile: req.host,
+      credential
+    });
     addLog(
       res.ok ? 'info' : 'error',
       'rdp',
@@ -401,7 +414,7 @@ export function registerIpc(
   });
 
   ipcMain.on(IPC.rdpLegacyStop, (_e, sessionId: string) => {
-    rdpLegacy.stop(sessionId);
+    engineHub.disconnect(sessionId);
   });
 
   // Прямоугольник панели вкладки (CSS-пиксели) → физические пиксели и в менеджер.
@@ -409,7 +422,7 @@ export function registerIpc(
     const win = BrowserWindow.fromWebContents(e.sender);
     if (!win || win.isDestroyed()) return;
     const sf = screen.getDisplayMatching(win.getBounds()).scaleFactor;
-    rdpLegacy.setRect(req.sessionId, {
+    engineHub.setRect(req.sessionId, {
       x: Math.round(req.rect.x * sf),
       y: Math.round(req.rect.y * sf),
       width: Math.round(req.rect.width * sf),
@@ -419,11 +432,11 @@ export function registerIpc(
 
   // Переключение вкладок: показать окно активной legacy-сессии, спрятать остальные.
   ipcMain.on(IPC.rdpLegacyActivate, (_e, sessionId: string) => {
-    rdpLegacy.activate(sessionId);
+    engineHub.activate(sessionId);
   });
 
   ipcMain.on(IPC.rdpLegacyHide, (_e, sessionId: string) => {
-    rdpLegacy.hide(sessionId);
+    engineHub.hide(sessionId);
   });
 
   // Модальный диалог/онбординг открыт поверх встроенного нативного окна: пока
@@ -432,7 +445,7 @@ export function registerIpc(
   // диалоги не закрываются и navigator.clipboard.writeText() падает как
   // "документ не в фокусе".
   ipcMain.on(IPC.rdpLegacyOverlay, (_e, overlay: boolean) => {
-    rdpLegacy.setOverlay(overlay);
+    engineHub.setOverlay(overlay);
   });
 
   // ---- VNC ----

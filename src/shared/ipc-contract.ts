@@ -45,6 +45,8 @@ export const IPC = {
   rdpjsBitmap: 'rdpjs:bitmap',
   /** node-rdpjs: состояние сессии */
   rdpjsState: 'rdpjs:state',
+  /** Единый поток состояний всех RDP-движков (iron|rdpjs|legacy) — RdpEngineStatePayload */
+  engineState: 'rdp:engine-state',
   /** Единый поток состояний всех RDP-движков (см. src/shared/rdp-engine.ts). */
   rdpEngineState: 'rdp:engine-state',
   /** node-rdpjs: события мыши из renderer */

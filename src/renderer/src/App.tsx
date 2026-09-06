@@ -119,6 +119,24 @@ export default function App(): React.JSX.Element {
         s.applySessionState(payload.sessionId, { phase: 'closed', reason: 'RDP-сессия завершена' });
       }
     });
+    // Единый поток состояний RDP-движков (iron|rdpjs|legacy) — заменяет
+    // разнородные rdpjs:state и rdp-legacy:exited:
+    //  - rdpjs:  connecting/connected/disconnected → те же фазы вкладки;
+    //  - legacy: выход процесса → error или closed (exitCode приложен);
+    //  - iron:   error/closed от сторожа моста — view управляет своими
+    //            connecting/connected сам, эти события не теряются.
+    const offEngineState = window.api.onRdpEngineState?.((payload) => {
+      const s = useApp.getState();
+      if (payload.phase === 'connected') {
+        s.applySessionState(payload.sessionId, { phase: 'connected' });
+      } else if (payload.phase === 'connecting') {
+        s.applySessionState(payload.sessionId, { phase: 'connecting' });
+      } else if (payload.phase === 'disconnected') {
+        s.applySessionState(payload.sessionId, { phase: 'closed', reason: 'RDP-сессия завершена' });
+      } else {
+        s.applySessionState(payload.sessionId, { phase: 'error', message: payload.message ?? 'Ошибка RDP-движка' });
+      }
+    });
     const offRdpjsState = window.api.onRdpjsState?.((payload) => {
       const s = useApp.getState();
       const phase = payload.state === 'connected' ? 'connected'
@@ -134,6 +152,7 @@ export default function App(): React.JSX.Element {
     return () => {
       offData();
       offState();
+      offEngineState?.();
       offRdpjsState?.();
       offRdpLegacyExited?.();
       offVncErr();

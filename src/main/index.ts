@@ -3,7 +3,8 @@ import { writeFileSync } from 'fs';
 import { join } from 'path';
 import { pathToFileURL } from 'url';
 import { registerIpc } from './ipc';
-import { stopAllIronGateways } from './rdp/iron-sessions';
+import { RdpEngineHub } from './rdp/engine-hub';
+import type { RdpLegacyExitedPayload } from '../shared/ipc-contract';
 import { SessionManager } from './sessions/manager';
 import { HostKeyStore } from './sessions/host-keys';
 import { SftpManager } from './sftp/manager';
@@ -377,6 +378,12 @@ if (!gotLock) {
       },
       onState: (sessionId: string, state: string, error?: string) => {
         broadcast('rdpjs:state', { sessionId, state, error });
+        // Атрибуция состояния в хабе: после hub.connect сессия принадлежит
+        // rdpjs; disconnected/error снимают владельца (повторный closeTab
+        // для мёртвой сессии станет no-op).
+        if (state === 'connecting' || state === 'connected' || state === 'disconnected') {
+          engineHub.handleEngineEvent('rdpjs', sessionId, { phase: state, message: error });
+        }
       }
     });
     const vnc = new VncManager(dpapiSealer, (sessionId, message) => {
@@ -410,17 +417,29 @@ if (!gotLock) {
     };
     const rdpLegacy = new RdpManager({
       sealer: dpapiSealer,
-      send: broadcast as (c: 'rdp-legacy:exited', p: unknown) => void,
+      send: (channel, payload) => {
+        broadcast(channel, payload);
+        // Выход процесса rdp-com-host.exe — единственный источник состояний
+        // legacy; тот же payload идёт в единый поток состояний хаба.
+        if (channel === 'rdp-legacy:exited') {
+          engineHub.handleLegacyProcessExit(payload as RdpLegacyExitedPayload);
+        }
+      },
       getParentHwnd,
       getParentOrigin
     });
+    // Единая точка жизненного цикла RDP-движков (риск R6): карта владельцев
+    // сессий, capability-маршрутизация ввода/окон, один канал состояний.
+    const engineHub = new RdpEngineHub({
+      rdpjs,
+      legacy: rdpLegacy,
+      onState: (payload) => broadcast('rdp:engine-state', payload)
+    });
     installMenu(updater);
-    registerIpc(store, sessions, vnc, sftp, tunnels, updater, rdpjs, rdpLegacy);
+    registerIpc(store, sessions, vnc, sftp, tunnels, updater, rdpjs, rdpLegacy, engineHub);
     app.on('before-quit', () => {
-      void stopAllIronGateways();
+      void engineHub.closeAll();
       sessions.closeAll();
-      rdpjs.closeAll();
-      rdpLegacy.closeAll();
       vnc.closeAll();
       sftp.closeAll();
       tunnels.closeAll();

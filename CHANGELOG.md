@@ -3,6 +3,27 @@
 Все заметные изменения проекта. Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 версионирование — семантическое (MAJOR.MINOR.PATCH).
 
+## [0.1.33] — 2026-09-06
+
+### Добавлено
+- **Единая точка жизненного цикла RDP-движков** — `RdpEngineHub` подключён
+  к IPC (фаза 1 плана вывода rdpjs из эксплуатации, риск R6):
+  - все launch-пути (`rdpjsLaunch`, `ironStart`, `rdpLegacyLaunch`) идут через
+    `hub.connect`; успех фиксирует владельца сессии;
+  - close (`rdpjsClose`, `ironStop`, `rdpLegacyStop`, `sessionClose`) закрывает
+    **ровно** движок-владелец — раньше `sessionClose` дёргал disconnect всех
+    трёх движков подряд на каждую сессию (латентный кросс-движковый баг);
+  - ввод мыши/клавиатуры и оконные команды (rect/activate/hide/overlay)
+    маршрутизируются по capability-флагам движка;
+  - `before-quit` закрывает все движки через `hub.closeAll()`;
+  - новый единый канал состояний `rdp:engine-state` (payload с `engine` и
+    фазой) транслируется в renderer (`window.api.onRdpEngineState`) и уже
+    обрабатывается наряду со старыми `rdpjs:state`/`rdp-legacy:exited`
+    (сами старые каналы снимутся в фазе 3 плана);
+  - 13 новых тестов хаба: атрибуция владельцев, capability-маршрутизация,
+    перевод событий (выход COM-host → error/disconnected, сторож моста iron),
+    no-op повторного закрытия мёртвой сессии, closeAll.
+
 ## [0.1.32] — 2026-09-06
 
 ### Добавлено

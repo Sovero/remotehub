@@ -186,6 +186,12 @@ const api = {
   rdpLegacyActivate: (sessionId: string): void => ipcRenderer.send(IPC.rdpLegacyActivate, sessionId),
   rdpLegacyHide: (sessionId: string): void => ipcRenderer.send(IPC.rdpLegacyHide, sessionId),
   rdpLegacyOverlay: (overlay: boolean): void => ipcRenderer.send(IPC.rdpLegacyOverlay, overlay),
+  // ---- единый поток состояний RDP-движков (rdp:engine-state) ----
+  onRdpEngineState: (cb: (payload: import('../shared/rdp-engine').RdpEngineStatePayload) => void): (() => void) => {
+    const listener = (_e: unknown, payload: import('../shared/rdp-engine').RdpEngineStatePayload): void => cb(payload);
+    ipcRenderer.on(IPC.engineState, listener);
+    return () => ipcRenderer.removeListener(IPC.engineState, listener);
+  },
   onRdpLegacyExited: (cb: (payload: import('../shared/ipc-contract').RdpLegacyExitedPayload) => void): (() => void) => {
     const listener = (_e: unknown, payload: import('../shared/ipc-contract').RdpLegacyExitedPayload): void => cb(payload);
     ipcRenderer.on(IPC.rdpLegacyExited, listener);
