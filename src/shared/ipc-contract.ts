@@ -45,6 +45,8 @@ export const IPC = {
   rdpjsBitmap: 'rdpjs:bitmap',
   /** node-rdpjs: состояние сессии */
   rdpjsState: 'rdpjs:state',
+  /** Единый поток состояний всех RDP-движков (см. src/shared/rdp-engine.ts). */
+  rdpEngineState: 'rdp:engine-state',
   /** node-rdpjs: события мыши из renderer */
   rdpjsMouse: 'rdpjs:mouse',
   /** node-rdpjs: движение мыши */
@@ -382,8 +384,15 @@ export interface IronStartRequest {
  */
 export interface IronStartResult {
   ok: boolean;
-  /** WebSocket-адрес локального RDCleanPath-моста (ws://127.0.0.1:<port>). */
+  /**
+   * WebSocket-адрес локального RDCleanPath-моста с одноразовым токеном сессии
+   * (ws://127.0.0.1:<port>/?token=<секрет>). Токен проверяется мостом при
+   * upgrade; тот же секрет надо передать в SessionBuilder.authToken (proxy_auth
+   * Request PDU) — мост сверяет и его. Секрет сессии: в логи не писать.
+   */
   wsUrl?: string;
+  /** Одноразовый токен этой сессии моста — для SessionBuilder.authToken. */
+  authToken?: string;
   /** Строка destination для Request PDU (host:port реального сервера). */
   destination?: string;
   username?: string;

@@ -228,6 +228,15 @@ describe('IronGateway — хендшейк и туннель', () => {
     return { gw, states };
   }
 
+  /** Открывает ws по URL с токеном сессии (buildWsUrl). */
+  function openAuthedWs(gw: IronGateway): Promise<WebSocket> {
+    return new Promise((resolve, reject) => {
+      const w = new WebSocket(gw.buildWsUrl());
+      w.once('open', () => resolve(w));
+      w.once('error', reject);
+    });
+  }
+
   it('полный цикл: Request → Response(cc) → двунаправленный сырой пайп', async () => {
     const fake = await startFakeRdpServer({
       x224Reply: X224_CC,
@@ -236,9 +245,9 @@ describe('IronGateway — хендшейк и туннель', () => {
     cleanups.push(fake.close);
     const { gw, states } = await makeGateway(fake.port);
 
-    const ws = await wsConnect(gw.actualPort);
+    const ws = await openAuthedWs(gw);
     const msgs = wsMessageQueue(ws);
-    ws.send(encodeRequest('any', 'auth', X224_CR));
+    ws.send(encodeRequest('any', gw.authToken, X224_CR));
 
     const resp = decodePdu(await msgs.next());
     expect(resp.version).toBe(RDCLEANPATH_VERSION);
@@ -265,8 +274,8 @@ describe('IronGateway — хендшейк и туннель', () => {
     cleanups.push(fake.close);
     const { gw } = await makeGateway(fake.port);
 
-    const ws = await wsConnect(gw.actualPort);
-    ws.send(encodeRequest('any', 'auth', X224_CR));
+    const ws = await openAuthedWs(gw);
+    ws.send(encodeRequest('any', gw.authToken, X224_CR));
     const f = decodePdu(await nextWsMessage(ws));
     expect(f.errorCode).toBe(NEGOTIATION_ERROR_CODE);
     expect(f.x224?.equals(rejectBytes)).toBe(true);
@@ -287,8 +296,8 @@ describe('IronGateway — хендшейк и туннель', () => {
     await gw.start();
     cleanups.push(() => gw.stop());
 
-    const ws = await wsConnect(gw.actualPort);
-    ws.send(encodeRequest('any', 'auth', X224_CR));
+    const ws = await openAuthedWs(gw);
+    ws.send(encodeRequest('any', gw.authToken, X224_CR));
     const f = decodePdu(await nextWsMessage(ws));
     expect(f.errorCode).toBe(1);
     expect(f.wsaErrorCode).toBe(10061);

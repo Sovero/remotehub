@@ -25,6 +25,8 @@
  *     [9] server_addr UTF8String        (optional)
  *   }
  */
+import * as crypto from 'node:crypto';
+import * as http from 'node:http';
 import * as net from 'node:net';
 import * as tls from 'node:tls';
 import { WebSocketServer, type WebSocket } from 'ws';
@@ -312,6 +314,18 @@ async function readX224(
   return { confirm: bytes[5] === 0xd0, bytes };
 }
 
+/** Сравнение секретов за постоянное время (строки произвольной длины). */
+function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a, 'utf8');
+  const bb = Buffer.from(b, 'utf8');
+  if (ab.length !== bb.length) {
+    // Не светим длину токена таймингом: сравниваем с самим собой.
+    crypto.timingSafeEqual(bb, bb);
+    return false;
+  }
+  return crypto.timingSafeEqual(ab, bb);
+}
+
 // ---------------- Шлюз ----------------
 
 export interface IronGatewayState {
@@ -353,6 +367,14 @@ export class IronGateway {
 
   public actualPort = 0;
 
+  /**
+   * Одноразовый секрет этой сессии (128 бит): проверяется при ws-upgrade
+   * (query `?token=`) и в proxy_auth Request PDU. Без него любой локальный
+   * процесс мог бы подключиться к 127.0.0.1-порту моста и влить свой трафик
+   * в RDP-туннель (риск R8 из docs/rdp-engine-risk-report.md).
+   */
+  public readonly authToken: string;
+
   constructor(options: IronGatewayOptions) {
     this.opts = {
       connectTimeoutMs: 8000,
@@ -361,17 +383,40 @@ export class IronGateway {
       tunnelSilenceTimeoutMs: 15000,
       ...options
     };
+    this.authToken = crypto.randomUUID().replace(/-/g, '');
   }
 
-  /** Поднимает ws-сервер на случайном порту 127.0.0.1. */
+  /** Поднимает ws-сервер на случайном порту 127.0.0.1 (upgrade только с валидным токеном). */
   async start(): Promise<number> {
-    this.wss = new WebSocketServer({ host: '127.0.0.1', port: 0 });
-    await new Promise<void>((resolve, reject) => {
-      this.wss!.once('listening', () => resolve());
-      this.wss!.once('error', (e) => reject(e));
+    // Явный HTTP-сервер: только он даёт контроль над рукопожатием upgrade —
+    // WebSocketServer({ noServer: true }) сам ничего не слушает.
+    this.wss = new WebSocketServer({ noServer: true });
+    const httpServer = http.createServer((_req, res) => {
+      // Обычные GET (без upgrade) протоколом RDCleanPath не предусмотрены.
+      res.writeHead(426);
+      res.end('Upgrade Required');
     });
-    this.server = (this.wss as unknown as { _server: net.Server })._server;
-    this.actualPort = (this.server?.address() as net.AddressInfo).port;
+    httpServer.on('upgrade', (req, socket, head) => {
+      const url = new URL(req.url ?? '/', 'http://127.0.0.1');
+      const token = url.searchParams.get('token') ?? '';
+      if (this.closed || !safeEqual(token, this.authToken)) {
+        // Не наш клиент: рвём рукопожатие, не отдавая 101.
+        socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
+        addLog('warn', 'iron', 'IronRDP: отклонено ws-подключение без валидного токена (127.0.0.1)');
+        socket.destroy();
+        return;
+      }
+      this.wss!.handleUpgrade(req, socket, head, (ws) => {
+        this.wss!.emit('connection', ws, req);
+      });
+    });
+    this.server = httpServer;
+    await new Promise<void>((resolve, reject) => {
+      httpServer.once('listening', () => resolve());
+      httpServer.once('error', (e) => reject(e));
+      httpServer.listen({ host: '127.0.0.1', port: 0 });
+    });
+    this.actualPort = (this.server.address() as net.AddressInfo).port;
     this.wss.on('connection', (ws) => {
       this.handleConnection(ws).catch((e: unknown) => {
         // Диагностика нештатных путей: попадает в лог main-процесса.
@@ -383,6 +428,16 @@ export class IronGateway {
       /* слушающий сокет: ошибки отдельных соединений обрабатываются в handleConnection */
     });
     return this.actualPort;
+  }
+
+  /**
+   * URL локального моста для WASM-клиента. Токен в query — первый фактор
+   * (проверяется при upgrade), тот же секрет в proxy_auth Request PDU — второй
+   * (проверяется в handleConnection): первый отсекает чужие WS-клиенты,
+   * второй — чужие байты, посланные в туннель по валидному WS.
+   */
+  buildWsUrl(): string {
+    return `ws://127.0.0.1:${this.actualPort}/?token=${this.authToken}`;
   }
 
   private report(state: IronGatewayState): void {
@@ -532,6 +587,17 @@ export class IronGateway {
       this.fail('RDCleanPath: в Request нет X.224 PDU');
       return;
     }
+    // Второй фактор аутентификации: proxy_auth Request PDU должен нести тот же
+    // одноразовый токен сессии, что и query upgrade-запроса (WASM-клиент шлёт
+    // его через SessionBuilder.authToken). Upgrade-проверка уже отсекла чужие
+    // WS-клиенты; эта проверка — страховка на случай её обхода/поломки
+    // (рефакторинг, второй листенер): без неё чужой байт-поток вливался бы
+    // прямо в RDP-туннель.
+    if (!fields.proxyAuth || !safeEqual(fields.proxyAuth, this.authToken)) {
+      this.sendWs(ws, encodeError({ errorCode: GENERAL_ERROR_CODE }));
+      this.fail('RDCleanPath: proxy_auth не содержит валидный токен сессии');
+      return;
+    }
     const x224Req = fields.x224;
 
     // 2. Релейное соединение к серверу.
@@ -649,13 +715,18 @@ export class IronGateway {
   async stop(): Promise<void> {
     this.closed = true;
     this.destroySockets();
+    // Живые клиенты держат соединение: рвём принудительно.
+    for (const client of this.wss?.clients ?? []) {
+      try { client.terminate(); } catch { /* ignore */ }
+    }
+    this.wss?.close();
+    const srv = this.server;
     await new Promise<void>((resolve) => {
-      if (!this.wss) return resolve();
-      // Живые клиенты держат close(): рвём принудительно.
-      for (const client of this.wss.clients) {
-        try { client.terminate(); } catch { /* ignore */ }
-      }
-      this.wss.close(() => resolve());
+      if (!srv) return resolve();
+      // Зависшие полусоединения (например, неуспешный upgrade) не должны
+      // удерживать процесс: закрываем принудительно, если метод доступен.
+      (srv as http.Server).closeAllConnections?.();
+      srv.close(() => resolve());
     });
     this.wss = null;
     this.server = null;

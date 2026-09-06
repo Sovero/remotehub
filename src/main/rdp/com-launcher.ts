@@ -39,6 +39,27 @@ function log(msg: string): void {
 }
 
 /**
+ * Целевой ключ cmdkey для пары host/учётка: TERMSRV/<host>.
+ * Единственное место, где собирается этот формат (используется и для /generic,
+ * и для гарантированного /delete при аварийной уборке).
+ */
+export function cmdkeyTargetFor(host: string): string {
+  return `TERMSRV/${host}`;
+}
+
+/**
+ * Гарантированная уборка пароля из Credential Manager (cmdkey /delete).
+ * Вызывается штатно из cleanup() сессии, а также по closeAll/before-quit —
+ * крах или kill COM-хоста не должен оставлять пароль ОС в хранилище (R2).
+ * Ошибки игнорируются: записи может уже не быть — это не сбой уборки.
+ */
+export function purgeCmdkeyCredential(host: string): void {
+  const target = cmdkeyTargetFor(host);
+  execFile('cmdkey', [`/delete:${target}`], { windowsHide: true }, () => undefined);
+  log(`cmdkey purge issued: ${target}`);
+}
+
+/**
  * Запускает rdp-com-host.exe с аргументами подключения.
  * Читает строку "HWND:1A2B3C4D" из stdout и возвращает HWND.
  *
@@ -65,7 +86,7 @@ export async function spawnComRdp(opts: RdpFileOptions, password: string | null)
 
   // cmdkey: инъекция пароля в Credential Manager.
   // COM-контроль MsTscAx при CredSSP сам найдёт эти credentials.
-  const cmdkeyTarget = `TERMSRV/${opts.host}`;
+  const cmdkeyTarget = cmdkeyTargetFor(opts.host);
   let passwordInjected = false;
   const user = opts.domain ? `${opts.domain}\\${opts.username}` : opts.username;
   if (password) {
@@ -176,9 +197,7 @@ export async function spawnComRdp(opts: RdpFileOptions, password: string | null)
         }
       }, 2000);
       // Удаляем cmdkey-запись
-      if (passwordInjected) {
-        execFile('cmdkey', [`/delete:${cmdkeyTarget}`], { windowsHide: true }, () => undefined);
-      }
+      if (passwordInjected) purgeCmdkeyCredential(opts.host);
     }
   };
 }

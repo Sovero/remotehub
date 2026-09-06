@@ -112,8 +112,8 @@ describe.skipIf(!host)('IronRDP E2E — реальный RDP-хост', () => {
     await gw.start();
     cleanups.push(() => gw.stop());
 
-    const ws = await wsConnect(gw.actualPort);
-    ws.send(encodeRequest(`${host}:${port}`, 'e2e', X224_CR_NEG));
+    const ws = await wsConnect(gw.buildWsUrl());
+    ws.send(encodeRequest(`${host}:${port}`, gw.authToken, X224_CR_NEG));
 
     const pdu = decodePdu(await nextWsMessage(ws));
     ws.close();
@@ -156,8 +156,8 @@ describe.skipIf(!host)('IronRDP E2E — реальный RDP-хост', () => {
     await gw.start();
     cleanups.push(() => gw.stop());
 
-    const ws = await wsConnect(gw.actualPort);
-    ws.send(encodeRequest(`${host}:${port}`, 'e2e', X224_CR_NEG));
+    const ws = await wsConnect(gw.buildWsUrl());
+    ws.send(encodeRequest(`${host}:${port}`, gw.authToken, X224_CR_NEG));
     const pdu = decodePdu(await nextWsMessage(ws));
     ws.close();
 

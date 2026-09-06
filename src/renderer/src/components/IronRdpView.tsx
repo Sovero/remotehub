@@ -99,9 +99,10 @@ const IronRdpView: React.FC<Props> = ({ sessionId, host, port, domain: requested
         const sb = new Backend.SessionBuilder();
         sb.proxyAddress(res.wsUrl);
         // WASM-клиент требует auth_token при RDCleanPath-подключении
-        // (ironerror "auth_token missing"). Мост токен не проверяет — это
-        // просто строка в Request PDU (proxy_auth).
-        sb.authToken('remote-hub');
+        // (ironerror "auth_token missing"). Мост проверяет токен дважды: при
+        // ws-upgrade (query ?token= в wsUrl) и в proxy_auth Request PDU —
+        // здесь передаётся одноразовый секрет сессии из ironStart.
+        sb.authToken(res.authToken ?? '');
         sb.destination(res.destination ?? `${host}:${port}`);
         sb.username(username);
         sb.password(res.password ?? '');

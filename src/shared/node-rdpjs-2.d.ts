@@ -1,6 +1,21 @@
 declare module 'node-rdpjs-2' {
   import type { EventEmitter } from 'events';
 
+  /** Плоский битмап из события 'bitmap' (формат emit: lib/protocol/rdp.js). */
+  export interface RdpjsBitmapEvent {
+    destTop: number;
+    destLeft: number;
+    destBottom: number;
+    destRight: number;
+    width: number;
+    height: number;
+    bitsPerPixel: number;
+    /** true, если данные сжаты RLE (при config.decompress: true — распакованы). */
+    isCompress: boolean;
+    /** BGRA 32-бит (распакованные) либо сжатый поток. */
+    data: Uint8Array;
+  }
+
   interface RdpClient extends EventEmitter {
     connect(host: string, port: number): void;
     close(): void;
@@ -13,7 +28,7 @@ declare module 'node-rdpjs-2' {
     on(event: 'session', listener: () => void): this;
     on(event: 'close', listener: () => void): this;
     on(event: 'error', listener: (err: Error & { code?: string }) => void): this;
-    on(event: 'bitmap', listener: (bitmaps: Record<string, { obj: Record<string, { value: unknown }> }>) => void): this;
+    on(event: 'bitmap', listener: (bitmap: RdpjsBitmapEvent) => void): this;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

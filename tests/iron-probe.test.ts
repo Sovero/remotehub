@@ -86,11 +86,12 @@ describe('IronGateway — получение цепочки сертификат
     });
     await gw.start();
     const ws = await new Promise<WebSocket>((resolve, reject) => {
-      const w = new WebSocket(`ws://127.0.0.1:${gw.actualPort}`);
+      // Токен сессии обязателен и в query upgrade, и в proxy_auth Request PDU.
+      const w = new WebSocket(gw.buildWsUrl());
       w.once('open', () => resolve(w));
       w.once('error', reject);
     });
-    ws.send(encodeRequest(`127.0.0.1:${port}`, 'probe', X224_CR_NEG));
+    ws.send(encodeRequest(`127.0.0.1:${port}`, gw.authToken, X224_CR_NEG));
     const msg = await new Promise<Buffer>((resolve, reject) => {
       const t = setTimeout(() => reject(new Error('нет ответа моста')), 10000);
       ws.once('message', (d) => {

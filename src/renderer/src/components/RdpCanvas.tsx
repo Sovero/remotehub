@@ -1,8 +1,15 @@
 /**
- * RdpCanvas — рендеринг RDP-сессии на HTML5 Canvas.
+ * RdpCanvas — рендеринг RDP-сессии на HTML5 Canvas (движок rdpjs).
  *
- * Получает битмапы от node-rdpjs через IPC и отрисовывает их.
+ * Получает битмапы от node-rdpjs-2 через IPC и отрисовывает их.
  * Захватывает мышь/клавиатуру/колёсико и отправляет в main-процесс.
+ *
+ * Производительность:
+ *  - распакованные кадры приходят в BGRA (32 бита); разворот B↔R делается
+ *    одним проходом по Uint32Array (а не побайтово) — в разы быстрее;
+ *  - входящие кадры копируются в очередь сразу (IPC-пейлоад одноразовый),
+ *    а блит на Canvas выполняется один раз за кадр (rAF): очередь из N
+ *    битмапов за 16 мс сливается в одну отрисовку.
  */
 import React, { useCallback, useEffect, useRef } from 'react';
 
@@ -33,6 +40,9 @@ interface Props {
 const RdpCanvas: React.FC<Props> = ({ sessionId, width, height, connected }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
+  /** Кадры, ожидающие ближайшего rAF-блита. */
+  const pendingRef = useRef<BitmapUpdate[]>([]);
+  const rafRef = useRef<number>(0);
 
   // Инициализация канваса
   const initCanvas = useCallback(() => {
@@ -53,32 +63,68 @@ const RdpCanvas: React.FC<Props> = ({ sessionId, width, height, connected }) => 
     initCanvas();
   }, [initCanvas]);
 
-  // Приём битмапов
+  // Приём битмапов: копия в очередь + rAF-блит один раз за кадр.
   useEffect(() => {
     if (!connected) return;
 
-    const handler = (payload: RdpjsBitmapPayload): void => {
-      const canvas = canvasRef.current;
-      const ctx = ctxRef.current;
-      if (!canvas || !ctx || payload.sessionId !== sessionId) return;
-
-      const raw = new Uint8ClampedArray(payload.data);
-      const imgData = new ImageData(raw, payload.width, payload.height);
-
-      // BGRA → RGBA swap
-      const pixels = imgData.data;
-      for (let i = 0; i < pixels.length; i += 4) {
-        const b = pixels[i];
-        pixels[i] = pixels[i + 2];
-        pixels[i + 2] = b;
+    /** BGRA → RGBA одним проходом по 32-битным словам. */
+    const bgraToRgba = (buf: Uint8ClampedArray): void => {
+      const words = new Uint32Array(buf.buffer, buf.byteOffset, buf.length >> 2);
+      for (let i = 0; i < words.length; i++) {
+        const px = words[i];
+        words[i] = (px & 0xff00ff00) | ((px & 0x000000ff) << 16) | ((px & 0x00ff0000) >> 16);
       }
+    };
 
-      ctx.putImageData(imgData, payload.destLeft, payload.destTop);
+    const flush = (): void => {
+      rafRef.current = 0;
+      const pending = pendingRef.current;
+      pendingRef.current = [];
+      const ctx = ctxRef.current;
+      if (!ctx || pending.length === 0) return;
+
+      for (const b of pending) {
+        const expected = b.width * b.height * 4;
+        if (b.data.length < expected) continue;
+        // Буфер ровно размера прямоугольника: ImageData требует точную длину.
+        const imgBuf = new Uint8ClampedArray(expected);
+        imgBuf.set(b.data.subarray(0, expected));
+        bgraToRgba(imgBuf);
+        const imgData = new ImageData(imgBuf, b.width, b.height);
+        try {
+          ctx.putImageData(imgData, b.destLeft, b.destTop);
+        } catch {
+          // putImageData кидает при выходе за пределы канваса (кадры после
+          // изменения размера сессии) — такие прямоугольники пропускаем.
+        }
+      }
+    };
+
+    const handler = (payload: RdpjsBitmapPayload): void => {
+      if (payload.sessionId !== sessionId) return;
+      if (payload.width <= 0 || payload.height <= 0) return;
+      // Копия обязательна: IPC-пейлоад валиден только до конца тика.
+      const copy = new Uint8Array(payload.data.slice(0));
+      pendingRef.current.push({
+        destLeft: payload.destLeft,
+        destTop: payload.destTop,
+        width: payload.width,
+        height: payload.height,
+        data: copy
+      });
+      if (rafRef.current === 0) {
+        rafRef.current = window.requestAnimationFrame(flush);
+      }
     };
 
     window.api.onRdpjsBitmap?.(handler);
     return () => {
       window.api.offRdpjsBitmap?.(handler as (...args: unknown[]) => void);
+      if (rafRef.current !== 0) {
+        window.cancelAnimationFrame(rafRef.current);
+        rafRef.current = 0;
+      }
+      pendingRef.current = [];
     };
   }, [connected, sessionId]);
 

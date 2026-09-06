@@ -354,15 +354,20 @@ export function registerIpc(
       }
     }
     try {
-      const port = await startIronGateway({
+      const endpoint = await startIronGateway({
         sessionId: req.sessionId,
         host: req.host,
         port: req.port ?? 3389
       });
-      addLog('info', 'iron', `IronRDP: мост для ${req.host}:${req.port ?? 3389} поднят на 127.0.0.1:${port}`);
+      // endpoint.wsUrl уже содержит одноразовый токен сессии в query
+      // (ws://127.0.0.1:<port>/?token=…), authToken — тот же секрет отдельно
+      // для SessionBuilder.authToken. В лог — только host:port реального
+      // сервера, сам токен не пишем (секрет сессии).
+      addLog('info', 'iron', `IronRDP: мост для ${req.host}:${req.port ?? 3389} поднят (127.0.0.1, доступ по токену сессии)`);
       return {
         ok: true,
-        wsUrl: `ws://127.0.0.1:${port}`,
+        wsUrl: endpoint.wsUrl,
+        authToken: endpoint.authToken,
         destination: `${req.host}:${req.port ?? 3389}`,
         username,
         password,

@@ -7,8 +7,22 @@ import { IronGateway, type IronGatewayOptions } from './iron-gateway';
 
 const gateways = new Map<string, IronGateway>();
 
-/** Запускает (или перезапускает) мост для сессии и возвращает его порт на 127.0.0.1. */
-export async function startIronGateway(opts: IronGatewayOptions): Promise<number> {
+/**
+ * Результат запуска моста: ws-URL с токеном в query + сам токен отдельно
+ * (для SessionBuilder.authToken — второй фактор в proxy_auth Request PDU).
+ * Оба значения — секрет сессии: в логи не писать.
+ */
+export interface IronGatewayEndpoint {
+  wsUrl: string;
+  authToken: string;
+}
+
+/**
+ * Запускает (или перезапускает) мост для сессии и возвращает его адрес на
+ * 127.0.0.1 с одноразовым токеном сессии. Токен проверяется мостом при
+ * upgrade и в proxy_auth Request PDU.
+ */
+export async function startIronGateway(opts: IronGatewayOptions): Promise<IronGatewayEndpoint> {
   const prev = gateways.get(opts.sessionId);
   if (prev) {
     gateways.delete(opts.sessionId);
@@ -28,7 +42,7 @@ export async function startIronGateway(opts: IronGatewayOptions): Promise<number
   });
   const port = await gw.start();
   gateways.set(opts.sessionId, gw);
-  return port;
+  return { wsUrl: gw.buildWsUrl(), authToken: gw.authToken };
 }
 
 /** Останавливает мост сессии, если он был. */

@@ -5,7 +5,7 @@ import type { Sealer } from '../store/crypto-format';
 import { resolveAuth } from '../sessions/config';
 import type { EmbedRect } from './embed';
 import { rdpOptionsFromHost } from './generator';
-import { spawnComRdp, type RdpComSpawn } from './com-launcher';
+import { spawnComRdp, purgeCmdkeyCredential, type RdpComSpawn } from './com-launcher';
 
 const WATCHDOG_INTERVAL = 2000;
 /** После WM_CLOSE даём RDP-хосту столько на вежливый выход, затем TerminateProcess. */
@@ -20,6 +20,8 @@ export interface RdpLaunchOutcome {
 
 interface ActiveRdp {
   child: ChildProcess | null;
+  /** Хост сессии — нужен для аварийной уборки cmdkey (closeAll/before-quit, R2). */
+  host: string;
   hwnd: bigint | null;
   rect: EmbedRect | null;
   /** HWND уже прикреплён к родителю Electron; до этого он не считается embedded. */
@@ -125,6 +127,7 @@ export class RdpManager {
     // (ResizeObserver больше не сработает, если размер панели не изменится).
     const active: ActiveRdp = {
       child: null,
+      host: opts.host,
       hwnd: null,
       rect: null,
       embedded: false,
@@ -327,6 +330,12 @@ export class RdpManager {
     for (const active of this.active.values()) {
       active.closing = true;
       this.killChild(active);
+      // Аварийная уборка пароля из Credential Manager: при выходе из приложения
+      // 'exit'-обработчик дочернего процесса может не успеть сработать, а штатная
+      // cleanup() COM-хоста выполнится только если он успеет прочитать 'quit' —
+      // поэтому сносим запись cmdkey здесь, независимо от состояния процесса.
+      // Ошибки/отсутствие записи игнорируются внутри purgeCmdkeyCredential.
+      if (active.host) purgeCmdkeyCredential(active.host);
     }
     this.active.clear();
     clearInterval(this.watchdog);

@@ -361,14 +361,18 @@ if (!gotLock) {
       hostKeyStore
     );
     const rdpjs = new RdpjsClientManager({
-      onBitmap: (sessionId: string, bitmap: { destLeft: number; destTop: number; width: number; height: number; data: Buffer }) => {
+      onBitmap: (sessionId: string, bitmap: { destLeft: number; destTop: number; width: number; height: number; data: Uint8Array }) => {
         broadcast('rdpjs:bitmap', {
           sessionId,
           destLeft: bitmap.destLeft,
           destTop: bitmap.destTop,
           width: bitmap.width,
           height: bitmap.height,
-          data: bitmap.data.buffer.slice(bitmap.data.byteOffset, bitmap.data.byteOffset + bitmap.data.byteLength)
+          // Точная копия кадра: bitmap.data может быть subarray-видом над буфером
+          // распаковщика, а structured clone сериализует ВЕСЬ referenced-буфер,
+          // не только диапазон вида. Buffer.prototype.slice был deprecated —
+          // заменён на явную точную копию (тот же клон, что и раньше).
+          data: Buffer.from(bitmap.data)
         });
       },
       onState: (sessionId: string, state: string, error?: string) => {
