@@ -231,6 +231,13 @@ export interface RdpEngineHubDeps {
   iron?: IronGatewayDeps;
   /** Единый поток состояний: main транслирует его в канал rdp:engine-state. */
   onState: (payload: RdpEngineStatePayload) => void;
+  /**
+   * Наблюдатель результатов запуска — единая точка атрибуции выбора движка
+   * (фаза 2 метрик: index.ts превращает его в записи журнала «engine-select:»,
+   * их агрегирует engine-metrics.ts). Вызывается на КАЖДЫЙ hub.connect —
+   * и на успех, и на неудачу. Опционален: тестам метрики не нужны.
+   */
+  onConnectResult?: (sessionId: string, engine: RdpEngineId, ok: boolean) => void;
 }
 
 export class RdpEngineHub {
@@ -253,6 +260,9 @@ export class RdpEngineHub {
     const adapter = this.adapters.get(req.engine);
     if (!adapter) return { ok: false, error: `Неизвестный RDP-движок: ${req.engine}` };
     const res = await adapter.connect(req);
+    // Атрибуция выбора движка (фаза 2 метрик) — до ветвления по res.ok,
+    // неудачные попытки тоже считаются (attempts vs successes).
+    this.deps.onConnectResult?.(req.sessionId, req.engine, res.ok);
     if (res.ok) this.owners.set(req.sessionId, req.engine);
     return res;
   }

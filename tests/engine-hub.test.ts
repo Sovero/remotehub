@@ -264,3 +264,58 @@ describe('RdpEngineHub — closeAll (before-quit)', () => {
     expect(hub.engineOf('c')).toBeNull();
   });
 });
+
+describe('RdpEngineHub — onConnectResult (фаза 2 метрик)', () => {
+  /** Хаб с наблюдателем результатов запуска. */
+  function makeHubWithResults() {
+    const states: RdpEngineStatePayload[] = [];
+    const results: Array<{ sessionId: string; engine: string; ok: boolean }> = [];
+    const rdpjs = fakeRdpjs();
+    const legacy = fakeLegacy();
+    const iron = fakeIron();
+    const hub = new RdpEngineHub({
+      rdpjs,
+      legacy,
+      iron: iron.deps,
+      onState: (p) => states.push(p),
+      onConnectResult: (sessionId, engine, ok) => results.push({ sessionId, engine, ok })
+    });
+    return { hub, rdpjs, legacy, iron, results };
+  }
+
+  it('вызывается на каждую попытку: успех и неудача; владелец — только у успеха', async () => {
+    const { hub, rdpjs, results } = makeHubWithResults();
+
+    rdpjs.connect = vi.fn(async () => ({ ok: false, error: 'сокет отклонён' }));
+    await hub.connect(rdpjsReq('fail1'));
+    rdpjs.connect = vi.fn(async () => ({ ok: true }));
+    await hub.connect(rdpjsReq('ok1'));
+
+    expect(results).toEqual([
+      { sessionId: 'fail1', engine: 'rdpjs', ok: false },
+      { sessionId: 'ok1', engine: 'rdpjs', ok: true }
+    ]);
+    expect(hub.engineOf('fail1')).toBeNull();
+    expect(hub.engineOf('ok1')).toBe('rdpjs');
+  });
+
+  it('неудача legacy (launch) тоже доходит до наблюдателя', async () => {
+    const { hub, legacy, results } = makeHubWithResults();
+    legacy.launch = vi.fn(async () => ({ ok: false, error: 'COM-host не запустился' }));
+    await hub.connect({
+      sessionId: 'b',
+      engine: 'legacy',
+      host: 'h',
+      hostProfile: { id: 'h', name: 'h', host: 'h' } as never,
+      credential: null
+    });
+    expect(results).toEqual([{ sessionId: 'b', engine: 'legacy', ok: false }]);
+  });
+
+  it('неизвестный движок — ранний выход до наблюдателя (это баг, а не попытка запуска)', async () => {
+    const { hub, results } = makeHubWithResults();
+    const res = await hub.connect({ sessionId: 'x', engine: 'nope' as never, host: 'h' });
+    expect(res.ok).toBe(false);
+    expect(results).toEqual([]);
+  });
+});

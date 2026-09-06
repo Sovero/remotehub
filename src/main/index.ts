@@ -19,6 +19,7 @@ import { RdpjsClientManager } from './rdp/rdpjs-client';
 import { RdpManager } from './rdp/manager';
 import { installSmokeHooks } from './smoke';
 import { addLog } from './log';
+import { EngineMetrics } from './rdp/engine-metrics';
 
 // Страховка от падения всего процесса из-за необязательного нативного модуля
 // (bufferutil/utf-8-validate у ws, и т.п.) — такой сбой не должен убивать
@@ -430,10 +431,23 @@ if (!gotLock) {
     });
     // Единая точка жизненного цикла RDP-движков (риск R6): карта владельцев
     // сессий, capability-маршрутизация ввода/окон, один канал состояний.
+    // onConnectResult — атрибуция выбора движка для фазы 2 метрик депрекации
+    // rdpjs: каждая попытка запуска (успех или нет) уходит в журнал source 'rdp'
+    // с маркером «engine-select:», его агрегирует EngineMetrics (userData,
+    // локально, без телеметрии). Секреты в строку не попадают.
+    const engineMetrics = new EngineMetrics(join(app.getPath('userData'), 'engine-metrics.json'));
+    engineMetrics.attach();
     const engineHub = new RdpEngineHub({
       rdpjs,
       legacy: rdpLegacy,
-      onState: (payload) => broadcast('rdp:engine-state', payload)
+      onState: (payload) => broadcast('rdp:engine-state', payload),
+      onConnectResult: (sessionId, engine, ok) => {
+        addLog(
+          ok ? 'info' : 'warn',
+          'rdp',
+          `RDP: выбор движка для сессии ${sessionId} — ${engine}, запуск ${ok ? 'выполнен' : 'не удался'} (engine-select: ${engine}${ok ? '' : ' failed'})`
+        );
+      }
     });
     installMenu(updater);
     registerIpc(store, sessions, vnc, sftp, tunnels, updater, rdpjs, rdpLegacy, engineHub);
