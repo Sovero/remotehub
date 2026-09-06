@@ -1,0 +1,103 @@
+name: Release Gates
+
+# Pre-tag gates: the release workflow (release.yml) runs on tag push, which is
+# too late to catch an unaudited or version-drifted tree — the tag already
+# exists by then. This workflow enforces the same two invariants on every
+# commit to main (and PRs), so a release can only be tagged from a tree that
+# already passed:
+#   1. npm audit — no known high/critical vulnerabilities in the tree.
+#   2. package.json version is not older than the newest stable tag
+#      (>= keeps pre-release bumping flexible; strict == is enforced at
+#      release time by release.yml against the pushed tag).
+# Background for both: docs/release-playbook.md (§4 — the version drift that
+# shipped as v0.1.15–v0.1.19; §7 — the planned audit gate).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# Superseded runs on the same ref are noise — cancel them.
+concurrency:
+  group: release-gates-${{ github.ref }}
+  cancel-in-progress: true
+
+# Dependabot PRs get their own token class; running npm ci here adds nothing
+# (the PR itself will be merged by a real user through a gated run).
+# Dependabot version-bump PRs touching package.json are also exempt from the
+# version guard: their version *must* stay as-is.
+jobs:
+  audit:
+    # Dependabot PRs run with a read-only token and cannot post statuses
+    # reliably; the regular gated run covers the merge result instead.
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # Same npm policy as release.yml: the stock npm on the runner predates
+      # allowScripts enforcement; npm@11 honors the package.json allowlist
+      # (bufferutil/utf-8-validate only) and never runs ssh2's install.js.
+      - run: npm install -g npm@11
+
+      - run: npm ci
+
+      - name: Security audit (high and above)
+        run: npm audit --audit-level=high
+
+  version-sync:
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        # Full history: the newest tag defines the baseline to compare against.
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: package.json must not be older than the newest tag
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+
+          NEWEST_TAG=$(git tag --sort=-v:refname | grep -Ev '^v.*[-+]' | head -n1 || true)
+          if [ -z "$NEWEST_TAG" ]; then
+            echo "No stable tags yet — version sync not applicable."
+            exit 0
+          fi
+          # Idempotency: while the release commit itself (with its updated
+          # package.json) is in flight — pushed together with or before its
+          # tag — the tag may not be visible yet. Skipping is safe: the
+          # tag-push run of release.yml enforces strict equality anyway.
+          if [ "$(git tag --list "$NEWEST_TAG" --contains HEAD)" ]; then
+            echo "Newest tag $NEWEST_TAG already contains HEAD — sync gate satisfied by release.yml."
+            exit 0
+          fi
+          TAG_VERSION="${NEWEST_TAG#v}"
+
+          RESULT=$(node -e "
+            const cmp=(a,b)=>{const A=a.split('.').map(Number),B=b.split('.').map(Number);return A[0]-B[0]||A[1]-B[1]||A[2]-B[2]};
+            const [pkg,tag]=process.argv.slice(1);
+            for (const v of [pkg,tag]) {
+              if (!/^\d+\.\d+\.\d+\$/.test(v)) { console.error('invalid semver: '+v); process.exit(2); }
+            }
+            console.log(cmp(pkg,tag) >= 0 ? 'ok' : 'behind');
+          " "$PKG_VERSION" "$TAG_VERSION")
+
+          echo "package.json: $PKG_VERSION | newest tag: $NEWEST_TAG ($TAG_VERSION) → $RESULT"
+          if [ "$RESULT" = "behind" ]; then
+            echo "::error::package.json version ($PKG_VERSION) is older than the newest tag ($NEWEST_TAG)."
+            echo "::error::Bump package.json to at least $TAG_VERSION before the next release."
+            exit 1
+          fi
+          echo "version sync OK: package.json >= newest tag"

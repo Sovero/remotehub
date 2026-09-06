@@ -60,6 +60,27 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
+      # Release gates — fail fast before any expensive build work.
+      #  1) npm audit: a release must not ship with known high/critical
+      #     vulnerabilities in the dependency tree.
+      #  2) version sync: package.json must already equal the pushed tag.
+      #     This step sits BEFORE the "Set version in package.json" step on
+      #     purpose: that step would otherwise overwrite the drift and hide
+      #     it. Catches tags pushed from a commit whose package.json drifted
+      #     (the v0.1.15–v0.1.19 pattern, docs/release-playbook.md §4).
+      - name: Release gates — npm audit + version sync with the tag
+        shell: bash
+        run: |
+          npm audit --audit-level=high
+          VERSION="${{ steps.tag.outputs.version }}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$PKG_VERSION" != "$VERSION" ]; then
+            echo "::error::package.json version ($PKG_VERSION) does not match tag v$VERSION."
+            echo "::error::Sync package.json to the release version, commit, and re-tag."
+            exit 1
+          fi
+          echo "release gates OK: audit clean, package.json == $VERSION"
+
       - name: Set version in package.json
         shell: bash
         run: |
