@@ -13,6 +13,16 @@ export const IPC = {
   settingsSet: 'settings:set',
   appInfo: 'app:info',
   appChangelog: 'app:changelog',
+  /** безрамочное окно: свернуть */
+  windowMinimize: 'window:minimize',
+  /** безрамочное окно: развернуть/восстановить */
+  windowToggleMaximize: 'window:toggle-maximize',
+  /** безрамочное окно: закрыть */
+  windowClose: 'window:close',
+  /** безрамочное окно: развёрнуто ли сейчас */
+  windowIsMaximized: 'window:is-maximized',
+  /** безрамочное окно: main → renderer при maximize/unmaximize */
+  windowMaximizeChanged: 'window:maximize-changed',
   notify: 'app:notify',
   menuCommand: 'menu:command',
   sessionOpen: 'session:open',

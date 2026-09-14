@@ -59,11 +59,77 @@ body {
 .app {
   display: grid;
   grid-template-columns: 280px 1fr;
-  grid-template-rows: 1fr 26px;
+  grid-template-rows: 34px 1fr 26px;
   grid-template-areas:
+    'title title'
     'sidebar workspace'
     'status status';
   height: 100%;
+}
+
+/* ---------- titlebar (безрамочное окно) ---------- */
+
+.titlebar {
+  grid-area: title;
+  display: flex;
+  align-items: center;
+  height: 34px;
+  padding-left: 12px;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.titlebar-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.titlebar-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+
+.titlebar-version {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.titlebar-controls {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.titlebar-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.titlebar-btn--close:hover {
+  background: #e81123;
+  color: #fff;
 }
 
 .app--loading {

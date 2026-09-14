@@ -3,6 +3,7 @@ import type { RdpEngine } from '@shared/types';
 import { findNode } from '@shared/tree';
 import { useApp } from './store';
 import Sidebar from './components/Sidebar';
+import TitleBar from './components/TitleBar';
 import TabBar from './components/TabBar';
 import StatusBar from './components/StatusBar';
 import Welcome from './components/Welcome';
@@ -217,6 +218,7 @@ export default function App(): React.JSX.Element {
 
   return (
     <div className={`app${settings.sidebarCollapsed ? ' app--sidebar-collapsed' : ''}`}>
+      <TitleBar />
       <aside className="sidebar">
         <Sidebar />
       </aside>

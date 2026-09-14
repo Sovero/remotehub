@@ -17,6 +17,8 @@ export type IconName =
   | 'pencil'
   | 'trash'
   | 'expand'
+  | 'minus'
+  | 'restore'
   | 'window'
   | 'arrow-up'
   | 'arrow-down'
@@ -102,6 +104,13 @@ const PATHS: Record<IconName, React.JSX.Element> = {
     <>
       <rect x="2" y="3.2" width="12" height="9.6" rx="1.2" />
       <path d="M2 6.4h12" />
+    </>
+  ),
+  minus: <path d="M3.2 8h9.6" />,
+  restore: (
+    <>
+      <rect x="5" y="2.6" width="8" height="8" rx="1" />
+      <path d="M11 5.4V4.6M3 10.6V12a1 1 0 0 0 1 1h5.4" />
     </>
   ),
   'arrow-up': <path d="M8 12.8V3.2M4.6 6.6 8 3.2l3.4 3.4" />,

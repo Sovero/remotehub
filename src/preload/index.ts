@@ -54,6 +54,16 @@ const api = {
     ipcRenderer.invoke(IPC.dialogPickFile),
   appInfo: (): Promise<{ version: string; electron: string; arch: string }> =>
     ipcRenderer.invoke(IPC.appInfo),
+  /** Безрамочное окно: свернуть / развернуть-восстановить / закрыть. */
+  windowMinimize: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.windowMinimize),
+  windowToggleMaximize: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.windowToggleMaximize),
+  windowClose: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.windowClose),
+  windowIsMaximized: (): Promise<{ maximized: boolean }> => ipcRenderer.invoke(IPC.windowIsMaximized),
+  onWindowMaximizeChanged: (cb: (payload: { maximized: boolean }) => void): (() => void) => {
+    const listener = (_e: unknown, payload: { maximized: boolean }): void => cb(payload);
+    ipcRenderer.on(IPC.windowMaximizeChanged, listener);
+    return () => ipcRenderer.removeListener(IPC.windowMaximizeChanged, listener);
+  },
   getChangelog: (): Promise<{
     ok: boolean;
     entries?: ChangelogEntry[];

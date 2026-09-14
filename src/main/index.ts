@@ -1,10 +1,10 @@
-import { app, BrowserWindow, dialog, Menu, screen, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, screen, shell } from 'electron';
 import { writeFileSync } from 'fs';
 import { join } from 'path';
 import { pathToFileURL } from 'url';
 import { registerIpc } from './ipc';
 import { RdpEngineHub } from './rdp/engine-hub';
-import type { RdpLegacyExitedPayload } from '../shared/ipc-contract';
+import { IPC, type RdpLegacyExitedPayload } from '../shared/ipc-contract';
 import { SessionManager } from './sessions/manager';
 import { HostKeyStore } from './sessions/host-keys';
 import { SftpManager } from './sftp/manager';
@@ -222,7 +222,12 @@ function createWindow(): void {
     backgroundColor: settings.theme === 'light' ? '#f4f4f6' : '#17181c',
     title: `Remote Hub v${app.getVersion()}`,
     icon,
-    autoHideMenuBar: false,
+    // Безрамочное окно: хром ОС скрыт, заголовок и кнопки рисует renderer
+    // (TitleBar с -webkit-app-region: drag). Меню приложения остаётся
+    // активным через Menu.setApplicationMenu — работают хоткеи и Alt.
+    frame: false,
+    titleBarStyle: 'hidden',
+    autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -258,6 +263,34 @@ function createWindow(): void {
 
   // Заголовок окна содержит версию; HTML-тег <title> не должен его перезаписывать.
   mainWindow.on('page-title-updated', (e) => e.preventDefault());
+
+  // Управление безрамочным окном из кастомного TitleBar (renderer).
+  const winOf = (sender: Electron.WebContents): BrowserWindow | null =>
+    BrowserWindow.fromWebContents(sender);
+  ipcMain.handle(IPC.windowMinimize, (e) => {
+    winOf(e.sender)?.minimize();
+    return { ok: true };
+  });
+  ipcMain.handle(IPC.windowToggleMaximize, (e) => {
+    const win = winOf(e.sender);
+    if (!win) return { ok: false };
+    if (win.isMaximized()) win.unmaximize();
+    else win.maximize();
+    return { ok: true };
+  });
+  ipcMain.handle(IPC.windowClose, (e) => {
+    winOf(e.sender)?.close();
+    return { ok: true };
+  });
+  ipcMain.handle(IPC.windowIsMaximized, (e) => ({ maximized: winOf(e.sender)?.isMaximized() ?? false }));
+  const sendMaximizeState = (): void => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send(IPC.windowMaximizeChanged, {
+      maximized: mainWindow.isMaximized()
+    });
+  };
+  mainWindow.on('maximize', sendMaximizeState);
+  mainWindow.on('unmaximize', sendMaximizeState);
 
   // Remote Hub не создаёт popup-окна и не позволяет remote-сценам увести
   // рабочее окно на внешний URL. В dev разрешён только origin renderer-сервера,
