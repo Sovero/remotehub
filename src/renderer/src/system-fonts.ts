@@ -47,8 +47,6 @@ function createMonospaceProbe(ctx: CanvasRenderingContext2D): (family: string) =
   };
 }
 
-let cache: Promise<string[] | null> | null = null;
-
 async function queryOnce(): Promise<string[] | null> {
   const query = (window as unknown as { queryLocalFonts?: () => Promise<readonly { family?: string }[]> })
     .queryLocalFonts;
@@ -71,12 +69,26 @@ async function queryOnce(): Promise<string[] | null> {
   return [...unique.values()].filter(probe);
 }
 
+/** Последний успешный результат — начальное значение при следующем открытии. */
+let lastFamilies: string[] | null = null;
+
 /**
  * Все моноширинные семейства, установленные в системе (или null, если системный
- * API недоступен). Результат кэшируется: список не меняется между открытиями
- * панели настроек и не дёргает систему повторно.
+ * API недоступен). Запрос выполняется при каждом вызове: шрифт, установленный
+ * при работающем приложении, появляется в списке при следующем открытии
+ * настроек, без перезапуска. Открытие настроек — редкое действие, поэтому
+ * повторный запрос систему не нагружает.
  */
-export function loadInstalledMonospaceFamilies(): Promise<string[] | null> {
-  cache ??= queryOnce();
-  return cache;
+export async function loadInstalledMonospaceFamilies(): Promise<string[] | null> {
+  const families = await queryOnce();
+  if (families && families.length > 0) lastFamilies = families;
+  return families;
+}
+
+/**
+ * Список из последнего успешного запроса: пока новый запрос выполняется, форма
+ * настроек показывает его — список не мигает статическим набором при открытии.
+ */
+export function lastInstalledMonospaceFamilies(): string[] | null {
+  return lastFamilies;
 }

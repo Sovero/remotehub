@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { RdpEngine } from '@shared/types';
 import { dynamicFontOptions, fontFamilyName, fontOptions, OPTIONAL_FONTS } from '@shared/fonts';
-import { loadInstalledMonospaceFamilies } from '../system-fonts';
+import { lastInstalledMonospaceFamilies, loadInstalledMonospaceFamilies } from '../system-fonts';
 import { useApp } from '../store';
 
 /**
@@ -40,13 +40,18 @@ export default function SettingsForm(): React.JSX.Element {
   const patchSettings = useApp((s) => s.patchSettings);
   const pushToast = useApp((s) => s.pushToast);
   const [installed] = useState<Set<string>>(() => installedOptionalFonts());
-  const [systemFamilies, setSystemFamilies] = useState<string[] | null>(null);
+  const [systemFamilies, setSystemFamilies] = useState<string[] | null>(() =>
+    lastInstalledMonospaceFamilies()
+  );
   // Основной список — все моноширинные шрифты системы; пока он не пришёл (или
-  // системный API недоступен), работаем по статическому набору. Сохранённое
-  // значение в обоих случаях остаётся в списке — селект не должен быть пустым.
+  // системный API недоступен), работаем по статическому набору. Запрос идёт
+  // при каждом открытии настроек, поэтому установленный при работающем
+  // приложении шрифт появляется здесь без перезапуска. Сохранённое значение в
+  // обоих случаях остаётся в списке — селект не должен быть пустым.
   useEffect(() => {
     let alive = true;
     void loadInstalledMonospaceFamilies().then((families) => {
+      // null — API недоступен: оставляем показанный список, не обнуляем его.
       if (alive && families && families.length > 0) setSystemFamilies(families);
     });
     return () => {
