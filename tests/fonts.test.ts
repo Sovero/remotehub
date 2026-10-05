@@ -9,8 +9,11 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_FONT_FAMILY,
   LEGACY_DEFAULT_FONT_FAMILY,
+  dynamicFontOptions,
   fontOptions,
+  fontValue,
   normalizeFontFamily,
+  quotedFamily,
   OPTIONAL_FONTS,
   STANDARD_FONTS
 } from '../src/shared/fonts';
@@ -64,5 +67,47 @@ describe('список шрифтов терминала', () => {
   it('стандартные и дополнительные значения шрифтов уникальны', () => {
     const values = [...STANDARD_FONTS, ...OPTIONAL_FONTS].map((f) => f.value);
     expect(new Set(values).size).toBe(values.length);
+  });
+});
+
+describe('динамический список по шрифтам системы', () => {
+  it('строит варианты по всем семействам и сортирует по алфавиту', () => {
+    const options = dynamicFontOptions(['Consolas', 'Cascadia Mono', 'Lucida Console'], '');
+    expect(options.map((o) => o.label)).toEqual(['Cascadia Mono', 'Consolas', 'Lucida Console']);
+    expect(options.every((o) => o.value.endsWith(', monospace'))).toBe(true);
+  });
+
+  it('экранирует кавычки и обратные слэши в имени семейства', () => {
+    expect(quotedFamily('Consolas')).toBe('"Consolas"');
+    expect(fontValue('Consolas')).toBe('"Consolas", monospace');
+    expect(quotedFamily('Weird "Font" \\ Name')).toBe('"Weird \\"Font\\" \\\\ Name"');
+  });
+
+  it('убирает дубликаты независимо от регистра', () => {
+    const options = dynamicFontOptions(['Consolas', 'consolas'], '');
+    expect(options).toHaveLength(1);
+    expect(options[0].label).toBe('Consolas');
+  });
+
+  it('текущий выбор остаётся в списке: семейство получает сохранённый стек', () => {
+    const current = 'Consolas, "Courier New", monospace';
+    const options = dynamicFontOptions(['Consolas', 'Courier New'], current);
+    expect(options.find((o) => o.label === 'Consolas')?.value).toBe(current);
+    expect(options.some((o) => o.label.includes('текущий выбор'))).toBe(false);
+  });
+
+  it('текущий выбор вне системы показывается отдельным пунктом', () => {
+    const current = '"Nimbus Mono PS", monospace';
+    const options = dynamicFontOptions(['Consolas'], current);
+    const last = options[options.length - 1];
+    expect(last.label).toBe('Nimbus Mono PS — текущий выбор');
+    expect(last.value).toBe(current);
+  });
+
+  it('пустой системный список оставляет только текущий выбор', () => {
+    const current = '"Consolas", monospace';
+    expect(dynamicFontOptions([], current)).toEqual([
+      { label: 'Consolas — текущий выбор', value: current }
+    ]);
   });
 });

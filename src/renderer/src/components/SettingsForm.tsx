@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { RdpEngine } from '@shared/types';
-import { fontFamilyName, fontOptions, OPTIONAL_FONTS } from '@shared/fonts';
+import { dynamicFontOptions, fontFamilyName, fontOptions, OPTIONAL_FONTS } from '@shared/fonts';
+import { loadInstalledMonospaceFamilies } from '../system-fonts';
 import { useApp } from '../store';
 
 /**
@@ -39,9 +40,22 @@ export default function SettingsForm(): React.JSX.Element {
   const patchSettings = useApp((s) => s.patchSettings);
   const pushToast = useApp((s) => s.pushToast);
   const [installed] = useState<Set<string>>(() => installedOptionalFonts());
-  // Стандартные шрифты + установленные дополнительные; сохранённое значение
-  // из прежней версии тоже попадает в список — селект не должен быть пустым.
-  const fontList = fontOptions(installed, settings.fontFamily);
+  const [systemFamilies, setSystemFamilies] = useState<string[] | null>(null);
+  // Основной список — все моноширинные шрифты системы; пока он не пришёл (или
+  // системный API недоступен), работаем по статическому набору. Сохранённое
+  // значение в обоих случаях остаётся в списке — селект не должен быть пустым.
+  useEffect(() => {
+    let alive = true;
+    void loadInstalledMonospaceFamilies().then((families) => {
+      if (alive && families && families.length > 0) setSystemFamilies(families);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const fontList = systemFamilies
+    ? dynamicFontOptions(systemFamilies, settings.fontFamily)
+    : fontOptions(installed, settings.fontFamily);
 
   // Шрифт применяется сразу при выборе (как тема, размер и акцентный цвет).
   const applyFont = (value: string): void => {

@@ -1,11 +1,12 @@
 /**
  * Набор шрифтов для настроек терминала.
  *
- * В списке — только то, что реально доступно на Windows, чтобы ничего не
- * приходилось устанавливать: стандартные шрифты (Consolas, Lucida Console,
- * Courier New) есть в любой системе, а популярные дополнительные (Cascadia
- * Mono, JetBrains Mono, Fira Code, DejaVu Sans Mono) добавляются, только если
- * найдены в системе.
+ * Основной путь — динамический список: renderer спрашивает у системы все
+ * моноширинные семейства (см. src/renderer/src/system-fonts.ts) и строит
+ * варианты через `dynamicFontOptions`. Статический набор ниже — запасной: он
+ * работает, когда системный API недоступен, и содержит только то, что реально
+ * есть в системе (стандартные шрифты Windows — всегда, популярные
+ * дополнительные — если найдены).
  */
 
 export interface FontOption {
@@ -46,7 +47,7 @@ export function normalizeFontFamily(fontFamily: string): string {
 }
 
 /**
- * Список для выпадающего списка настроек: стандартные шрифты, затем
+ * Запасной список, когда системный API недоступен: стандартные шрифты, затем
  * установленные дополнительные. Сохранённое значение, которого нет в списке
  * (например, выбранное в прежней версии), добавляется отдельным пунктом —
  * селект не должен оставаться без выбранного шрифта.
@@ -59,5 +60,42 @@ export function fontOptions(installed: ReadonlySet<string>, current: string): Fo
   if (current && !options.some((option) => option.value === current)) {
     options.push({ label: `${fontFamilyName(current)} — текущий выбор`, value: current });
   }
+  return options;
+}
+
+/** CSS-имя семейства в кавычках (кавычки и обратные слэши экранируются). */
+export function quotedFamily(family: string): string {
+  return `"${family.replace(/["\\]/g, '\\$&')}"`;
+}
+
+/** Значение настройки для семейства: сам шрифт плюс запасной моноширинный. */
+export function fontValue(family: string): string {
+  return `${quotedFamily(family)}, monospace`;
+}
+
+/**
+ * Динамический список: все установленные в системе моноширинные семейства,
+ * отсортированные по алфавиту. Сохранённое значение не теряется: если его
+ * первый шрифт есть в списке, вариант этого семейства получает текущий стек
+ * (селект остаётся валидным); если такого семейства нет — значение добавляется
+ * отдельным пунктом «— текущий выбор».
+ */
+export function dynamicFontOptions(families: readonly string[], current: string): FontOption[] {
+  const options: FontOption[] = [];
+  const seen = new Set<string>();
+  for (const family of families) {
+    const name = family.trim();
+    const key = name.toLowerCase();
+    if (!name || seen.has(key)) continue;
+    seen.add(key);
+    options.push({ label: name, value: fontValue(name) });
+  }
+  if (current) {
+    const currentName = fontFamilyName(current).toLowerCase();
+    const match = options.find((option) => option.label.toLowerCase() === currentName);
+    if (match) match.value = current;
+    else options.push({ label: `${fontFamilyName(current)} — текущий выбор`, value: current });
+  }
+  options.sort((a, b) => a.label.localeCompare(b.label, 'ru'));
   return options;
 }
