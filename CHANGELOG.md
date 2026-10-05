@@ -3,6 +3,15 @@
 Все заметные изменения проекта. Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 версионирование — семантическое (MAJOR.MINOR.PATCH).
 
+## [0.1.36] — 2026-10-05
+
+### Безопасность
+- `electron` 43.4.0 → 43.7.7 (четыре high-advisory: GHSA-gr2m-v5gq-v685,
+  GHSA-j84w-jfhq-vhvj, GHSA-9qh4-3jw8-366w, GHSA-qmv3-fv6v-rmhq) и правки
+  транзитивных зависимостей (`brace-expansion`, `fast-uri`) — ворота
+  `npm audit --audit-level=high` снова зелёные. Инсталлятор пересобран на новом
+  рантайме.
+
 ## [0.1.35] — 2026-10-05
 
 ### Исправлено

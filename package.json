@@ -1,6 +1,6 @@
 {
   "name": "remote-hub",
-  "version": "0.1.35",
+  "version": "0.1.36",
   "description": "Remote Hub — Termius-подобное приложение для Windows: SSH, Telnet, RDP, VNC, SFTP",
   "repository": "https://github.com/Sovero/remotehub.git",
   "main": "./out/main/index.js",
@@ -23,7 +23,7 @@
   "build": {
     "appId": "com.remotehub.app",
     "productName": "Remote Hub",
-    "electronVersion": "43.4.0",
+    "electronVersion": "43.7.7",
     "directories": {
       "output": "release"
     },
@@ -103,7 +103,7 @@
     "@types/ssh2": "^1.15.5",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^5.2.0",
-    "electron": "43.4.0",
+    "electron": "43.7.7",
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "typescript": "^7.0.2",
@@ -113,6 +113,6 @@
   "allowScripts": {
     "bufferutil@4.1.0": true,
     "utf-8-validate@6.0.6": true,
-    "electron@43.4.0": true
+    "electron@43.7.7": true
   }
 }
