@@ -3,6 +3,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Store, SchemaTooNewError } from '../src/main/store';
+import { LEGACY_DEFAULT_FONT_FAMILY } from '../src/shared/fonts';
 import { sealSecret, type Sealer } from '../src/main/store/crypto-format';
 import {
   createGroup,
@@ -109,6 +110,20 @@ describe('settings', () => {
     expect(loaded.data.rdpEngine).toBe('iron');
     // Новое поле настроек у старого файла получает значение по умолчанию (R02).
     expect(loaded.data.rdpAutoFallbackToLegacy).toBe(false);
+  });
+
+  it('старый дефолт шрифта терминала заменяется стандартным', () => {
+    writeFileSync(
+      join(dir, 'settings.json'),
+      JSON.stringify({ schemaVersion: 1, settings: { fontFamily: LEGACY_DEFAULT_FONT_FAMILY } }),
+      'utf8'
+    );
+    expect(store.loadSettings().data.fontFamily).toBe(DEFAULT_SETTINGS.fontFamily);
+  });
+
+  it('осознанно выбранный шрифт терминала сохраняется', () => {
+    store.saveSettings({ ...DEFAULT_SETTINGS, fontFamily: 'Fira Code, Consolas, monospace' });
+    expect(store.loadSettings().data.fontFamily).toBe('Fira Code, Consolas, monospace');
   });
 
   it('сохраняет выбранный IronRDP-движок', () => {

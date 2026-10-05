@@ -9,6 +9,7 @@ import {
   type TreeNode
 } from '../../shared/types';
 import { DEFAULT_SETTINGS } from '../../shared/types';
+import { normalizeFontFamily } from '../../shared/fonts';
 import { atomicWriteJson, readJsonSafe } from './atomic';
 import type { Sealer } from './crypto-format';
 
@@ -74,6 +75,8 @@ export class Store {
       checkSchema(this.settingsPath, res.data.schemaVersion);
     }
     const merged: Settings = { ...DEFAULT_SETTINGS, ...(res.data?.settings ?? {}) };
+    // Старый дефолт шрифта терминала заменяем стандартным: Cascadia Mono мог отсутствовать.
+    merged.fontFamily = normalizeFontFamily(merged.fontFamily);
     return { data: merged, recovered: res.recovered };
   }
 

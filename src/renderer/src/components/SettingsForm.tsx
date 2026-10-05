@@ -1,37 +1,34 @@
 import { useState } from 'react';
 import type { RdpEngine } from '@shared/types';
+import { fontFamilyName, fontOptions, OPTIONAL_FONTS } from '@shared/fonts';
 import { useApp } from '../store';
 
-const FONTS = [
-  { label: 'Cascadia Mono', value: '"Cascadia Mono", Consolas, monospace' },
-  { label: 'Consolas', value: 'Consolas, monospace' },
-  { label: 'JetBrains Mono', value: '"JetBrains Mono", Consolas, monospace' },
-  { label: 'Fira Code', value: '"Fira Code", Consolas, monospace' },
-  { label: 'DejaVu Sans Mono', value: '"DejaVu Sans Mono", monospace' },
-  { label: 'Courier New', value: '"Courier New", monospace' }
-];
-
-/** Какие моноширинные шрифты реально установлены в системе (для пометки в списке). */
-function installedFonts(): Set<string> {
-  if (typeof document === 'undefined') return new Set();
-  const probe = (name: string): boolean => {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return false;
-    ctx.font = `16px "${name}", monospace`;
-    const width = ctx.measureText('iiiiiiiiii').width;
-    ctx.font = '16px monospace';
-    return Math.abs(width - ctx.measureText('iiiiiiiiii').width) > 0.01;
-  };
+/**
+ * Необязательные шрифты показываем только при наличии: canvas-проба меряет
+ * строку одинаковыми символами и отсекает семейства, которых в системе нет.
+ * Стандартные (Consolas, Lucida Console, Courier New) есть в любой Windows,
+ * поэтому показываются всегда — устанавливать ничего не нужно.
+ */
+function installedOptionalFonts(): Set<string> {
   const result = new Set<string>();
-  for (const f of FONTS) if (probe(f.label)) result.add(f.label);
+  if (typeof document === 'undefined') return result;
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return result;
+  const sample = 'mmmmmmmmmmlli';
+  const width = (stack: string): number => {
+    ctx.font = `16px ${stack}`;
+    return ctx.measureText(sample).width;
+  };
+  const widthOfFallbacks = ['monospace', 'sans-serif', 'serif'].map((family) => width(family));
+  for (const font of OPTIONAL_FONTS) {
+    const probeWidth = width(`"${font.label}", monospace`);
+    // Нет шрифта — ширина совпадает с одним из запасных семейств.
+    if (widthOfFallbacks.every((fallback) => Math.abs(probeWidth - fallback) > 0.01)) {
+      result.add(font.label);
+    }
+  }
   return result;
-}
-
-/** Человекочитаемое имя первого шрифта в CSS-стеке. */
-function familyName(cssStack: string): string {
-  const m = cssStack.match(/(["'])?([^"',]+)\1/);
-  return m ? m[2].trim() : cssStack;
 }
 
 const ACCENTS = ['#2d95ec', '#57ab5a', '#c678dd', '#e5534b', '#d29922', '#39c5cf'];
@@ -41,14 +38,15 @@ export default function SettingsForm(): React.JSX.Element {
   const settings = useApp((s) => s.settings);
   const patchSettings = useApp((s) => s.patchSettings);
   const pushToast = useApp((s) => s.pushToast);
-  const [installed, setInstalled] = useState<Set<string>>(() => installedFonts());
+  const [installed] = useState<Set<string>>(() => installedOptionalFonts());
+  // Стандартные шрифты + установленные дополнительные; сохранённое значение
+  // из прежней версии тоже попадает в список — селект не должен быть пустым.
+  const fontList = fontOptions(installed, settings.fontFamily);
 
   // Шрифт применяется сразу при выборе (как тема, размер и акцентный цвет).
   const applyFont = (value: string): void => {
     void patchSettings({ fontFamily: value });
-    const fam = familyName(value);
-    const note = installed.has(fam) ? '' : ' — шрифт не найден в системе, будет использован запасной';
-    pushToast(`Шрифт терминала: ${fam}${note}`);
+    pushToast(`Шрифт терминала: ${fontFamilyName(value)}`);
   };
 
   const applyRdpEngine = (rdpEngine: RdpEngine): void => {
@@ -87,10 +85,9 @@ export default function SettingsForm(): React.JSX.Element {
           value={settings.fontFamily}
           onChange={(e) => applyFont(e.target.value)}
         >
-          {FONTS.map((f) => (
+          {fontList.map((f) => (
             <option key={f.value} value={f.value}>
               {f.label}
-              {installed.has(f.label) ? '' : ' (не установлен)'}
             </option>
           ))}
         </select>

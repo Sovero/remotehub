@@ -1,3 +1,5 @@
+import { DEFAULT_FONT_FAMILY } from './fonts';
+
 export type Protocol = 'ssh' | 'telnet' | 'rdp' | 'vnc';
 
 /** Реализация RDP-клиента, выбираемая в настройках приложения. */
@@ -191,7 +193,7 @@ export const SCHEMA_VERSION = 1;
 export const DEFAULT_SETTINGS: Settings = {
   theme: 'dark',
   fontSize: 14,
-  fontFamily: '"Cascadia Mono", Consolas, "Courier New", monospace',
+  fontFamily: DEFAULT_FONT_FAMILY,
   accent: '#2d95ec',
   confirmOnDelete: true,
   restoreTabs: true,
