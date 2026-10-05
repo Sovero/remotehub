@@ -1,38 +1,96 @@
 {
-  "slug": "audit-remediation",
-  "title": "Устранение находок аудита Remote Hub",
+  "slug": "rdp-legacy-fallback",
+  "title": "Системный RDP: окно сразу в рамке и автопереход по галочке",
   "mode": "full",
   "depth": "deep",
-  "tier": "T2",
-  "startedAt": "2026-08-27T09:40:00+03:00",
-  "updatedAt": "2026-08-27T11:58:00+03:00",
-  "finishedAt": "2026-08-27T11:58:00+03:00",
+  "tier": "T0",
+  "startedAt": "2026-10-05T17:05:00+03:00",
+  "updatedAt": "2026-10-05T17:40:00+03:00",
+  "finishedAt": "2026-10-05T17:40:00+03:00",
   "requirements": {
-    "total": 12, "done": 12, "inTicket": 0, "inSpec": 0,
-    "placeholder": 0, "deferred": 1, "dropped": 0
+    "total": 4,
+    "done": 4,
+    "inTicket": 0,
+    "inSpec": 0,
+    "placeholder": 0,
+    "deferred": 0,
+    "dropped": 0
   },
-  "tickets": [
-    { "id": "01", "title": "Проверка host key при SSH-подключении", "requirements": ["R01", "R01i.1", "R01i.2", "R01.1"], "blockedBy": [], "wave": 1, "status": "done", "commit": "2d5ef87" },
-    { "id": "02", "title": "Удаление неиспользуемого COM-хоста RDP", "requirements": ["R02"], "blockedBy": [], "wave": 1, "status": "done", "commit": "b606cfd" },
-    { "id": "03", "title": "Разгрузка main/index.ts и откат мёртвой правки сборки", "requirements": ["R03", "R03i.1", "R04"], "blockedBy": ["02"], "wave": 2, "status": "done", "commit": "afe9ade" },
-    { "id": "04", "title": "Поиск, фильтр по источнику и экспорт в журнале событий", "requirements": ["R05.1", "R05.2", "R05.3", "R05.4", "R05.5"], "blockedBy": [], "wave": 1, "status": "done", "commit": "9b1b62f" }
-  ],
+  "tickets": [],
   "debt": {
     "placeholders": [],
     "assumptions": [
-      "ASSUMPTION-1: COM-хост/MsRdpClient9 удаляется целиком, а не остаётся fallback-движком (spec §2)",
-      "ASSUMPTION-2: незакоммиченная правка electron.vite.config.ts откатывается, а не достраивается (spec §4)"
+      "ASSUMPTION-1: галочка автоперехода по умолчанию снята — текущее поведение сохраняется, автопереход включается осознанно (manifest R02)",
+      "ASSUMPTION-2: автопереход только iron → legacy, как у существующей кнопки; поведение rdpjs не расширяется (spec, «Вне рамок»)"
     ],
     "emptyEnv": []
   },
   "additions": [],
   "blind": {
-    "checkedAt": "2026-08-27T11:58:00+03:00",
-    "agreedWithManifest": 5,
+    "checkedAt": "2026-10-05T17:40:00+03:00",
+    "agreedWithManifest": 2,
     "drift": 0,
     "notes": [
-      "R05.5: рендер-лимит (не буквальная виртуализация) — осознанная замена из spec §5, не расхождение по сути.",
-      "R06 (deferred) подтверждён блайндом как «не реализовано» — ожидаемо."
+      "R01 (окно в рамке): проверено по коду (маршрутизация оконных команд на запускающийся движок + повторный rect после запуска + отказ от 0×0) и тестами tests/engine-hub.test.ts (19 тестов) и tests/quick-fixes.test.ts (setrect/show/resize при раннем rect). Живая проверка «глазами» на реальном RDP-хосте не выполнена — нужен стенд пользователя.",
+      "R02 (автопереход по галочке): проверено по коду и тестами tests/rdp-fallback.test.ts (6) и tests/store.test.ts (дефолт и персистентность флага). Фактический переход в живом приложении не наблюдался по той же причине.",
+      "Полный npm test: 191 passed, 2 skipped (e2e IronRDP требует живого сервера), 0 failed."
     ]
-  }
+  },
+  "stages": [
+    {
+      "id": "preflight",
+      "status": "done",
+      "note": ".autopilot уже существует в репозитории — переиспользован",
+      "startedAt": "2026-10-05T17:05:00+03:00",
+      "finishedAt": "2026-10-05T17:05:00+03:00"
+    },
+    {
+      "id": "manifest",
+      "status": "done",
+      "note": "R01 из брифа, R02/R02.1/R02.2 из «Дополнений»",
+      "startedAt": "2026-10-05T17:05:00+03:00",
+      "finishedAt": "2026-10-05T17:15:00+03:00"
+    },
+    {
+      "id": "briefing",
+      "status": "skipped",
+      "note": "уточнение получено при обсуждении плана: вопрос о формате записи прогона + отзыв к плану, ответы в brief.md «Дополнения»",
+      "startedAt": "2026-10-05T17:15:00+03:00",
+      "finishedAt": "2026-10-05T17:18:00+03:00"
+    },
+    {
+      "id": "spec",
+      "status": "done",
+      "startedAt": "2026-10-05T17:18:00+03:00",
+      "finishedAt": "2026-10-05T17:22:00+03:00"
+    },
+    {
+      "id": "plan",
+      "status": "done",
+      "note": "T0 — тикетов нет, прямой маршрут",
+      "startedAt": "2026-10-05T17:22:00+03:00",
+      "finishedAt": "2026-10-05T17:24:00+03:00"
+    },
+    {
+      "id": "build",
+      "status": "done",
+      "note": "правки в хабе, панели, схеме настроек, сторе и UI + 10 регрессионных тестов; целевые тесты, typecheck и полный npm test зелёные",
+      "startedAt": "2026-10-05T17:24:00+03:00",
+      "finishedAt": "2026-10-05T17:33:00+03:00"
+    },
+    {
+      "id": "review",
+      "status": "done",
+      "note": "ревью по трём осям: манифест не сужен, истории спеки покрыты, зависимостей и подавлений не добавлено",
+      "startedAt": "2026-10-05T17:33:00+03:00",
+      "finishedAt": "2026-10-05T17:36:00+03:00"
+    },
+    {
+      "id": "final",
+      "status": "done",
+      "note": "слепая приёмка по brief.md; живая проверка на RDP-хосте остаётся за пользователем",
+      "startedAt": "2026-10-05T17:36:00+03:00",
+      "finishedAt": "2026-10-05T17:40:00+03:00"
+    }
+  ]
 }
