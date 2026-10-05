@@ -239,6 +239,24 @@ body {
   margin-bottom: 14px;
 }
 
+/* Селект шрифта терминала и кнопка ручного перезапроса списка из системы. */
+.font-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.font-picker .input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Кнопка не должна растягиваться и переносить подпись «Обновление…» на две строки. */
+.font-refresh {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .settings-form .check {
   display: flex;
   align-items: flex-start;
@@ -589,8 +607,13 @@ body {
   cursor: pointer;
 }
 
-.btn:hover {
+.btn:hover:not(:disabled) {
   background: var(--bg-hover);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 .btn--primary {

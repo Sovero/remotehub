@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { RdpEngine } from '@shared/types';
 import { dynamicFontOptions, fontFamilyName, fontOptions, OPTIONAL_FONTS } from '@shared/fonts';
 import { lastInstalledMonospaceFamilies, loadInstalledMonospaceFamilies } from '../system-fonts';
 import { useApp } from '../store';
+import Icon from './Icon';
 
 /**
  * Необязательные шрифты показываем только при наличии: canvas-проба меряет
@@ -43,21 +44,31 @@ export default function SettingsForm(): React.JSX.Element {
   const [systemFamilies, setSystemFamilies] = useState<string[] | null>(() =>
     lastInstalledMonospaceFamilies()
   );
+  const [refreshing, setRefreshing] = useState(false);
+  // Форма перемонтируется при каждом открытии настроек, поэтому запрос идёт в
+  // том числе автоматически (notify: false — без тостов). Кнопка «Обновить»
+  // запускает тот же путь вручную (notify: true) — для шрифта, установленного
+  // во время уже открытого окна: перезапуск приложения не нужен.
+  const loadFamilies = useCallback(async (notify: boolean): Promise<void> => {
+    setRefreshing(true);
+    const families = await loadInstalledMonospaceFamilies();
+    setRefreshing(false);
+    // null (API недоступен) или пустой результат: оставляем показанный список,
+    // не обнуляем его — селект не должен оставаться без значений.
+    if (families && families.length > 0) {
+      setSystemFamilies(families);
+      if (notify) pushToast(`Шрифтов найдено: ${families.length}`);
+    } else if (notify) {
+      pushToast('Системный список шрифтов недоступен — показан стандартный набор');
+    }
+  }, [pushToast]);
+
   // Основной список — все моноширинные шрифты системы; пока он не пришёл (или
-  // системный API недоступен), работаем по статическому набору. Запрос идёт
-  // при каждом открытии настроек, поэтому установленный при работающем
-  // приложении шрифт появляется здесь без перезапуска. Сохранённое значение в
-  // обоих случаях остаётся в списке — селект не должен быть пустым.
+  // системный API недоступен), работаем по статическому набору. Сохранённое
+  // значение в обоих случаях остаётся в списке.
   useEffect(() => {
-    let alive = true;
-    void loadInstalledMonospaceFamilies().then((families) => {
-      // null — API недоступен: оставляем показанный список, не обнуляем его.
-      if (alive && families && families.length > 0) setSystemFamilies(families);
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
+    void loadFamilies(false);
+  }, [loadFamilies]);
   const fontList = systemFamilies
     ? dynamicFontOptions(systemFamilies, settings.fontFamily)
     : fontOptions(installed, settings.fontFamily);
@@ -99,19 +110,39 @@ export default function SettingsForm(): React.JSX.Element {
 
       <div className="form-row">
         <label className="form-label">Шрифт терминала</label>
-        <select
-          className="input"
-          value={settings.fontFamily}
-          onChange={(e) => applyFont(e.target.value)}
-        >
-          {fontList.map((f) => (
-            <option key={f.value} value={f.value}>
-              {f.label}
-            </option>
-          ))}
-        </select>
+        <div className="font-picker">
+          <select
+            className="input"
+            value={settings.fontFamily}
+            onChange={(e) => applyFont(e.target.value)}
+          >
+            {fontList.map((f) => (
+              <option key={f.value} value={f.value}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="btn btn--sm font-refresh"
+            onClick={() => void loadFamilies(true)}
+            disabled={refreshing}
+            title="Заново прочитать список шрифтов из системы"
+            aria-busy={refreshing}
+          >
+            {refreshing ? (
+              <Icon name="spinner" size={13} className="icon-spin" />
+            ) : (
+              <Icon name="refresh" size={13} />
+            )}
+            {refreshing ? 'Обновление…' : 'Обновить'}
+          </button>
+        </div>
         <div className="form-hint" style={{ fontFamily: settings.fontFamily }}>
           AaBbCc 123 ← терминал выглядит так
+        </div>
+        <div className="form-hint">
+          Список собирается из системы. Если шрифт установили при открытых настройках — нажмите «Обновить».
         </div>
       </div>
 
