@@ -142,6 +142,11 @@ export interface Settings {
   rdpAutoAcceptCert: boolean;
   /** Движок RDP: legacy node-rdpjs или IronRDP/WASM. */
   rdpEngine: RdpEngine;
+  /**
+   * Автоматически уходить на системный RDP (MsRdpClient), если IronRDP не смог
+   * подключиться: кнопка в оверлее не нужна. Выключено — решает пользователь.
+   */
+  rdpAutoFallbackToLegacy: boolean;
   winBounds: WindowBounds | null;
   openTabs: OpenTabMeta[];
   snippets: Snippet[];
@@ -192,6 +197,7 @@ export const DEFAULT_SETTINGS: Settings = {
   restoreTabs: true,
   rdpAutoAcceptCert: true,
   rdpEngine: 'iron',
+  rdpAutoFallbackToLegacy: false,
   winBounds: null,
   openTabs: [],
   snippets: [],

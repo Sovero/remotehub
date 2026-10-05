@@ -230,6 +230,58 @@ describe('R2: гарантированная уборка cmdkey', () => {
   });
 });
 
+// ---------------- R01: ранний rect панели вкладки ----------------
+
+describe('R01: rect, пришедший до спавна COM-хоста, применяется при встраивании', () => {
+  it('заглушка сессии дожидается rect и отправляет setrect/show/resize', async () => {
+    const writes: string[] = [];
+    const child = new EventEmitter() as ChildProcessLike;
+    child.stdin = { write: (text: string) => writes.push(text) } as ChildProcessLike['stdin'];
+    child.kill = vi.fn();
+
+    type SpawnResult = { ok: boolean; child: ChildProcessLike; hwnd: bigint; cleanup: () => void };
+    let releaseSpawn: (v: SpawnResult) => void = () => undefined;
+    const comSpawn = vi.fn(
+      () =>
+        new Promise<SpawnResult>((resolve) => {
+          releaseSpawn = resolve;
+        })
+    );
+
+    const manager = new RdpManager({
+      sealer: { available: () => true, seal: (b: Buffer) => b, unseal: (b: Buffer) => b.toString() },
+      send: () => undefined,
+      getParentHwnd: () => BigInt('0xff00'),
+      getParentOrigin: () => ({ x: 0, y: 0 }),
+      comSpawn: comSpawn as unknown as ConstructorParameters<typeof RdpManager>[0]['comSpawn'],
+      watchdogInterval: 60000
+    });
+
+    const host = {
+      id: 'h2', kind: 'host', name: 'legacy-rect', protocol: 'rdp',
+      host: 'rect-target', port: 3389, username: '', credentialId: null,
+      tags: [], notes: '',
+      ssh: {} as Host['ssh'], vnc: {} as Host['vnc'],
+      rdp: { domain: '', width: 1024, height: 768, promptForCreds: true },
+      lastConnectedAt: null
+    } as unknown as Host;
+
+    const launching = manager.launch(host, null, 'sess-rect');
+    // Панель вкладки (LegacyRdpView) монтируется раньше, чем хост отдаст HWND.
+    manager.setRect('sess-rect', { x: 10, y: 20, width: 300, height: 200 });
+    releaseSpawn({ ok: true, child, hwnd: BigInt('0x1234'), cleanup: () => undefined });
+    await launching;
+
+    expect(manager.isEmbedded('sess-rect')).toBe(true);
+    const lines = writes.map((w) => w.trim());
+    expect(lines).toContain('setrect 10 20 300 200');
+    expect(lines).toContain('show');
+    // resize уходит с дебаунсом (RESIZE_DEBOUNCE_MS) — дожидаемся его.
+    await vi.waitFor(() => expect(writes.some((w) => w.startsWith('resize '))).toBe(true));
+    manager.closeAll();
+  });
+});
+
 interface ChildProcessLike extends EventEmitter {
   stdin: { write: (s: string) => void } | null;
   kill: () => void;

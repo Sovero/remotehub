@@ -82,6 +82,31 @@ export interface RdpEngineStartResult {
   };
 }
 
+/**
+ * Политика автоперехода на системный движок (R02): при ошибке RDP-подключения
+ * на IronRDP вкладка сама переключается на системный RDP, если в настройках
+ * включена галочка. Снятая галочка оставляет решение пользователю — в оверлее
+ * ошибки показывается кнопка «Подключиться через системный RDP».
+ *
+ * Чистая функция: политика живёт в тестируемом месте, а не в UI. Петля
+ * исключена — переход возможен только с iron, после перехода вкладка legacy.
+ */
+export function shouldAutoFallbackToLegacy(input: {
+  /** kind вкладки сессии (SessionTab.kind). */
+  kind: string;
+  /** Движок, на котором вкладка открыта сейчас. */
+  engine: RdpEngineId | undefined;
+  /** Фаза вкладки (SessionState.phase). */
+  phase: string;
+  /** Галочка «Автоматически переключаться на системный RDP при ошибке IronRDP». */
+  enabled: boolean;
+  /** Автопереход на этой вкладке уже запускался — второй раз не повторяем. */
+  alreadyAttempted?: boolean;
+}): boolean {
+  if (!input.enabled || input.alreadyAttempted) return false;
+  return input.kind === 'rdp' && input.engine === 'iron' && input.phase === 'error';
+}
+
 /** Что умеет движок — хаб по этим флагам маршрутизирует ввод и оконные команды. */
 export interface RdpEngineCapabilities {
   /** Фактический клиент исполняется в renderer (iron WASM): main только поднимает мост. */

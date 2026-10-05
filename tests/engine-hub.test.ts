@@ -210,6 +210,71 @@ describe('RdpEngineHub — маршрутизация по capability-флага
     hub.setOverlay(true);
     expect(legacy.calls).toEqual(['setRect', 'activate', 'hide', 'setOverlay']);
   });
+
+  it('оконные команды запускающейся legacy-сессии доходят до движка до записи владельца', async () => {
+    const { hub, legacy } = makeHub();
+    let release: (res: { ok: boolean }) => void = () => undefined;
+    legacy.launch = vi.fn(
+      () => new Promise<{ ok: boolean }>((resolve) => (release = resolve))
+    ) as unknown as LegacyEngineLike['launch'];
+    const connecting = hub.connect({
+      sessionId: 's8',
+      engine: 'legacy',
+      host: 'h',
+      hostProfile: { id: 'h', name: 'h', host: 'h' } as never,
+      credential: null
+    });
+    // Панель вкладки шлёт первый rect сразу при монтировании — владельца ещё нет.
+    expect(hub.engineOf('s8')).toBeNull();
+    hub.setRect('s8', { x: 1, y: 2, width: 300, height: 200 });
+    hub.activate('s8');
+    hub.hide('s8');
+    release({ ok: true });
+    await connecting;
+    expect(hub.engineOf('s8')).toBe('legacy');
+    expect(legacy.calls).toEqual(['setRect', 'activate', 'hide']);
+  });
+
+  it('после неуспешного запуска legacy оконные команды движку не адресуются', async () => {
+    const { hub, legacy } = makeHub();
+    legacy.launch = vi.fn(async () => ({ ok: false, error: 'boom' })) as unknown as LegacyEngineLike['launch'];
+    const res = await hub.connect({
+      sessionId: 's9',
+      engine: 'legacy',
+      host: 'h',
+      hostProfile: { id: 'h', name: 'h', host: 'h' } as never,
+      credential: null
+    });
+    expect(res.ok).toBe(false);
+    expect(hub.engineOf('s9')).toBeNull();
+    hub.setRect('s9', { x: 0, y: 0, width: 10, height: 10 });
+    hub.activate('s9');
+    hub.hide('s9');
+    hub.setOverlay(true);
+    expect(legacy.calls).toEqual([]);
+  });
+
+  it('disconnect во время запуска закрывает запускающийся движок и не оставляет владельца', async () => {
+    const { hub, legacy } = makeHub();
+    let release: (res: { ok: boolean }) => void = () => undefined;
+    legacy.launch = vi.fn(
+      () => new Promise<{ ok: boolean }>((resolve) => (release = resolve))
+    ) as unknown as LegacyEngineLike['launch'];
+    const connecting = hub.connect({
+      sessionId: 's10',
+      engine: 'legacy',
+      host: 'h',
+      hostProfile: { id: 'h', name: 'h', host: 'h' } as never,
+      credential: null
+    });
+    hub.disconnect('s10');
+    expect(legacy.calls).toEqual(['stop:s10']);
+    release({ ok: true });
+    const res = await connecting;
+    expect(res.ok).toBe(true);
+    // Сессию закрыли, пока connect был в пути: владельцем она быть не должна.
+    expect(hub.engineOf('s10')).toBeNull();
+  });
 });
 
 describe('RdpEngineHub — единый поток состояний', () => {

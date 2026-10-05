@@ -168,7 +168,13 @@ export function registerIpc(
   ipcMain.handle(IPC.settingsSet, (_e, patch: Partial<Settings>) => {
     const current = store.loadSettings().data;
     const rdpEngine = patch.rdpEngine === 'iron' || patch.rdpEngine === 'rdpjs' ? patch.rdpEngine : current.rdpEngine;
-    const next: Settings = { ...current, ...patch, rdpEngine };
+    // Галочка автоперехода — тоже белый список: значение не из рендерера
+    // (undefined/строка) не должно попадать в файл настроек как есть.
+    const rdpAutoFallbackToLegacy =
+      typeof patch.rdpAutoFallbackToLegacy === 'boolean'
+        ? patch.rdpAutoFallbackToLegacy
+        : current.rdpAutoFallbackToLegacy;
+    const next: Settings = { ...current, ...patch, rdpEngine, rdpAutoFallbackToLegacy };
     store.saveSettings(next);
     return { ok: true, settings: next };
   });

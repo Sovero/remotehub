@@ -145,6 +145,18 @@ export default function SettingsForm(): React.JSX.Element {
       <label className="check">
         <input
           type="checkbox"
+          checked={settings.rdpAutoFallbackToLegacy}
+          onChange={(e) => void patchSettings({ rdpAutoFallbackToLegacy: e.target.checked })}
+        />
+        Автоматически переключаться на системный RDP, если IronRDP не смог подключиться
+      </label>
+      <div className="form-hint">
+        Выключено — при ошибке вкладка покажет кнопку «Подключиться через системный RDP» и не подключается сама.
+      </div>
+
+      <label className="check">
+        <input
+          type="checkbox"
           checked={settings.confirmOnDelete}
           onChange={(e) => void patchSettings({ confirmOnDelete: e.target.checked })}
         />

@@ -37,6 +37,7 @@ export default function StatusBar(): React.JSX.Element {
   const tabs = useApp((s) => s.tabs);
   const activeTabId = useApp((s) => s.activeTabId);
   const tree = useApp((s) => s.tree);
+  const settings = useApp((s) => s.settings);
   const [, tick] = useState(0);
 
   // Индикатор: всего хостов в дереве / активных (живых) сессий.
@@ -71,6 +72,23 @@ export default function StatusBar(): React.JSX.Element {
     }
     return null;
   }, [active, tree]);
+
+  // Движок активной RDP-вкладки: видно, кто ведёт сессию и был ли переход
+  // автоматическим (R02) — «подключаемся по такому движку».
+  const rdpEngineHint = useMemo(() => {
+    if (!active || active.kind !== 'rdp') return null;
+    const engine = active.rdpEngine ?? settings.rdpEngine;
+    if (engine === 'legacy') {
+      return {
+        text: active.rdpEngineAuto ? 'системный RDP · авто' : 'системный RDP',
+        title: active.rdpEngineAuto
+          ? 'IronRDP не подключился — движок выбран автоматически'
+          : 'Системный RDP-движок (mstscax), встроенное окно'
+      };
+    }
+    if (engine === 'rdpjs') return { text: 'Legacy canvas (rdpjs)', title: 'Движок node-rdpjs' };
+    return { text: 'IronRDP', title: 'Движок IronRDP (WASM, canvas в вкладке)' };
+  }, [active, settings.rdpEngine]);
 
   const stateLabel: Record<string, string> = {
     connecting: 'Подключение…',
@@ -109,6 +127,12 @@ export default function StatusBar(): React.JSX.Element {
             <span className="statusbar-item statusbar-muted statusbar-live-hint" title={liveHint.title}>
               <Icon name={liveHint.icon} size={11} />
               {liveHint.text}
+            </span>
+          )}
+          {rdpEngineHint && (
+            <span className="statusbar-item statusbar-muted" title={rdpEngineHint.title}>
+              <Icon name="window" size={11} />
+              {rdpEngineHint.text}
             </span>
           )}
         </>

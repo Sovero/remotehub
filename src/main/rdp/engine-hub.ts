@@ -244,6 +244,25 @@ export class RdpEngineHub {
   private readonly adapters: Map<RdpEngineId, RdpEngine>;
   /** sessionId → движок-владелец (заполняется при успешном connect). */
   private readonly owners = new Map<string, RdpEngineId>();
+  /**
+   * sessionId → движок, на котором сессия запускается прямо сейчас (connect
+   * ещё не завершён). Нужен, чтобы оконные команды панели вкладки не терялись
+   * до записи владельца — см. engineForCommands().
+   */
+  private readonly starting = new Map<string, RdpEngineId>();
+
+  /**
+   * Движок, которому адресуются оконные команды сессии: подтверждённый
+   * владелец или движок, запускающий её прямо сейчас. Второе принципиально:
+   * панель вкладки (LegacyRdpView) шлёт первый rect сразу при монтировании, а
+   * владелец фиксируется только после завершения connect (спавн COM-хоста,
+   * cmdkey, ожидание HWND — сотни мс). Без этой ветки первый rect терялся, и
+   * нативное окно показывалось в дефолтной геометрии хоста (0,0 + разрешение
+   * профиля), пока пользователь не изменит размер главного окна.
+   */
+  private engineForCommands(sessionId: string): RdpEngineId | null {
+    return this.owners.get(sessionId) ?? this.starting.get(sessionId) ?? null;
+  }
 
   constructor(private readonly deps: RdpEngineHubDeps) {
     const emit = (engine: RdpEngineId) => (sessionId: string, event: RdpEngineEvent) =>
@@ -259,20 +278,35 @@ export class RdpEngineHub {
   async connect(req: RdpEngineConnectRequest): Promise<RdpEngineStartResult> {
     const adapter = this.adapters.get(req.engine);
     if (!adapter) return { ok: false, error: `Неизвестный RDP-движок: ${req.engine}` };
-    const res = await adapter.connect(req);
-    // Атрибуция выбора движка (фаза 2 метрик) — до ветвления по res.ok,
-    // неудачные попытки тоже считаются (attempts vs successes).
-    this.deps.onConnectResult?.(req.sessionId, req.engine, res.ok);
-    if (res.ok) this.owners.set(req.sessionId, req.engine);
-    return res;
+    this.starting.set(req.sessionId, req.engine);
+    try {
+      const res = await adapter.connect(req);
+      // Атрибуция выбора движка (фаза 2 метрик) — до ветвления по res.ok,
+      // неудачные попытки тоже считаются (attempts vs successes).
+      this.deps.onConnectResult?.(req.sessionId, req.engine, res.ok);
+      // Владельца фиксируем, только если сессию не закрыли/не перезапустили,
+      // пока connect был в пути: disconnect снимает starting (см. ниже).
+      if (res.ok && this.starting.get(req.sessionId) === req.engine) {
+        this.owners.set(req.sessionId, req.engine);
+      }
+      return res;
+    } finally {
+      // Снимаем запись, только если её не перезаписал более новый connect.
+      if (this.starting.get(req.sessionId) === req.engine) this.starting.delete(req.sessionId);
+    }
   }
 
-  /** Закрывает сессию у движка-владельца (и только у него). */
+  /**
+   * Закрывает сессию у движка, который ею владеет или ещё её запускает:
+   * закрытие вкладки во время запуска обязано останавливать COM-хост, иначе
+   * останется осиротевшее нативное окно.
+   */
   disconnect(sessionId: string): void {
-    const engine = this.owners.get(sessionId);
+    const engine = this.engineForCommands(sessionId);
     if (!engine) return;
     this.adapters.get(engine)?.disconnect(sessionId);
     this.owners.delete(sessionId);
+    if (this.starting.get(sessionId) === engine) this.starting.delete(sessionId);
   }
 
   engineOf(sessionId: string): RdpEngineId | null {
@@ -339,20 +373,24 @@ export class RdpEngineHub {
   // ---- окна (capability: windowEmbedding → legacy) ----
 
   setRect(sessionId: string, rect: RdpLegacyRect): void {
-    if (this.owners.get(sessionId) === 'legacy') this.deps.legacy.setRect(sessionId, rect);
+    if (this.engineForCommands(sessionId) === 'legacy') this.deps.legacy.setRect(sessionId, rect);
   }
 
   activate(sessionId: string): void {
-    if (this.owners.get(sessionId) === 'legacy') this.deps.legacy.activate(sessionId);
+    if (this.engineForCommands(sessionId) === 'legacy') this.deps.legacy.activate(sessionId);
   }
 
   hide(sessionId: string): void {
-    if (this.owners.get(sessionId) === 'legacy') this.deps.legacy.hide(sessionId);
+    if (this.engineForCommands(sessionId) === 'legacy') this.deps.legacy.hide(sessionId);
   }
 
-  /** Оверлей — глобальная команда: применяется, если есть хоть одна legacy-сессия. */
+  /**
+   * Оверлей — глобальная команда: применяется, если есть хоть одна legacy-сессия
+   * (в том числе запускающаяся: диалог, открытый во время подключения, не должен
+   * оказаться под нативным окном).
+   */
   setOverlay(overlay: boolean): void {
-    for (const engine of this.owners.values()) {
+    for (const engine of [...this.owners.values(), ...this.starting.values()]) {
       if (engine === 'legacy') {
         this.deps.legacy.setOverlay(overlay);
         return;

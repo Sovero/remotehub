@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid';
 import type { Group, Host, HistoryEntry, RdpEngine, Runbook, Settings, Snippet, TreeNode } from '@shared/types';
 import { createGroup, createHost } from '@shared/types';
 import type { SessionState, UpdateStatus } from '@shared/ipc-contract';
+import { shouldAutoFallbackToLegacy } from '@shared/rdp-engine';
 import {
   applyImport,
   duplicateHost,
@@ -72,6 +73,8 @@ export interface SessionTab {
   state: SessionState;
   /** Движок, на котором создана эта вкладка; настройка не меняет уже живую сессию. */
   rdpEngine?: RdpEngine;
+  /** Движок выбран автоматически при ошибке IronRDP (R02) — видно в статус-баре. */
+  rdpEngineAuto?: boolean;
   adHocHost: Host | null;
   startedAt: number | null;
   /** Транзитная информация VNC-сессии (порт моста и пароль — только в памяти). */
@@ -152,6 +155,11 @@ interface AppState {
    * HWND) — для серверов, чей сертификат несовместим с TLS-стеком IronRDP.
    */
   useLegacyRdpEngine: (sessionId: string) => Promise<void>;
+  /**
+   * R02: автопереход на системный RDP при ошибке IronRDP — по галочке
+   * settings.rdpAutoFallbackToLegacy, без кнопки в оверлее.
+   */
+  autoFallbackToLegacyRdp: (sessionId: string, reason?: string) => Promise<void>;
   closeTab: (sessionId: string, force?: boolean) => Promise<void>;
   switchTab: (sessionId: string) => void;
   submitPassword: (sessionId: string, password: string) => Promise<void>;
@@ -191,6 +199,7 @@ export const useApp = create<AppState>((set, get) => ({
     restoreTabs: true,
     rdpAutoAcceptCert: true,
     rdpEngine: 'iron',
+    rdpAutoFallbackToLegacy: false,
     winBounds: null,
     openTabs: [],
     snippets: [],
@@ -755,6 +764,40 @@ export const useApp = create<AppState>((set, get) => ({
     }));
   },
 
+  /**
+   * Автопереход на системный RDP вместо ожидания клика по кнопке в оверлее:
+   * решает чистая политика shouldAutoFallbackToLegacy (RDP-вкладка на iron,
+   * фаза error, включённая галочка, без повторной попытки). Дальше — тот же
+   * путь, что у кнопки: остановить iron-сессию и создать legacy-панель.
+   */
+  autoFallbackToLegacyRdp: async (sessionId, reason) => {
+    const tab = get().tabs.find((t) => t.sessionId === sessionId);
+    if (!tab) return;
+    if (
+      !shouldAutoFallbackToLegacy({
+        kind: tab.kind,
+        engine: tab.rdpEngine ?? get().settings.rdpEngine,
+        phase: tab.state.phase,
+        enabled: get().settings.rdpAutoFallbackToLegacy,
+        alreadyAttempted: tab.rdpEngineAuto === true
+      })
+    ) {
+      return;
+    }
+    // Фаза и метка меняются синхронно: повторные события ошибки, пришедшие до
+    // ответа sessionClose, второй переход не запустят.
+    set((s) => ({
+      tabs: s.tabs.map((t) =>
+        t.sessionId === sessionId ? { ...t, rdpEngineAuto: true, state: { phase: 'connecting' } } : t
+      )
+    }));
+    const trimmed = reason ? reason.slice(0, 140) : '';
+    const detail = reason ? ': ' + trimmed + (reason.length === trimmed.length ? '' : '…') : '';
+    get().pushToast('IronRDP не подключился' + detail + ' — подключаемся через системный RDP');
+    appLog('warn', 'rdp', 'Автопереход на системный RDP, сессия ' + sessionId.slice(0, 8) + detail);
+    await get().useLegacyRdpEngine(sessionId);
+  },
+
   closeTab: async (sessionId, force) => {
     const { tabs, settings } = get();
     const tab = tabs.find((t) => t.sessionId === sessionId);
@@ -831,6 +874,14 @@ export const useApp = create<AppState>((set, get) => ({
         state.phase === 'error' ? 'error' : state.phase === 'closed' ? 'warn' : 'info',
         (tab?.protocol as 'rdp' | 'vnc' | 'ssh' | 'app') ?? 'app',
         `Сессия ${sessionId.slice(0, 8)} (${tab?.title ?? 'без имени'}): ${state.phase}${detail ? ` — ${detail}` : ''}`
+      );
+    }
+    // R02: ошибка сессии — при включённой галочке уходим на системный RDP сами,
+    // не дожидаясь кнопки в оверлее (политику проверяет сам автопереход).
+    if (state.phase === 'error') {
+      void get().autoFallbackToLegacyRdp(
+        sessionId,
+        (state as { message?: string }).message
       );
     }
     if (state.phase === 'auth-required') {

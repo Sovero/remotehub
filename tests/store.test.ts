@@ -107,11 +107,18 @@ describe('settings', () => {
     );
     const loaded = store.loadSettings();
     expect(loaded.data.rdpEngine).toBe('iron');
+    // Новое поле настроек у старого файла получает значение по умолчанию (R02).
+    expect(loaded.data.rdpAutoFallbackToLegacy).toBe(false);
   });
 
   it('сохраняет выбранный IronRDP-движок', () => {
     store.saveSettings({ ...DEFAULT_SETTINGS, rdpEngine: 'iron' });
     expect(store.loadSettings().data.rdpEngine).toBe('iron');
+  });
+
+  it('сохраняет включённый автопереход на системный RDP (R02)', () => {
+    store.saveSettings({ ...DEFAULT_SETTINGS, rdpAutoFallbackToLegacy: true });
+    expect(store.loadSettings().data.rdpAutoFallbackToLegacy).toBe(true);
   });
 
   it('повреждённый файл настроек откладывается в .bak', () => {
