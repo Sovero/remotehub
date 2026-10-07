@@ -19,6 +19,7 @@ import { RdpjsClientManager } from './rdp/rdpjs-client';
 import { RdpManager } from './rdp/manager';
 import { installSmokeHooks } from './smoke';
 import { addLog } from './log';
+import { createRendererLogThrottle } from './renderer-log-throttle';
 import { EngineMetrics } from './rdp/engine-metrics';
 
 // Страховка от падения всего процесса из-за необязательного нативного модуля
@@ -241,12 +242,18 @@ function createWindow(): void {
   // попадает в журнал приложения: без этого шаги протокола после того, как
   // шлюз отрапортовал "connected", были видны только в devtools, недоступных
   // обычному пользователю при диагностике зависшего подключения.
+  // Поток во время активной сессии схлопывается ограничителем: каждая запись
+  // — это IPC-рассылка во все окна, а без ограничителя их сотни в секунду
+  // (см. renderer-log-throttle.ts).
+  const rendererLogThrottle = createRendererLogThrottle((level, _source, message) => {
+    const source = /iron|rdp/i.test(message) ? 'iron' : 'app';
+    addLog(level, source, `[renderer] ${message}`);
+  });
   mainWindow.webContents.on('console-message', (_event, level, message) => {
     if (!message) return;
     // Chromium ConsoleMessageLevel: 0=verbose,1=info,2=warning,3=error.
     const mapped = level >= 3 ? 'error' : level === 2 ? 'warn' : 'info';
-    const source = /iron|rdp/i.test(message) ? 'iron' : 'app';
-    addLog(mapped, source, `[renderer] ${message}`);
+    rendererLogThrottle.offer(mapped, message);
   });
 
   mainWindow.once('ready-to-show', () => {

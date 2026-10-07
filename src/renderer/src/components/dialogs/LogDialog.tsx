@@ -11,6 +11,8 @@ const LEVEL_LABELS: Record<LogLevel, string> = { error: 'Ошибки', warn: '�
 const RENDER_LIMIT = 300;
 /** Сколько последних записей полного журнала включать в диагностику. */
 const DIAGNOSTICS_ENTRIES = 500;
+/** Период слияния живых записей журнала в состояние списка (буферизация). */
+const LOG_FLUSH_MS = 250;
 
 function fmtTime(ts: number): string {
   const d = new Date(ts);
@@ -41,16 +43,27 @@ export default function LogDialog(): React.JSX.Element {
   const listRef = useRef<HTMLDivElement | null>(null);
 
   // Первичная загрузка + подписка на живые записи из main.
+  // Записи приходят по одной, а при активной RDP-сессии их поток может быть
+  // очень частым: каждая отдельная setState здесь — это пересчёт sources и
+  // filtered по всему буферу, то есть нагрузка на тот же поток, что рисует
+  // картинку сессии. Буферизуем и сливаем пачками раз в LOG_FLUSH_MS.
   useEffect(() => {
     let alive = true;
     void window.api.getLogs().then((res) => {
       if (alive) setEntries(res.entries);
     });
+    const pending: LogEntry[] = [];
     const off = window.api.onLogEntry((entry) => {
-      if (alive) setEntries((prev) => [...prev, entry]);
+      if (alive) pending.push(entry);
     });
+    const flushTimer = window.setInterval(() => {
+      if (!alive || pending.length === 0) return;
+      const batch = pending.splice(0, pending.length);
+      setEntries((prev) => prev.concat(batch));
+    }, LOG_FLUSH_MS);
     return () => {
       alive = false;
+      window.clearInterval(flushTimer);
       off();
     };
   }, []);

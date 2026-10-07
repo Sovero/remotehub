@@ -328,6 +328,16 @@ function safeEqual(a: string, b: string): boolean {
 
 // ---------------- Шлюз ----------------
 
+/** Как часто печатать сводку по трафику туннеля в журнал (см. startTunnelAccounting). */
+const TUNNEL_LOG_INTERVAL_MS = 10_000;
+
+/** Человекочитаемый размер для сводки туннеля. */
+function formatBytes(n: number): string {
+  if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} МБ`;
+  if (n >= 1024) return `${(n / 1024).toFixed(1)} КБ`;
+  return `${n} Б`;
+}
+
 export interface IronGatewayState {
   phase: 'connecting' | 'connected' | 'error' | 'closed';
   message?: string;
@@ -364,6 +374,20 @@ export class IronGateway {
   private probe: net.Socket | null = null;
   private pending: PendingConn | null = null;
   private closed = false;
+
+  /**
+   * Учёт трафика туннеля для журнала (см. startTunnelAccounting): байты и
+   * чанки, накопленные с последней сводки. Без этого журнала каждый чанк
+   * давал отдельную запись + IPC-рассылку, и журнал сам тормозил сессию.
+   */
+  private tunnelStats: {
+    upBytes: number;
+    upChunks: number;
+    downBytes: number;
+    downChunks: number;
+    windowStart: number;
+  } | null = null;
+  private tunnelSummaryTimer: NodeJS.Timeout | null = null;
 
   public actualPort = 0;
 
@@ -675,19 +699,26 @@ export class IronGateway {
     };
     armSilenceTimer();
 
+    // Запись в журнал РОВНО на каждый чанк (раньше здесь была addLog с
+    // размером байт) на активной картинке RDP давала сотни записей в секунду:
+    // каждая — IPC-рассылка во все окна, поэтому журнал становился узким
+    // местом самой сессии. Считаем байты/чанки в памяти и печатаем сводку
+    // раз в TUNNEL_LOG_INTERVAL_MS и один раз при завершении туннеля.
+    this.startTunnelAccounting();
     ws.on('message', (data) => {
       const buf = toBuf(data);
-      addLog('info', 'iron', `IronRDP: тоннель клиент→сервер, ${buf.length} байт`);
+      this.countTunnel('up', buf.length);
       relay.write(buf);
     });
     // Накопленное с момента согласования и весь дальнейший поток — клиенту.
     chan.startTunneling((chunk: Buffer) => {
       armSilenceTimer(); // сервер откликнулся — соединение живо, взводим сторож заново
-      addLog('info', 'iron', `IronRDP: тоннель сервер→клиент, ${chunk.length} байт`);
+      this.countTunnel('down', chunk.length);
       this.sendWs(ws, chunk);
     });
     const teardown = (why: string): void => {
       settleOnce(() => {
+        this.flushTunnelStats(true);
         this.report({ phase: 'closed', message: why });
         try { ws.close(); } catch { /* ignore */ }
         if (!relay.destroyed) relay.destroy();
@@ -699,6 +730,59 @@ export class IronGateway {
     relay.on('error', (e) => teardown(`ошибка TCP: ${e.message}`));
 
     this.report({ phase: 'connected', message: addr });
+  }
+
+  /** Начать (или продолжить) накопление статистики туннеля + периодическую сводку. */
+  private startTunnelAccounting(): void {
+    if (this.tunnelSummaryTimer) return;
+    this.tunnelStats ??= { upBytes: 0, upChunks: 0, downBytes: 0, downChunks: 0, windowStart: Date.now() };
+    const timer = setInterval(() => this.flushTunnelStats(false), TUNNEL_LOG_INTERVAL_MS);
+    timer.unref?.();
+    this.tunnelSummaryTimer = timer;
+  }
+
+  /** Учесть чанк в одном направлении ('up' — клиент→сервер, 'down' — сервер→клиент). */
+  private countTunnel(dir: 'up' | 'down', bytes: number): void {
+    const s = this.tunnelStats;
+    if (!s) return;
+    if (dir === 'up') {
+      s.upBytes += bytes;
+      s.upChunks += 1;
+    } else {
+      s.downBytes += bytes;
+      s.downChunks += 1;
+    }
+  }
+
+  /**
+   * Печать сводки по туннелю и (при final) остановка учёта. Сводка пустого
+   * окна не печатается — на медленных сессиях журнал не засоряется нулём.
+   */
+  private flushTunnelStats(final: boolean): void {
+    const s = this.tunnelStats;
+    if (final) {
+      if (this.tunnelSummaryTimer) clearInterval(this.tunnelSummaryTimer);
+      this.tunnelSummaryTimer = null;
+    }
+    if (!s) return;
+    if (s.upChunks + s.downChunks > 0) {
+      const secs = Math.max(1, Math.round((Date.now() - s.windowStart) / 1000));
+      addLog(
+        'info',
+        'iron',
+        `IronRDP: тоннель за ${secs} с — ${formatBytes(s.upBytes)} → (${s.upChunks} чанков), ` +
+          `${formatBytes(s.downBytes)} ← (${s.downChunks} чанков)`
+      );
+    }
+    if (final) {
+      this.tunnelStats = null;
+      return;
+    }
+    s.upBytes = 0;
+    s.upChunks = 0;
+    s.downBytes = 0;
+    s.downChunks = 0;
+    s.windowStart = Date.now();
   }
 
   private fail(message: string): void {
@@ -714,6 +798,9 @@ export class IronGateway {
   /** Полностью останавливает шлюз. */
   async stop(): Promise<void> {
     this.closed = true;
+    // Итоговая сводка туннеля: teardown при closed не выполняется (settleOnce
+    // выходит early), поэтому закрываем учёт явно здесь.
+    this.flushTunnelStats(true);
     this.destroySockets();
     // Живые клиенты держат соединение: рвём принудительно.
     for (const client of this.wss?.clients ?? []) {

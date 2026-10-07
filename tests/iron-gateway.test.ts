@@ -19,6 +19,7 @@ import {
   encodeRequest,
   encodeResponse
 } from '../src/main/rdp/iron-gateway';
+import { onLog } from '../src/main/log';
 
 const X224_CR = Buffer.from([
   0x03, 0x00, 0x00, 0x13, // TPKT: len 19
@@ -301,6 +302,40 @@ describe('IronGateway — хендшейк и туннель', () => {
     const f = decodePdu(await nextWsMessage(ws));
     expect(f.errorCode).toBe(1);
     expect(f.wsaErrorCode).toBe(10061);
+    ws.close();
+  }, 15000);
+
+  it('активный туннель не пишет запись журнала на каждый чанк — только сводка при остановке', async () => {
+    const fake = await startFakeRdpServer({ x224Reply: X224_CC, afterReply: Buffer.from('SRV-DATA') });
+    cleanups.push(fake.close);
+    const { gw } = await makeGateway(fake.port);
+
+    // Ловим только записи туннеля: раньше их было ровно по одной на чанк в
+    // каждую сторону, и на активной картинке RDP журнал давал сотни IPC/с.
+    const tunnelLogs: string[] = [];
+    const off = onLog((e) => {
+      if (e.message.includes('тоннель')) tunnelLogs.push(e.message);
+    });
+
+    const ws = await openAuthedWs(gw);
+    const msgs = wsMessageQueue(ws);
+    ws.send(encodeRequest('any', gw.authToken, X224_CR));
+    decodePdu(await msgs.next());
+    await msgs.next(); // SRV-DATA — чанк сервер→клиент
+
+    for (let i = 0; i < 50; i++) ws.send(Buffer.from(`CHUNK-${i}`));
+    await new Promise((r) => setTimeout(r, 300));
+
+    const received = fake.receivedFromClients().join('|');
+    for (let i = 0; i < 50; i++) expect(received).toContain(`CHUNK-${i}`);
+    // Сводный интервал (10 с) за время теста не истекает — записей быть не должно.
+    expect(tunnelLogs).toHaveLength(0);
+
+    await gw.stop();
+    expect(tunnelLogs).toHaveLength(1);
+    expect(tunnelLogs[0]).toContain('тоннель за');
+    expect(tunnelLogs[0]).toContain('50 чанков'); // клиент→сервер
+    off();
     ws.close();
   }, 15000);
 });
