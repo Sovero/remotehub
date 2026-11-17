@@ -34,8 +34,8 @@ export function clipboardDecision(policy: ClipboardPolicy, maxBytes: number, tex
 }
 
 /** Сколько строк и символов в строке показываем в подтверждении. */
-export const CLIPBOARD_PREVIEW_LINES = 4;
-export const CLIPBOARD_PREVIEW_LINE_CHARS = 120;
+const PREVIEW_LINES = 4;
+const PREVIEW_LINE_CHARS = 120;
 
 /**
  * Первые строки текста для подтверждения. Каждая строка режется отдельно: одна
@@ -43,13 +43,13 @@ export const CLIPBOARD_PREVIEW_LINE_CHARS = 120;
  */
 export function clipboardPreview(text: string): string {
   const all = text.split('\n');
-  const head = all.slice(0, CLIPBOARD_PREVIEW_LINES).map(clipPreviewLine).join('\n');
-  return all.length > CLIPBOARD_PREVIEW_LINES ? `${head}\n…` : head;
+  const head = all.slice(0, PREVIEW_LINES).map(clipPreviewLine).join('\n');
+  return all.length > PREVIEW_LINES ? `${head}\n…` : head;
 }
 
 /** Строка предпросмотра: длинную режем, многоточие показывает обрыв. */
 function clipPreviewLine(line: string): string {
-  return line.length > CLIPBOARD_PREVIEW_LINE_CHARS ? `${line.slice(0, CLIPBOARD_PREVIEW_LINE_CHARS)}…` : line;
+  return line.length > PREVIEW_LINE_CHARS ? `${line.slice(0, PREVIEW_LINE_CHARS)}…` : line;
 }
 
 /** Данные подтверждения записи в буфер обмена. */
@@ -62,6 +62,23 @@ export interface ClipboardAskRequest {
   preview: string;
   /** Откуда пришёл текст: «SSH · web-01», «RDP · 10.0.0.5», «VNC · сервер». */
   source: string;
+}
+
+/**
+ * Поставить запрос в очередь подтверждений: новый встаёт в конец, а повтор того
+ * же текста из того же источника подряд не дублируется.
+ *
+ * Очередь, а не одно поле: второй текст из сессии раньше молча затирал первый
+ * вопрос, и пользователь терял шанс отказаться от чужого текста.
+ * @returns тот же массив, если запрос — повтор: лишней перерисовки не будет.
+ */
+export function enqueueClipboardRequest(
+  queue: ClipboardAskRequest[],
+  request: ClipboardAskRequest
+): ClipboardAskRequest[] {
+  const last = queue[queue.length - 1];
+  if (last && last.text === request.text && last.source === request.source) return queue;
+  return [...queue, request];
 }
 
 /** Что сделать по решению политики. */

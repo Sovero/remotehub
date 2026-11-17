@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   clipboardDecision,
   clipboardPreview,
+  enqueueClipboardRequest,
   formatBytes,
   utf8Length,
   dispatchRemoteCopy
@@ -110,6 +111,35 @@ describe('dispatchRemoteCopy: остальные политики', () => {
     expect(e.copy).not.toHaveBeenCalled();
     expect(e.ask).not.toHaveBeenCalled();
     expect(e.tooLarge).not.toHaveBeenCalled();
+  });
+});
+
+describe('enqueueClipboardRequest', () => {
+  const make = (text: string, source = 'SSH · web-01') => ({
+    text,
+    bytes: utf8Length(text),
+    preview: text,
+    source
+  });
+
+  it('ставит новый запрос в конец, не теряя предыдущий', () => {
+    const first = make('первый');
+    const queue = enqueueClipboardRequest(enqueueClipboardRequest([], first), make('второй'));
+
+    expect(queue.map((r) => r.text)).toEqual(['первый', 'второй']);
+    expect(queue[0]).toBe(first);
+  });
+
+  it('повтор того же текста из того же источника подряд не дублирует', () => {
+    const queue = [make('текст')];
+
+    expect(enqueueClipboardRequest(queue, make('текст'))).toBe(queue);
+  });
+
+  it('тот же текст из другого места — отдельный запрос', () => {
+    const queue = enqueueClipboardRequest([make('текст')], make('текст', 'RDP · 10.0.0.5'));
+
+    expect(queue).toHaveLength(2);
   });
 });
 

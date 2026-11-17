@@ -15,7 +15,7 @@ export function offerRemoteClipboard(text: string, source: string): void {
   const { clipboardPolicy, clipboardMaxBytes } = useApp.getState().settings;
   dispatchRemoteCopy(clipboardPolicy, clipboardMaxBytes, text, source, {
     copy: copyTextToClipboard,
-    ask: (request) => useApp.getState().setPendingClipboard(request),
+    ask: (request) => useApp.getState().enqueueClipboardRequest(request),
     tooLarge: (limit) =>
       useApp.getState().pushToast(`Буфер обмена: текст больше предела ${formatBytes(limit)} — не скопирован`)
   });

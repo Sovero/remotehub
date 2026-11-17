@@ -30,8 +30,9 @@ export interface ClipboardSyncOptions {
 export interface ClipboardSync {
   /**
    * Локальный буфер → сессия. Повторно тот же текст не отправляется, текст,
-   * пришедший с сервера, обратно не возвращается. force — ответ на запрос
-   * сервера: там нужен именно текущий текст, даже если он уже отправлялся.
+   * пришедший с сервера, и локальное содержимое, которое сессия уже знает, — тоже.
+   * force — ответ на запрос сервера: там нужен именно текущий текст, даже если он
+   * уже отправлялся.
    * @returns true, если текст действительно ушёл в сессию.
    */
   pushLocal(text: string, force?: boolean): boolean;
@@ -40,6 +41,8 @@ export interface ClipboardSync {
   /**
    * Пришло с сервера: запомнить, чтобы опрос не отправил текст обратно. В локальный
    * буфер он не пишется — это решает политика буфера обмена (см. offerRemoteClipboard).
+   * Локальное содержимое при этом остаётся «знакомым» сессии: отказ от записи не
+   * должен превращаться в отправку на сервер устаревшего буфера.
    */
   markRemote(text: string): void;
   /** Запустить опрос локального буфера. @returns остановка опроса. */
@@ -57,21 +60,23 @@ export interface ClipboardSync {
  */
 export function createClipboardSync(options: ClipboardSyncOptions): ClipboardSync {
   const { push, isReady = () => true, read = readClipboardText } = options;
-  /** Последнее отправленное в сессию и последнее полученное из неё. */
-  let sent = '';
+  /** Последнее полученное из сессии: этот текст обратно не отправляем. */
   let received = '';
+  /**
+   * Локальное содержимое, которое сессия уже знает: отправленное нами или то, что
+   * лежало в буфере в момент удалённого события. Отдельное значение нужно, чтобы
+   * отказ по политике (ask/deny) не отправлял на сервер устаревший локальный текст:
+   * сервер вернул бы его эхом, и подтверждение подменилось бы нашим же буфером.
+   */
+  let localSeen: string | null = null;
 
   const pushLocal = (text: string, force = false): boolean => {
     if (!text || !isReady()) return false;
-    if (!force) {
-      if (text === received) {
-        // Текст пришёл с сервера — обратно его не отправляем.
-        sent = text;
-        return false;
-      }
-      if (text === sent) return false;
+    if (!force && (text === received || text === localSeen)) {
+      localSeen = text;
+      return false;
     }
-    sent = text;
+    localSeen = text;
     push(text);
     return true;
   };
@@ -81,10 +86,9 @@ export function createClipboardSync(options: ClipboardSyncOptions): ClipboardSyn
   };
 
   const markRemote = (text: string): void => {
-    if (!text) return;
-    // Помечаем как полученное с сервера: иначе опрос отправил бы текст назад.
-    received = text;
-    sent = text;
+    // Запоминаем только пришедший текст: localSeen не сбрасываем, иначе опрос
+    // счёл бы неизменившийся локальный буфер новым и отправил его обратно.
+    if (text) received = text;
   };
 
   const start = (): (() => void) => {

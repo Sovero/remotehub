@@ -19,6 +19,12 @@ export interface LoadData<T> {
   recovered: boolean;
 }
 
+/** Поля настроек до общей политики буфера обмена (тогда она касалась только OSC 52). */
+interface LegacyClipboardSettings {
+  osc52Policy?: ClipboardPolicy;
+  osc52MaxBytes?: number;
+}
+
 export class SchemaTooNewError extends Error {
   constructor(file: string, found: number, supported: number) {
     super(
@@ -75,19 +81,17 @@ export class Store {
     if (res.data !== null) {
       checkSchema(this.settingsPath, res.data.schemaVersion);
     }
-    const merged: Settings = { ...DEFAULT_SETTINGS, ...(res.data?.settings ?? {}) };
-    // До общей политики буфера настройка называлась по OSC 52. Переносим значение,
-    // иначе у тех, кто уже выставил запрет, он тихо вернулся бы к «спрашивать».
-    const legacy = res.data?.settings as
-      | (Partial<Settings> & { osc52Policy?: ClipboardPolicy; osc52MaxBytes?: number })
-      | undefined;
-    if (legacy) {
-      if (legacy.clipboardPolicy === undefined && legacy.osc52Policy !== undefined) {
-        merged.clipboardPolicy = legacy.osc52Policy;
-      }
-      if (legacy.clipboardMaxBytes === undefined && typeof legacy.osc52MaxBytes === 'number') {
-        merged.clipboardMaxBytes = legacy.osc52MaxBytes;
-      }
+    // До общей политики буфера настройка называлась по OSC 52. Разбираем старые
+    // поля отдельно: переносим значение (иначе выставленный запрет тихо вернулся бы
+    // к «спрашивать») и не тащим их дальше в settings.json.
+    const { osc52Policy, osc52MaxBytes, ...saved } = (res.data?.settings ?? {}) as Partial<Settings> &
+      LegacyClipboardSettings;
+    const merged: Settings = { ...DEFAULT_SETTINGS, ...saved };
+    if (saved.clipboardPolicy === undefined && osc52Policy !== undefined) {
+      merged.clipboardPolicy = osc52Policy;
+    }
+    if (saved.clipboardMaxBytes === undefined && typeof osc52MaxBytes === 'number') {
+      merged.clipboardMaxBytes = osc52MaxBytes;
     }
     // Старый дефолт шрифта терминала заменяем стандартным: Cascadia Mono мог отсутствовать.
     merged.fontFamily = normalizeFontFamily(merged.fontFamily);
