@@ -11,17 +11,14 @@ export default function VncViewer({ tab }: { tab: SessionTab }): React.JSX.Eleme
   const applySessionState = useApp((s) => s.applySessionState);
   const vnc = tab.vnc;
   // Общий с RDP механизм буфера: защита от эха и опрос локального буфера.
+  // noVNC сам игнорирует clipboardPasteFrom вне состояния connected и не пишет
+  // в закрытый сокет, поэтому здесь только источник текста: isReady нужен лишь
+  // чтобы не читать буфер обмена после разрыва.
   const clip = useMemo(
     () =>
       createClipboardSync({
-        push: (text) => {
-          try {
-            rfbRef.current?.clipboardPasteFrom(text);
-          } catch {
-            // соединение уже закрыто
-          }
-        },
-        isReady: () => connectedRef.current && rfbRef.current !== null
+        push: (text) => rfbRef.current?.clipboardPasteFrom(text),
+        isReady: () => connectedRef.current
       }),
     []
   );
@@ -70,7 +67,7 @@ export default function VncViewer({ tab }: { tab: SessionTab }): React.JSX.Eleme
     });
     // Буфер обмена VNC → локальный: noVNC отдаёт текст события clipboard.
     rfb.addEventListener('clipboard', (e) => {
-      clip.applyRemote((e as CustomEvent<{ text: string }>).detail?.text ?? '');
+      clip.applyRemote((e as CustomEvent<{ text: string }>).detail.text);
     });
     rfb.addEventListener('credentialsrequired', () => {
       applySessionState(tab.sessionId, {
