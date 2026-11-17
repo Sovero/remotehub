@@ -10,9 +10,9 @@
  * Секреты: пароль разрешён в main из хранилища (credentialId), сюда приходит
  * уже готовый результат ironStart; WASM-клиент выполняет NLA на своей стороне.
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Backend, init } from '@devolutions/iron-remote-desktop-rdp';
-import { copyTextToClipboard, readClipboardText } from '../lib/clipboard';
+import { createClipboardSync } from '../lib/clipboard';
 import { useApp } from '../store';
 
 let initPromise: Promise<void> | null = null;
@@ -71,8 +71,6 @@ interface Props {
 
 const RECONNECT_DEBOUNCE_MS = 250;
 
-/** Как часто сверяем локальный буфер, чтобы сервер видел свежую вставку. */
-const CLIPBOARD_POLL_MS = 700;
 /** Сканкоды левого Ctrl и V — для Ctrl+V внутри удалённого стола. */
 const SCANCODE_CTRL = 0x1d;
 const SCANCODE_V = 0x2f;
@@ -81,29 +79,28 @@ const IronRdpView: React.FC<Props> = ({ sessionId, host, port, domain: requested
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const sessionRef = useRef<IronSession | null>(null);
-  /** Последнее отправленное на сервер и полученное с сервера — защита от эха. */
-  const clipboardSentRef = useRef('');
-  const clipboardReceivedRef = useRef('');
   const [attempt, setAttempt] = useState(0);
-
-  /**
-   * Локальный буфер → сессия. force — ответ на запрос сервера: там нужен именно
-   * текущий текст, даже если он совпадает с отправленным ранее (своей копии
-   * буфера WASM-сторона не держит).
-   */
-  const pushLocalClipboard = useCallback((text: string, force = false): void => {
-    const session = sessionRef.current;
-    if (!session || !text) return;
-    if (!force && text === clipboardSentRef.current) return;
-    clipboardSentRef.current = text;
-    try {
-      const data = new Backend.ClipboardData();
-      data.addText('text/plain', text);
-      void session.onClipboardPaste(data).catch(() => undefined);
-    } catch {
-      // канал cliprdr не поднят или сессия уже освобождена
-    }
-  }, []);
+  // Общий с VNC механизм буфера: защита от эха и опрос локального буфера.
+  // Своей копии буфера WASM-сторона не держит, поэтому по запросу сервера текст
+  // отправляется заново (force), даже если уже уходил.
+  const clip = useMemo(
+    () =>
+      createClipboardSync({
+        push: (text) => {
+          const session = sessionRef.current;
+          if (!session) return;
+          try {
+            const data = new Backend.ClipboardData();
+            data.addText('text/plain', text);
+            void session.onClipboardPaste(data).catch(() => undefined);
+          } catch {
+            // канал cliprdr не поднят или сессия уже освобождена
+          }
+        },
+        isReady: () => sessionRef.current !== null
+      }),
+    []
+  );
 
   // Переподключение из тулбара: reconnectTab диспатчит событие вместо rdpjsLaunch.
   useEffect(() => {
@@ -163,13 +160,7 @@ const IronRdpView: React.FC<Props> = ({ sessionId, host, port, domain: requested
         // обратно через границу WASM, ломает цикл сессии — поэтому try/catch.
         sb.remoteClipboardChangedCallback((data: RemoteClipboardData) => {
           try {
-            const text = firstClipboardText(data);
-            if (!text) return;
-            // Помечаем текст как «пришёл с сервера»: иначе опрос локального
-            // буфера отправил бы его обратно на сервер.
-            clipboardReceivedRef.current = text;
-            clipboardSentRef.current = text;
-            copyTextToClipboard(text);
+            clip.applyRemote(firstClipboardText(data));
           } catch {
             // содержимое буфера нечитаемо — пропускаем
           }
@@ -177,7 +168,7 @@ const IronRdpView: React.FC<Props> = ({ sessionId, host, port, domain: requested
         // Сервер просит текущий локальный буфер (Ctrl+V в удалённом приложении) —
         // отдаём текст заново, иначе вставка вставит пустоту.
         sb.forceClipboardUpdateCallback(() => {
-          void readClipboardText().then((text) => pushLocalClipboard(text, true));
+          void clip.pushCurrent(true);
         });
         sb.renderCanvas(canvas);
         // Разрешение хоста (width/height) — только запасной вариант на случай,
@@ -253,7 +244,7 @@ const IronRdpView: React.FC<Props> = ({ sessionId, host, port, domain: requested
       sessionRef.current = null;
       void window.api.ironStop(sessionId);
     };
-  }, [sessionId, attempt, host, port, requestedDomain, credentialId, width, height, pushLocalClipboard]);
+  }, [sessionId, attempt, host, port, requestedDomain, credentialId, width, height, clip]);
 
   // Ввод: мышь / колесо / клавиатура → InputTransaction(DeviceEvent).
   useEffect(() => {
@@ -310,8 +301,7 @@ const IronRdpView: React.FC<Props> = ({ sessionId, host, port, domain: requested
       // сами отдаём серверу текст и доставляем нажатие сканкодами.
       if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'v') {
         e.preventDefault();
-        void readClipboardText().then((text) => {
-          pushLocalClipboard(text, true);
+        void clip.pushCurrent(true).then(() => {
           send((t) => {
             t.addEvent(Backend.DeviceEvent.keyPressed(SCANCODE_CTRL));
             t.addEvent(Backend.DeviceEvent.keyPressed(SCANCODE_V));
@@ -347,26 +337,11 @@ const IronRdpView: React.FC<Props> = ({ sessionId, host, port, domain: requested
       el.removeEventListener('wheel', onWheel);
       el.removeEventListener('keydown', onKey);
     };
-  }, [pushLocalClipboard]);
+  }, [clip]);
 
   // Отслеживание локального буфера: скопированное в Windows должно доехать до
-  // сервера к моменту вставки. Опрос только когда окно в фокусе, и текст,
-  // пришедший с сервера, обратно не отправляем.
-  useEffect(() => {
-    const tick = (): void => {
-      if (!sessionRef.current || !document.hasFocus()) return;
-      void readClipboardText().then((text) => {
-        if (!text) return;
-        if (text === clipboardReceivedRef.current) {
-          clipboardSentRef.current = text;
-          return;
-        }
-        pushLocalClipboard(text);
-      });
-    };
-    const id = window.setInterval(tick, CLIPBOARD_POLL_MS);
-    return () => window.clearInterval(id);
-  }, [pushLocalClipboard]);
+  // сервера к моменту вставки.
+  useEffect(() => clip.start(), [clip]);
 
   // Динамический resize под размер панели (дебаунс — серверу нужна пауза).
   useEffect(() => {
