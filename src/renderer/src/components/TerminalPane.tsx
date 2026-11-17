@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { SearchAddon } from '@xterm/addon-search';
 import 'xterm/css/xterm.css';
+import { formatBytes, osc52Action, parseOsc52, utf8Length } from '@shared/osc52';
 import { copyTextToClipboard, readClipboardText } from '../lib/clipboard';
 import { registerTermPaste } from '../lib/termRegistry';
 import { useApp, type SessionTab } from '../store';
@@ -70,10 +71,13 @@ export default function TerminalPane({
   const theme = useApp((s) => s.settings.theme);
   const fontSize = useApp((s) => s.settings.fontSize);
   const fontFamily = useApp((s) => s.settings.fontFamily);
+  const pushToast = useApp((s) => s.pushToast);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   /** Многострочная вставка, ждущая решения пользователя. */
   const [pendingPaste, setPendingPaste] = useState<PendingPaste | null>(null);
+  /** Текст из OSC 52, ждущий подтверждения (политика «спрашивать»). */
+  const [pendingOsc52, setPendingOsc52] = useState<PendingOsc52 | null>(null);
 
   /**
    * Вставка с защитой от пачки команд: одна строка уходит в терминал сразу, а
@@ -88,6 +92,33 @@ export default function TerminalPane({
     }
     setPendingPaste({ text, lines, index: 0, step: false });
   }, []);
+
+  /**
+   * OSC 52: сервер просит записать текст в буфер клиента (tmux set-clipboard,
+   * vim +clipboard, mc). Раньше копировали всегда и без предела — любой сервер
+   * молча подменял буфер Windows. Теперь решает настройка, а слишком большой
+   * текст в буфер не попадает вовсе.
+   */
+  const requestOsc52Copy = useCallback(
+    (text: string): void => {
+      const { osc52Policy, osc52MaxBytes } = useApp.getState().settings;
+      switch (osc52Action(osc52Policy, osc52MaxBytes, text)) {
+        case 'copy':
+          copyTextToClipboard(text);
+          return;
+        case 'ask':
+          setPendingOsc52({ text, bytes: utf8Length(text) });
+          return;
+        case 'too-large':
+          pushToast(`OSC 52: текст больше предела ${formatBytes(osc52MaxBytes)} — буфер не изменён`);
+          return;
+        default:
+          // 'ignore' — запись запрещена настройками, молча пропускаем
+          return;
+      }
+    },
+    [pushToast]
+  );
 
   const pasteEverything = (): void => {
     if (!pendingPaste) return;
@@ -126,9 +157,10 @@ export default function TerminalPane({
     // сессии (tmux set-clipboard, vim/nvim +clipboard, mc, screen, ssh-сессии
     // через far2l). Без обработчика xterm.js молча проглатывает эту
     // последовательность, поэтому копирование на сервере не доходило до
-    // буфера Windows.
+    // буфера Windows. Писать ли в буфер — решает политика в настройках.
     const oscClipboard = term.parser.registerOscHandler(52, (data: string) => {
-      applyOsc52Clipboard(data);
+      const text = parseOsc52(data);
+      if (text !== null) requestOsc52Copy(text);
       return true;
     });
     termRef.current = term;
@@ -164,7 +196,7 @@ export default function TerminalPane({
       searchRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab.sessionId, requestPaste]);
+  }, [tab.sessionId, requestPaste, requestOsc52Copy]);
 
   // Живое применение шрифта и темы
   useEffect(() => {
@@ -300,6 +332,37 @@ export default function TerminalPane({
           </button>
         </div>
       )}
+      {pendingOsc52 && (
+        <Modal title="Скопировать в буфер обмена?" onClose={() => setPendingOsc52(null)} width={460}>
+          <div className="form">
+            <div className="form-row">
+              <label className="form-label">
+                «{tab.title}» просит записать в буфер обмена {formatBytes(pendingOsc52.bytes)} текста.
+              </label>
+              <code className="input" style={PASTE_PREVIEW_STYLE}>
+                {osc52Preview(pendingOsc52.text)}
+              </code>
+            </div>
+            <div className="form-hint">
+              Политику можно сменить в настройках: разрешить, спрашивать или запретить.
+            </div>
+            <div className="modal-actions">
+              <button className="btn" onClick={() => setPendingOsc52(null)}>
+                <Icon name="close" size={13} /> Не копировать
+              </button>
+              <button
+                className="btn btn--primary"
+                onClick={() => {
+                  copyTextToClipboard(pendingOsc52.text);
+                  setPendingOsc52(null);
+                }}
+              >
+                <Icon name="check" size={13} /> Скопировать
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {pendingPaste && (
         <Modal title="Вставка нескольких строк" onClose={() => setPendingPaste(null)} width={460}>
           <div className="form">
@@ -366,6 +429,31 @@ interface PendingPaste {
   step: boolean;
 }
 
+/** Текст из OSC 52, ждущий решения пользователя (политика «спрашивать»). */
+interface PendingOsc52 {
+  text: string;
+  bytes: number;
+}
+
+/** Сколько строк и символов в строке показываем в подтверждении. */
+const OSC52_PREVIEW_LINES = 4;
+const OSC52_PREVIEW_LINE_CHARS = 120;
+
+/**
+ * Первые строки текста OSC 52 для подтверждения. Каждая строка режется отдельно:
+ * одна длинная строка (лог, JSON) иначе раздула бы модалку и DOM.
+ */
+function osc52Preview(text: string): string {
+  const all = text.split('\n');
+  const head = all.slice(0, OSC52_PREVIEW_LINES).map(clipPreviewLine).join('\n');
+  return all.length > OSC52_PREVIEW_LINES ? `${head}\n…` : head;
+}
+
+/** Строка предпросмотра: длинную режем, многоточие показывает обрыв. */
+function clipPreviewLine(line: string): string {
+  return line.length > OSC52_PREVIEW_LINE_CHARS ? `${line.slice(0, OSC52_PREVIEW_LINE_CHARS)}…` : line;
+}
+
 /** Блок предпросмотра вставляемого текста в диалоге. */
 const PASTE_PREVIEW_STYLE: React.CSSProperties = {
   display: 'block',
@@ -402,24 +490,6 @@ function copySelection(term: Terminal): boolean {
   copyTextToClipboard(sel);
   term.clearSelection();
   return true;
-}
-
-/**
- * OSC 52: data = "<selection>;<base64>". selection 'c' — системный буфер.
- * Запрос содержимого буфера ('?') не поддерживаем: чтение буфера сервером — это
- * уже утечка, а не копирование.
- */
-function applyOsc52Clipboard(data: string): void {
-  const semi = data.indexOf(';');
-  if (semi < 0) return;
-  const selection = data.slice(0, semi).trim() || 'c';
-  const payload = data.slice(semi + 1).trim();
-  if (selection !== 'c' || !payload || payload === '?') return;
-  try {
-    copyTextToClipboard(new TextDecoder().decode(Uint8Array.from(atob(payload), (c) => c.charCodeAt(0))));
-  } catch {
-    // некорректный base64 — последовательность просто игнорируем
-  }
 }
 
 /** base64-кодирование юникода (btoa не умеет >1 байт). */

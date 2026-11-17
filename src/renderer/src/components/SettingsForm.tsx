@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { RdpEngine } from '@shared/types';
+import type { Osc52Policy, RdpEngine } from '@shared/types';
+import { formatBytes } from '@shared/osc52';
 import { dynamicFontOptions, fontFamilyName, fontOptions, OPTIONAL_FONTS } from '@shared/fonts';
 import { lastInstalledMonospaceFamilies, loadInstalledMonospaceFamilies } from '../system-fonts';
 import { useApp } from '../store';
@@ -230,6 +231,48 @@ export default function SettingsForm(): React.JSX.Element {
       <div className="form-hint">
         Вкл: предупреждение о недоверенном сертификате гасится автоматически. Выкл: оно
         показывается при каждом подключении — вы решаете сами.
+      </div>
+
+      <div className="form-row">
+        <label className="form-label" htmlFor="osc52-policy">
+          Буфер обмена из SSH (OSC 52)
+        </label>
+        <select
+          id="osc52-policy"
+          className="input"
+          value={settings.osc52Policy}
+          onChange={(e) => void patchSettings({ osc52Policy: e.target.value as Osc52Policy })}
+        >
+          <option value="ask">Спрашивать перед записью — рекомендуется</option>
+          <option value="allow">Разрешить всегда</option>
+          <option value="deny">Запретить</option>
+        </select>
+        <div className="form-hint">
+          Так tmux, vim и mc просят скопировать текст в буфер Windows. При «разрешить» любой
+          сервер может молча заменить содержимое буфера.
+        </div>
+      </div>
+
+      <div className="form-row">
+        <label className="form-label" htmlFor="osc52-limit">
+          Предел размера OSC 52:{' '}
+          {settings.osc52MaxBytes > 0 ? formatBytes(settings.osc52MaxBytes) : 'без предела'}
+        </label>
+        <input
+          id="osc52-limit"
+          className="input"
+          type="number"
+          min={0}
+          step={1024}
+          value={settings.osc52MaxBytes}
+          onChange={(e) =>
+            void patchSettings({ osc52MaxBytes: Math.max(0, Math.round(Number(e.target.value) || 0)) })
+          }
+        />
+        <div className="form-hint">
+          Текст больше предела не попадает в буфер даже при подтверждении. Значение в байтах,
+          0 — без ограничения.
+        </div>
       </div>
     </div>
   );

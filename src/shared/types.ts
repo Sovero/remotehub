@@ -133,6 +133,12 @@ export interface OpenTabMeta {
   adHocHost: Host | null;
 }
 
+/** Политика записи в буфер обмена текста из OSC 52 (SSH-сессия). */
+export type Osc52Policy = 'allow' | 'ask' | 'deny';
+
+/** Предел размера текста OSC 52 по умолчанию: 100 КиБ. */
+export const DEFAULT_OSC52_MAX_BYTES = 100_000;
+
 export interface Settings {
   theme: 'dark' | 'light';
   fontSize: number;
@@ -142,6 +148,10 @@ export interface Settings {
   restoreTabs: boolean;
   /** Авто-подтверждать предупреждение безопасности RDP (непроверенный сертификат). */
   rdpAutoAcceptCert: boolean;
+  /** OSC 52 из SSH-сессии: писать ли текст в буфер обмена без спроса. */
+  osc52Policy: Osc52Policy;
+  /** Предел размера текста OSC 52 в байтах (0 — без предела). */
+  osc52MaxBytes: number;
   /** Движок RDP: legacy node-rdpjs или IronRDP/WASM. */
   rdpEngine: RdpEngine;
   /**
@@ -198,6 +208,8 @@ export const DEFAULT_SETTINGS: Settings = {
   confirmOnDelete: true,
   restoreTabs: true,
   rdpAutoAcceptCert: true,
+  osc52Policy: 'ask',
+  osc52MaxBytes: DEFAULT_OSC52_MAX_BYTES,
   rdpEngine: 'iron',
   rdpAutoFallbackToLegacy: false,
   winBounds: null,

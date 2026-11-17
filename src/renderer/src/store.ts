@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { nanoid } from 'nanoid';
 import type { Group, Host, HistoryEntry, RdpEngine, Runbook, Settings, Snippet, TreeNode } from '@shared/types';
-import { createGroup, createHost } from '@shared/types';
+import { createGroup, createHost, DEFAULT_OSC52_MAX_BYTES } from '@shared/types';
 import { DEFAULT_FONT_FAMILY } from '@shared/fonts';
 import type { PasswordSaveScope, SessionState, UpdateStatus } from '@shared/ipc-contract';
 import { shouldAutoFallbackToLegacy } from '@shared/rdp-engine';
@@ -207,6 +207,8 @@ export const useApp = create<AppState>((set, get) => ({
     confirmOnDelete: true,
     restoreTabs: true,
     rdpAutoAcceptCert: true,
+    osc52Policy: 'ask',
+    osc52MaxBytes: DEFAULT_OSC52_MAX_BYTES,
     rdpEngine: 'iron',
     rdpAutoFallbackToLegacy: false,
     winBounds: null,
