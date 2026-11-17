@@ -119,7 +119,13 @@ export const IPC = {
   /** журнал событий: запись из renderer в main */
   logAdd: 'log:add',
   /** журнал событий: новая запись (main → окна) */
-  logEntry: 'log:entry'
+  logEntry: 'log:entry',
+  /** буфер обмена: записать текст (нативный clipboard main — работает без фокуса документа) */
+  clipboardWrite: 'clipboard:write-text',
+  /** буфер обмена: прочитать текст */
+  clipboardRead: 'clipboard:read-text',
+  /** дерево профилей изменено в main (например, сохранён пароль SSH) — main → окна */
+  profilesChanged: 'profiles:changed'
 } as const;
 
 export interface ProfilesGetResult {
@@ -198,7 +204,15 @@ export interface LoadResult<T> {
 /** Session states pushed from main to renderer. */
 export type SessionState =
   | { phase: 'connecting'; detail?: string }
-  | { phase: 'auth-required'; detail?: string }
+  | {
+      phase: 'auth-required';
+      detail?: string;
+      /**
+       * Заполнен, если пароль запрошен из-за отказа сохранённого пароля набора:
+       * диалог предложит заменить его — для всех хостов набора или только для этого.
+       */
+      savedCredential?: { id: string; name: string };
+    }
   | { phase: 'connected' }
   | { phase: 'error'; message: string }
   | { phase: 'closed'; reason?: string };
@@ -223,13 +237,34 @@ export interface SessionStatePayload {
   state: SessionState;
 }
 
+/** Содержимое буфера обмена (IPC.clipboardRead). */
+export interface ClipboardReadResult {
+  text: string;
+}
+
+/** Дерево профилей, изменённое в main (IPC.profilesChanged). */
+export interface ProfilesChangedPayload {
+  tree: TreeNode[];
+}
+
 /**
  * Ответ пользователя на диалог auth-required: либо пароль (keyboard-interactive/
  * ручной ввод), либо решение по host key сервера (см. SessionState 'auth-required'
  * с detail вида "host-key:new:..." / "host-key:changed:..." — HostKeyStore/SshSession).
  */
+/**
+ * Куда сохранять пароль из диалога: никуда / только для этого хоста (при
+ * необходимости — новый набор) / заменить пароль в наборе у всех его хостов.
+ */
+export type PasswordSaveScope = 'none' | 'host' | 'credential';
+
 export type SessionAuthRequest =
-  | { sessionId: string; password: string }
+  | {
+      sessionId: string;
+      password: string;
+      /** Сохранение выполняется после успешного подключения (см. PasswordSaveScope). */
+      saveScope?: PasswordSaveScope;
+    }
   | { sessionId: string; hostKeyDecision: 'accept' | 'reject' };
 
 /** Состояние автообновления, которое main шлёт в рендерер. */

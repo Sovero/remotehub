@@ -60,7 +60,14 @@ export default function DialogRoot(): React.JSX.Element | null {
     case 'settings':
       return <SettingsDialog onClose={closeDialog} />;
     case 'password':
-      return <PasswordDialog sessionId={dialog.sessionId} title={dialog.title} detail={dialog.detail} />;
+      return (
+        <PasswordDialog
+          sessionId={dialog.sessionId}
+          title={dialog.title}
+          detail={dialog.detail}
+          savedCredential={dialog.savedCredential}
+        />
+      );
     case 'tunnels':
       return <TunnelsDialog sessionId={dialog.sessionId} title={dialog.title} host={dialog.host} onClose={closeDialog} />;
     case 'history':

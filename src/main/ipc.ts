@@ -1,7 +1,7 @@
 import { mkdirSync, renameSync, rmdirSync, unlinkSync, writeFileSync } from 'fs';
 import { readFile } from 'fs/promises';
 import { basename, join, posix } from 'path';
-import { BrowserWindow, dialog, ipcMain, screen } from 'electron';
+import { BrowserWindow, clipboard, dialog, ipcMain, screen } from 'electron';
 import { app } from 'electron';
 import { nanoid } from 'nanoid';
 import {
@@ -38,14 +38,17 @@ import type { RdpEngineHub } from './rdp/engine-hub';
 import type { RdpEngineConnectRequest } from '../shared/rdp-engine';
 import type { RdpManager } from './rdp/manager';
 import { readFileSync } from 'fs';
-import { buildExport, parseProfileExport } from '../shared/tree';
+import { buildExport, findNode, parseProfileExport } from '../shared/tree';
 import { checkPort, pingHost } from './availability';
 import {
   applyCredentialInput,
+  attachCredential,
   detachCredential,
+  replaceablePasswordSet,
   toDtoList,
   validateCredentialInput
 } from './credentials/dto';
+import { sealSecret } from './store/crypto-format';
 import { RdpjsClientManager } from './rdp/rdpjs-client';
 import { SessionManager } from './sessions/manager';
 import { SftpManager } from './sftp/manager';
@@ -72,6 +75,60 @@ export function registerIpc(
       win.webContents.send(channel, payload);
     }
   };
+
+  /** Пароль сохранён в хранилище: запись в журнал + тост пользователю. */
+  const notifyPasswordSaved = (message: string, host: string): void => {
+    addLog('info', 'ssh', `${message} — ${host}`);
+    broadcast(IPC.notify, message);
+  };
+
+  // Сохранение пароля из диалога SSH (в том числе замена отклонённого пароля).
+  // SessionManager зовёт обработчик только после успешного подключения, поэтому
+  // пароль от неудачной попытки в хранилище не попадает. Парольный набор хоста
+  // обновляем на месте: при scope 'credential' — вместе со всеми его хостами,
+  // при 'host' — только если набор принадлежит этому хосту. Набор с ключом или
+  // агентом не перезаписываем — для хоста создаётся отдельный набор.
+  sessions.setPasswordSaver((host, password, scope) => {
+    if (!password || scope === 'none') return;
+    try {
+      const sets = store.loadCredentials().data;
+      const tree = store.loadProfiles().data;
+      const existing = host.credentialId ? sets.find((c) => c.id === host.credentialId) : undefined;
+      const replaceable = replaceablePasswordSet(existing ?? null, tree, host.id, scope);
+      if (replaceable) {
+        const passwordCipher = sealSecret(password, store.sealer());
+        store.saveCredentials(
+          sets.map((c) => (c.id === replaceable.id ? { ...c, passwordMode: 'stored' as const, passwordCipher } : c))
+        );
+        notifyPasswordSaved(`Пароль обновлён в наборе «${replaceable.name}»`, host.host);
+        return;
+      }
+      if (!findNode(tree, host.id)) {
+        // Быстрое подключение без профиля: привязывать набор не к чему.
+        broadcast(IPC.notify, 'Пароль не сохранён: сохраните профиль хоста');
+        return;
+      }
+      const created: CredentialSet = {
+        id: nanoid(10),
+        name: host.name || host.host,
+        username: existing?.username || host.username,
+        passwordMode: 'stored',
+        passwordCipher: sealSecret(password, store.sealer()),
+        keyFile: null,
+        keyPassphraseCipher: null,
+        useAgent: false
+      };
+      store.saveCredentials([...sets, created]);
+      const next = attachCredential(tree, host.id, created.id);
+      store.saveProfiles(next);
+      // Renderer держит копию дерева и сохраняет её целиком — без этой рассылки
+      // привязка набора потерялась бы при первой же правке профилей.
+      broadcast(IPC.profilesChanged, { tree: next });
+      notifyPasswordSaved(`Пароль сохранён в новом наборе «${created.name}»`, host.host);
+    } catch (err) {
+      addLog('warn', 'ssh', `Не удалось сохранить пароль: ${(err as Error).message}`);
+    }
+  });
 
   // ---- журнал событий: новые записи main → все окна ----
   onLog((entry) => broadcast(IPC.logEntry, entry));
@@ -101,6 +158,16 @@ export function registerIpc(
       return { ok: false, error: `Не удалось записать файл: ${(err as Error).message}` };
     }
   });
+
+  // ---- буфер обмена ----
+  // Нативный clipboard главного процесса: не зависит от фокуса документа,
+  // поэтому копирование из терминала и панели RDP работает всегда.
+  ipcMain.handle(IPC.clipboardWrite, (_e, text: string) => {
+    if (typeof text === 'string' && text) clipboard.writeText(text);
+    return { ok: true };
+  });
+
+  ipcMain.handle(IPC.clipboardRead, () => ({ text: clipboard.readText() }));
 
   // Записи из renderer (переходы состояний сессий, ошибки UI) попадают в тот же журнал.
   ipcMain.on(IPC.logAdd, (_e, req: LogAddRequest) => {
@@ -292,7 +359,7 @@ export function registerIpc(
     if ('hostKeyDecision' in req) {
       sessions.resolveHostKey(req.sessionId, req.hostKeyDecision === 'accept');
     } else {
-      sessions.retryWithPassword(req.sessionId, req.password);
+      sessions.retryWithPassword(req.sessionId, req.password, req.saveScope ?? 'none');
     }
     return { ok: true };
   });

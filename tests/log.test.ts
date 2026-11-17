@@ -94,7 +94,9 @@ describe('IPC logs:export', () => {
     // registerIpc только регистрирует лямбды в ipcMain.handle, ничего не вызывает сразу.
     registerIpc(
       {} as never,
-      {} as never,
+      // SessionManager: registerIpc сразу регистрирует обработчик сохранения
+      // пароля — у остальных менеджеров ничего не вызывается.
+      { setPasswordSaver: () => undefined } as never,
       {} as never,
       {} as never,
       {} as never,

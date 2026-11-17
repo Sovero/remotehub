@@ -1,8 +1,10 @@
 import type {
   CredentialDto,
   CredentialSetInput,
-  CredentialsListResult
+  CredentialsListResult,
+  PasswordSaveScope
 } from '../../shared/ipc-contract';
+import { credentialHostIds } from '../../shared/tree';
 import type { CredentialSet, TreeNode } from '../../shared/types';
 import { sealSecret, type Sealer } from '../store/crypto-format';
 
@@ -80,6 +82,34 @@ export function detachCredential(tree: TreeNode[], credentialId: string): TreeNo
     }
     return { ...node, children: detachCredential(node.children, credentialId) };
   });
+}
+
+/** Привязывает набор к хосту (сохранение пароля из диалога подключения). */
+export function attachCredential(tree: TreeNode[], hostId: string, credentialId: string): TreeNode[] {
+  return tree.map((node) => {
+    if (node.kind === 'host') {
+      return node.id === hostId ? { ...node, credentialId } : node;
+    }
+    return { ...node, children: attachCredential(node.children, hostId, credentialId) };
+  });
+}
+
+/**
+ * Набор, в котором можно заменить пароль: парольный набор (без ключа и агента).
+ * scope 'host' — только если набор принадлежит ровно этому хосту, иначе правка
+ * затронула бы другие профили; scope 'credential' — пароль меняется у всех
+ * хостов набора, поэтому принадлежность проверять не нужно.
+ */
+export function replaceablePasswordSet(
+  credential: CredentialSet | null,
+  tree: TreeNode[],
+  hostId: string,
+  scope: Exclude<PasswordSaveScope, 'none'>
+): CredentialSet | null {
+  if (!credential || credential.keyFile || credential.useAgent) return null;
+  if (scope === 'credential') return credential;
+  const hostIds = credentialHostIds(tree, credential.id);
+  return hostIds.length === 1 && hostIds[0] === hostId ? credential : null;
 }
 
 export function validateCredentialInput(input: CredentialSetInput): string | null {

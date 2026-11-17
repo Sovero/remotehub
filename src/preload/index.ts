@@ -4,6 +4,7 @@ import {
   type CheckPingRequest,
   type CheckPortRequest,
   type CheckResult,
+  type ClipboardReadResult,
   type CredentialDto,
   type CredentialSaveResult,
   type CredentialSetInput,
@@ -13,6 +14,7 @@ import {
   type LocalEntry,
   type MonitorCheckRequest,
   type MonitorCheckResult,
+  type ProfilesChangedPayload,
   type RunbookRunRequest,
   type RunbookStepResultPayload,
   type RunbookStopRequest,
@@ -52,6 +54,16 @@ const api = {
     ipcRenderer.invoke(IPC.credentialsDelete, id),
   pickKeyFile: (): Promise<{ canceled: boolean; path: string | null }> =>
     ipcRenderer.invoke(IPC.dialogPickFile),
+  /** Буфер обмена через main: работает и без фокуса документа (в отличие от navigator.clipboard). */
+  clipboardWrite: (text: string): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IPC.clipboardWrite, text),
+  clipboardRead: (): Promise<ClipboardReadResult> => ipcRenderer.invoke(IPC.clipboardRead),
+  /** Дерево профилей изменено в main (например, сохранён пароль SSH). */
+  onProfilesChanged: (cb: (payload: ProfilesChangedPayload) => void): (() => void) => {
+    const listener = (_e: unknown, payload: ProfilesChangedPayload): void => cb(payload);
+    ipcRenderer.on(IPC.profilesChanged, listener);
+    return () => ipcRenderer.removeListener(IPC.profilesChanged, listener);
+  },
   appInfo: (): Promise<{ version: string; electron: string; arch: string }> =>
     ipcRenderer.invoke(IPC.appInfo),
   /** Безрамочное окно: свернуть / развернуть-восстановить / закрыть. */

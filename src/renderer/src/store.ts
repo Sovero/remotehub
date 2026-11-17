@@ -3,10 +3,11 @@ import { nanoid } from 'nanoid';
 import type { Group, Host, HistoryEntry, RdpEngine, Runbook, Settings, Snippet, TreeNode } from '@shared/types';
 import { createGroup, createHost } from '@shared/types';
 import { DEFAULT_FONT_FAMILY } from '@shared/fonts';
-import type { SessionState, UpdateStatus } from '@shared/ipc-contract';
+import type { PasswordSaveScope, SessionState, UpdateStatus } from '@shared/ipc-contract';
 import { shouldAutoFallbackToLegacy } from '@shared/rdp-engine';
 import {
   applyImport,
+  credentialHostIds,
   duplicateHost,
   findNode,
   findParent,
@@ -89,7 +90,14 @@ export type DialogState =
   | { type: 'group'; group: Group | null; parentId: string | null }
   | { type: 'confirm'; title: string; message: string; confirmLabel?: string; danger?: boolean; onConfirm: () => void | Promise<void> }
   | { type: 'import' }
-  | { type: 'password'; sessionId: string; title: string; detail: string }
+  | {
+      type: 'password';
+      sessionId: string;
+      title: string;
+      detail: string;
+      /** Набор, чей сохранённый пароль не подошёл: предлагаем заменить пароль. */
+      savedCredential?: { name: string; hostCount: number };
+    }
   | { type: 'new-session' }
   | { type: 'credentials' }
   | { type: 'snippets' }
@@ -163,7 +171,7 @@ interface AppState {
   autoFallbackToLegacyRdp: (sessionId: string, reason?: string) => Promise<void>;
   closeTab: (sessionId: string, force?: boolean) => Promise<void>;
   switchTab: (sessionId: string) => void;
-  submitPassword: (sessionId: string, password: string) => Promise<void>;
+  submitPassword: (sessionId: string, password: string, saveScope?: PasswordSaveScope) => Promise<void>;
   /** Ответ пользователя на диалог подтверждения host key сервера (см. parseHostKeyDetail). */
   submitHostKeyDecision: (sessionId: string, accept: boolean) => Promise<void>;
   applySessionState: (sessionId: string, state: SessionState) => void;
@@ -830,8 +838,8 @@ export const useApp = create<AppState>((set, get) => ({
     set({ activeTabId: sessionId });
   },
 
-  submitPassword: async (sessionId, password) => {
-    await window.api.sessionAuth({ sessionId, password });
+  submitPassword: async (sessionId, password, saveScope) => {
+    await window.api.sessionAuth({ sessionId, password, saveScope });
     set((s) => ({
       tabs: s.tabs.map((t) =>
         t.sessionId === sessionId ? { ...t, state: { phase: 'connecting' } } : t
@@ -894,11 +902,17 @@ export const useApp = create<AppState>((set, get) => ({
           : hostKey.kind === 'changed'
             ? `Внимание: ключ сервера изменился — ${tab.title}`
             : `Новый сервер: ${tab.title}`;
+        // Сохранённый пароль набора не подошёл: диалог предложит его заменить —
+        // для всех хостов набора или только для этого.
+        const saved = state.savedCredential;
         get().openDialog({
           type: 'password',
           sessionId,
           title,
-          detail: state.detail ?? 'Введите пароль'
+          detail: state.detail ?? 'Введите пароль',
+          savedCredential: saved
+            ? { name: saved.name, hostCount: credentialHostIds(get().tree, saved.id).length }
+            : undefined
         });
       }
     }

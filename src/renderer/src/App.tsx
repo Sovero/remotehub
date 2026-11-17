@@ -89,6 +89,9 @@ export default function App(): React.JSX.Element {
     const offState = window.api.onSessionState((payload) => {
       useApp.getState().applySessionState(payload.sessionId, payload.state);
     });
+    const offProfiles = window.api.onProfilesChanged((payload) => {
+      useApp.getState().setTree(payload.tree);
+    });
     const offVncErr = window.api.onVncError((payload) => {
       useApp
         .getState()
@@ -156,6 +159,7 @@ export default function App(): React.JSX.Element {
       offEngineState?.();
       offRdpjsState?.();
       offRdpLegacyExited?.();
+      offProfiles();
       offVncErr();
       offNotify();
       offMenu();

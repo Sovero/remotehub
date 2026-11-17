@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyCredentialInput,
   detachCredential,
+  replaceablePasswordSet,
   toDto,
   toDtoList,
   validateCredentialInput
@@ -97,6 +98,38 @@ describe('validateCredentialInput', () => {
   it('требует имя', () => {
     expect(validateCredentialInput({ name: '  ', username: '', passwordMode: 'stored' })).not.toBeNull();
     expect(validateCredentialInput({ name: 'ok', username: '', passwordMode: 'stored' })).toBeNull();
+  });
+});
+
+describe('replaceablePasswordSet', () => {
+  /** Дерево, где i-й хост ссылается на набор credentialIds[i]. */
+  const treeWith = (credentialIds: (string | null)[]) =>
+    credentialIds.map((credentialId, i) =>
+      createHost({ id: `h${i}`, name: `H${i}`, protocol: 'ssh', host: `h${i}`, credentialId })
+    );
+
+  it('scope host: обновляем набор, принадлежащий ровно этому хосту', () => {
+    expect(replaceablePasswordSet(set(), treeWith(['c1']), 'h0', 'host')).toMatchObject({ id: 'c1' });
+  });
+
+  it('scope host: общий набор не трогаем — для хоста создаётся новый', () => {
+    expect(replaceablePasswordSet(set(), treeWith(['c1', 'c1']), 'h0', 'host')).toBeNull();
+  });
+
+  it('scope credential: общий набор обновляем целиком', () => {
+    expect(replaceablePasswordSet(set(), treeWith(['c1', 'c1', 'c1']), 'h0', 'credential')).toMatchObject({ id: 'c1' });
+  });
+
+  it('набор с ключом или агентом не перезаписываем ни в одном режиме', () => {
+    for (const scope of ['host', 'credential'] as const) {
+      expect(replaceablePasswordSet(set({ keyFile: 'C:/k/id_rsa' }), treeWith(['c1']), 'h0', scope)).toBeNull();
+      expect(replaceablePasswordSet(set({ useAgent: true }), treeWith(['c1', 'c1']), 'h0', scope)).toBeNull();
+    }
+  });
+
+  it('чужой и отсутствующий набор не трогаем', () => {
+    expect(replaceablePasswordSet(set(), treeWith(['c1']), 'h1', 'host')).toBeNull();
+    expect(replaceablePasswordSet(null, treeWith(['c1']), 'h0', 'credential')).toBeNull();
   });
 });
 

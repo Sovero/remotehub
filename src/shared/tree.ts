@@ -18,6 +18,17 @@ export function findNode(tree: TreeNode[], id: string): TreeNode | null {
 }
 
 /** Группа, в чьих children лежит узел, или null, если узел в корне/отсутствует. */
+/** id всех хостов дерева, привязанных к набору учётных данных. */
+export function credentialHostIds(tree: TreeNode[], credentialId: string): string[] {
+  return tree.flatMap((node) =>
+    node.kind === 'host'
+      ? node.credentialId === credentialId
+        ? [node.id]
+        : []
+      : credentialHostIds(node.children, credentialId)
+  );
+}
+
 export function findParent(tree: TreeNode[], id: string): Group | null {
   for (const node of tree) {
     if (isGroup(node)) {

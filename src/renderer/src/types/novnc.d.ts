@@ -12,6 +12,8 @@ declare module '@novnc/novnc' {
     qualityLevel: number;
     compressionLevel: number;
     disconnect(): void;
+    /** Отправить клиентский буфер обмена серверу (extended clipboard или ClientCutText). */
+    clipboardPasteFrom(text: string): void;
     requestFullscreen(): void;
     focus(): void;
   }

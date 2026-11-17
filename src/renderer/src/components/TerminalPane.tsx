@@ -4,9 +4,11 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { SearchAddon } from '@xterm/addon-search';
 import 'xterm/css/xterm.css';
+import { copyTextToClipboard, readClipboardText } from '../lib/clipboard';
 import { registerTermPaste } from '../lib/termRegistry';
 import { useApp, type SessionTab } from '../store';
 import Icon from './Icon';
+import Modal from './dialogs/Modal';
 
 const DARK_THEME = {
   background: '#101014',
@@ -70,6 +72,37 @@ export default function TerminalPane({
   const fontFamily = useApp((s) => s.settings.fontFamily);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  /** Многострочная вставка, ждущая решения пользователя. */
+  const [pendingPaste, setPendingPaste] = useState<PendingPaste | null>(null);
+
+  /**
+   * Вставка с защитой от пачки команд: одна строка уходит в терминал сразу, а
+   * многострочный текст сначала спрашивает режим — иначе вставка выполнила бы
+   * на сервере все строки подряд.
+   */
+  const requestPaste = useCallback((text: string): void => {
+    const lines = splitPasteLines(text);
+    if (lines.length <= 1) {
+      termRef.current?.paste(toTerminalInput(text));
+      return;
+    }
+    setPendingPaste({ text, lines, index: 0, step: false });
+  }, []);
+
+  const pasteEverything = (): void => {
+    if (!pendingPaste) return;
+    termRef.current?.paste(toTerminalInput(pendingPaste.text));
+    setPendingPaste(null);
+  };
+
+  /** Построчный режим: каждая строка уходит в терминал только по подтверждению. */
+  const pasteNextLine = (): void => {
+    const pending = pendingPaste;
+    if (!pending) return;
+    termRef.current?.paste(pending.lines[pending.index] + '\r');
+    const next = pending.index + 1;
+    setPendingPaste(next >= pending.lines.length ? null : { ...pending, index: next });
+  };
 
   // Создание терминала
   useEffect(() => {
@@ -89,6 +122,15 @@ export default function TerminalPane({
     term.loadAddon(fit);
     term.loadAddon(search);
     term.loadAddon(new WebLinksAddon());
+    // OSC 52 — штатный способ «скопировать в буфер клиента» изнутри удалённой
+    // сессии (tmux set-clipboard, vim/nvim +clipboard, mc, screen, ssh-сессии
+    // через far2l). Без обработчика xterm.js молча проглатывает эту
+    // последовательность, поэтому копирование на сервере не доходило до
+    // буфера Windows.
+    const oscClipboard = term.parser.registerOscHandler(52, (data: string) => {
+      applyOsc52Clipboard(data);
+      return true;
+    });
     termRef.current = term;
     fitRef.current = fit;
     searchRef.current = search;
@@ -109,19 +151,20 @@ export default function TerminalPane({
       window.api.sessionInput(tab.sessionId, btoaUnicode(data));
     });
 
-    const unregisterPaste = registerTermPaste(tab.sessionId, (text) => term.paste(text));
+    const unregisterPaste = registerTermPaste(tab.sessionId, requestPaste);
 
     return () => {
       disposeInput.dispose();
       unregisterPaste();
       unsubscribeData();
+      oscClipboard.dispose();
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
       searchRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab.sessionId]);
+  }, [tab.sessionId, requestPaste]);
 
   // Живое применение шрифта и темы
   useEffect(() => {
@@ -141,20 +184,22 @@ export default function TerminalPane({
       const term = termRef.current;
       if (!term) return;
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'c') {
-        const sel = term.getSelection();
-        if (sel) {
-          void navigator.clipboard.writeText(sel);
-          term.clearSelection();
-        }
+        copySelection(term);
         e.preventDefault();
       } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'v') {
-        void navigator.clipboard.readText().then((text) => term.paste(text));
+        void readClipboardText().then(requestPaste);
         e.preventDefault();
       }
     };
+    // Правая кнопка: есть выделение — копируем его (как в Termius/PuTTY),
+    // нет выделения — вставляем. Раньше клик всегда вставлял, и выделенный
+    // текст нельзя было скопировать мышью.
     const onContextMenu = (e: MouseEvent): void => {
       e.preventDefault();
-      void navigator.clipboard.readText().then((text) => termRef.current?.paste(text));
+      const term = termRef.current;
+      if (!term) return;
+      if (copySelection(term)) return;
+      void readClipboardText().then(requestPaste);
     };
     container.addEventListener('keydown', onKeyDown);
     container.addEventListener('contextmenu', onContextMenu);
@@ -162,7 +207,7 @@ export default function TerminalPane({
       container.removeEventListener('keydown', onKeyDown);
       container.removeEventListener('contextmenu', onContextMenu);
     };
-  }, []);
+  }, [requestPaste]);
 
   // Адаптация размера при активации вкладки и изменении размера окна
   useEffect(() => {
@@ -255,8 +300,126 @@ export default function TerminalPane({
           </button>
         </div>
       )}
+      {pendingPaste && (
+        <Modal title="Вставка нескольких строк" onClose={() => setPendingPaste(null)} width={460}>
+          <div className="form">
+            {pendingPaste.step ? (
+              <>
+                <div className="form-row">
+                  <label className="form-label">
+                    Строка {pendingPaste.index + 1} из {pendingPaste.lines.length}
+                  </label>
+                  <code className="input" style={PASTE_PREVIEW_STYLE}>
+                    {pendingPaste.lines[pendingPaste.index] || '(пустая строка)'}
+                  </code>
+                </div>
+                <div className="modal-actions">
+                  <button className="btn" onClick={() => setPendingPaste(null)}>
+                    <Icon name="close" size={13} /> Отменить
+                  </button>
+                  <button className="btn btn--primary" onClick={pasteNextLine}>
+                    <Icon name="play" size={13} /> Вставить строку
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="form-row">
+                  <label className="form-label">
+                    В буфере {pendingPaste.lines.length} строк — вставка выполнит все команды на сервере сразу.
+                  </label>
+                  <code className="input" style={PASTE_PREVIEW_STYLE}>
+                    {pastePreview(pendingPaste.lines)}
+                  </code>
+                </div>
+                <div className="modal-actions">
+                  <button className="btn" onClick={() => setPendingPaste(null)}>
+                    <Icon name="close" size={13} /> Отменить
+                  </button>
+                  <button className="btn" onClick={pasteEverything}>
+                    <Icon name="code" size={13} /> Вставить всё
+                  </button>
+                  <button
+                    className="btn btn--primary"
+                    onClick={() => setPendingPaste((p) => (p ? { ...p, step: true } : p))}
+                  >
+                    <Icon name="play" size={13} /> Построчно
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </Modal>
+      )}
     </div>
   );
+}
+
+/** Многострочная вставка, ждущая решения: всё сразу или по одной строке. */
+interface PendingPaste {
+  /** Исходный текст буфера — им вставляется режим «Вставить всё». */
+  text: string;
+  lines: string[];
+  /** Индекс следующей строки для построчного режима. */
+  index: number;
+  /** true — построчная вставка с подтверждением каждой строки. */
+  step: boolean;
+}
+
+/** Блок предпросмотра вставляемого текста в диалоге. */
+const PASTE_PREVIEW_STYLE: React.CSSProperties = {
+  display: 'block',
+  fontFamily: 'var(--font-mono)',
+  fontSize: '12px',
+  whiteSpace: 'pre-wrap',
+  wordBreak: 'break-all',
+  maxHeight: 140,
+  overflow: 'auto'
+};
+
+/** Строки вставки; завершающий перевод строки отдельной строкой не считается. */
+function splitPasteLines(text: string): string[] {
+  const lines = text.split(/\r?\n/);
+  if (lines.length > 1 && lines[lines.length - 1] === '') lines.pop();
+  return lines;
+}
+
+/** LF → CR: в терминал Enter приходит как CR, и только он гарантированно выполняет команду. */
+function toTerminalInput(text: string): string {
+  return text.replace(/\r?\n/g, '\r');
+}
+
+/** Первые строки для предпросмотра. */
+function pastePreview(lines: string[]): string {
+  const head = lines.slice(0, 5).join('\n');
+  return lines.length > 5 ? head + '\n…' : head;
+}
+
+/** Копирует текущее выделение терминала; false — выделения нет. */
+function copySelection(term: Terminal): boolean {
+  const sel = term.getSelection();
+  if (!sel) return false;
+  copyTextToClipboard(sel);
+  term.clearSelection();
+  return true;
+}
+
+/**
+ * OSC 52: data = "<selection>;<base64>". selection 'c' — системный буфер.
+ * Запрос содержимого буфера ('?') не поддерживаем: чтение буфера сервером — это
+ * уже утечка, а не копирование.
+ */
+function applyOsc52Clipboard(data: string): void {
+  const semi = data.indexOf(';');
+  if (semi < 0) return;
+  const selection = data.slice(0, semi).trim() || 'c';
+  const payload = data.slice(semi + 1).trim();
+  if (selection !== 'c' || !payload || payload === '?') return;
+  try {
+    copyTextToClipboard(new TextDecoder().decode(Uint8Array.from(atob(payload), (c) => c.charCodeAt(0))));
+  } catch {
+    // некорректный base64 — последовательность просто игнорируем
+  }
 }
 
 /** base64-кодирование юникода (btoa не умеет >1 байт). */
