@@ -4,7 +4,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { SearchAddon } from '@xterm/addon-search';
 import 'xterm/css/xterm.css';
-import { formatBytes, osc52Action, parseOsc52, utf8Length } from '@shared/osc52';
+import { dispatchOsc52, formatBytes, parseOsc52, type Osc52AskRequest } from '@shared/osc52';
 import { copyTextToClipboard, readClipboardText } from '../lib/clipboard';
 import { registerTermPaste } from '../lib/termRegistry';
 import { useApp, type SessionTab } from '../store';
@@ -77,7 +77,7 @@ export default function TerminalPane({
   /** Многострочная вставка, ждущая решения пользователя. */
   const [pendingPaste, setPendingPaste] = useState<PendingPaste | null>(null);
   /** Текст из OSC 52, ждущий подтверждения (политика «спрашивать»). */
-  const [pendingOsc52, setPendingOsc52] = useState<PendingOsc52 | null>(null);
+  const [pendingOsc52, setPendingOsc52] = useState<Osc52AskRequest | null>(null);
 
   /**
    * Вставка с защитой от пачки команд: одна строка уходит в терминал сразу, а
@@ -102,20 +102,13 @@ export default function TerminalPane({
   const requestOsc52Copy = useCallback(
     (text: string): void => {
       const { osc52Policy, osc52MaxBytes } = useApp.getState().settings;
-      switch (osc52Action(osc52Policy, osc52MaxBytes, text)) {
-        case 'copy':
-          copyTextToClipboard(text);
-          return;
-        case 'ask':
-          setPendingOsc52({ text, bytes: utf8Length(text) });
-          return;
-        case 'too-large':
-          pushToast(`OSC 52: текст больше предела ${formatBytes(osc52MaxBytes)} — буфер не изменён`);
-          return;
-        default:
-          // 'ignore' — запись запрещена настройками, молча пропускаем
-          return;
-      }
+      // Решение и действия разведены: dispatchOsc52 покрыт тестами без React.
+      dispatchOsc52(osc52Policy, osc52MaxBytes, text, {
+        copy: copyTextToClipboard,
+        ask: setPendingOsc52,
+        tooLarge: (limit) =>
+          pushToast(`OSC 52: текст больше предела ${formatBytes(limit)} — буфер не изменён`)
+      });
     },
     [pushToast]
   );
@@ -340,7 +333,7 @@ export default function TerminalPane({
                 «{tab.title}» просит записать в буфер обмена {formatBytes(pendingOsc52.bytes)} текста.
               </label>
               <code className="input" style={PASTE_PREVIEW_STYLE}>
-                {osc52Preview(pendingOsc52.text)}
+                {pendingOsc52.preview}
               </code>
             </div>
             <div className="form-hint">
@@ -427,31 +420,6 @@ interface PendingPaste {
   index: number;
   /** true — построчная вставка с подтверждением каждой строки. */
   step: boolean;
-}
-
-/** Текст из OSC 52, ждущий решения пользователя (политика «спрашивать»). */
-interface PendingOsc52 {
-  text: string;
-  bytes: number;
-}
-
-/** Сколько строк и символов в строке показываем в подтверждении. */
-const OSC52_PREVIEW_LINES = 4;
-const OSC52_PREVIEW_LINE_CHARS = 120;
-
-/**
- * Первые строки текста OSC 52 для подтверждения. Каждая строка режется отдельно:
- * одна длинная строка (лог, JSON) иначе раздула бы модалку и DOM.
- */
-function osc52Preview(text: string): string {
-  const all = text.split('\n');
-  const head = all.slice(0, OSC52_PREVIEW_LINES).map(clipPreviewLine).join('\n');
-  return all.length > OSC52_PREVIEW_LINES ? `${head}\n…` : head;
-}
-
-/** Строка предпросмотра: длинную режем, многоточие показывает обрыв. */
-function clipPreviewLine(line: string): string {
-  return line.length > OSC52_PREVIEW_LINE_CHARS ? `${line.slice(0, OSC52_PREVIEW_LINE_CHARS)}…` : line;
 }
 
 /** Блок предпросмотра вставляемого текста в диалоге. */
