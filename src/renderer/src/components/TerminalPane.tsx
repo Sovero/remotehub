@@ -4,8 +4,9 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { SearchAddon } from '@xterm/addon-search';
 import 'xterm/css/xterm.css';
-import { dispatchOsc52, formatBytes, parseOsc52, type Osc52AskRequest } from '@shared/osc52';
+import { parseOsc52 } from '@shared/osc52';
 import { copyTextToClipboard, readClipboardText } from '../lib/clipboard';
+import { offerRemoteClipboard } from '../lib/remote-clipboard';
 import { registerTermPaste } from '../lib/termRegistry';
 import { useApp, type SessionTab } from '../store';
 import Icon from './Icon';
@@ -71,13 +72,10 @@ export default function TerminalPane({
   const theme = useApp((s) => s.settings.theme);
   const fontSize = useApp((s) => s.settings.fontSize);
   const fontFamily = useApp((s) => s.settings.fontFamily);
-  const pushToast = useApp((s) => s.pushToast);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   /** Многострочная вставка, ждущая решения пользователя. */
   const [pendingPaste, setPendingPaste] = useState<PendingPaste | null>(null);
-  /** Текст из OSC 52, ждущий подтверждения (политика «спрашивать»). */
-  const [pendingOsc52, setPendingOsc52] = useState<Osc52AskRequest | null>(null);
 
   /**
    * Вставка с защитой от пачки команд: одна строка уходит в терминал сразу, а
@@ -95,22 +93,11 @@ export default function TerminalPane({
 
   /**
    * OSC 52: сервер просит записать текст в буфер клиента (tmux set-clipboard,
-   * vim +clipboard, mc). Раньше копировали всегда и без предела — любой сервер
-   * молча подменял буфер Windows. Теперь решает настройка, а слишком большой
-   * текст в буфер не попадает вовсе.
+   * vim +clipboard, mc). Политика общая с RDP и VNC — см. offerRemoteClipboard.
    */
   const requestOsc52Copy = useCallback(
-    (text: string): void => {
-      const { osc52Policy, osc52MaxBytes } = useApp.getState().settings;
-      // Решение и действия разведены: dispatchOsc52 покрыт тестами без React.
-      dispatchOsc52(osc52Policy, osc52MaxBytes, text, {
-        copy: copyTextToClipboard,
-        ask: setPendingOsc52,
-        tooLarge: (limit) =>
-          pushToast(`OSC 52: текст больше предела ${formatBytes(limit)} — буфер не изменён`)
-      });
-    },
-    [pushToast]
+    (text: string): void => offerRemoteClipboard(text, `SSH · ${tab.title}`),
+    [tab.title]
   );
 
   const pasteEverything = (): void => {
@@ -325,37 +312,6 @@ export default function TerminalPane({
           </button>
         </div>
       )}
-      {pendingOsc52 && (
-        <Modal title="Скопировать в буфер обмена?" onClose={() => setPendingOsc52(null)} width={460}>
-          <div className="form">
-            <div className="form-row">
-              <label className="form-label">
-                «{tab.title}» просит записать в буфер обмена {formatBytes(pendingOsc52.bytes)} текста.
-              </label>
-              <code className="input" style={PASTE_PREVIEW_STYLE}>
-                {pendingOsc52.preview}
-              </code>
-            </div>
-            <div className="form-hint">
-              Политику можно сменить в настройках: разрешить, спрашивать или запретить.
-            </div>
-            <div className="modal-actions">
-              <button className="btn" onClick={() => setPendingOsc52(null)}>
-                <Icon name="close" size={13} /> Не копировать
-              </button>
-              <button
-                className="btn btn--primary"
-                onClick={() => {
-                  copyTextToClipboard(pendingOsc52.text);
-                  setPendingOsc52(null);
-                }}
-              >
-                <Icon name="check" size={13} /> Скопировать
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
       {pendingPaste && (
         <Modal title="Вставка нескольких строк" onClose={() => setPendingPaste(null)} width={460}>
           <div className="form">
@@ -365,7 +321,7 @@ export default function TerminalPane({
                   <label className="form-label">
                     Строка {pendingPaste.index + 1} из {pendingPaste.lines.length}
                   </label>
-                  <code className="input" style={PASTE_PREVIEW_STYLE}>
+                  <code className="input clip-preview">
                     {pendingPaste.lines[pendingPaste.index] || '(пустая строка)'}
                   </code>
                 </div>
@@ -384,7 +340,7 @@ export default function TerminalPane({
                   <label className="form-label">
                     В буфере {pendingPaste.lines.length} строк — вставка выполнит все команды на сервере сразу.
                   </label>
-                  <code className="input" style={PASTE_PREVIEW_STYLE}>
+                  <code className="input clip-preview">
                     {pastePreview(pendingPaste.lines)}
                   </code>
                 </div>
@@ -421,17 +377,6 @@ interface PendingPaste {
   /** true — построчная вставка с подтверждением каждой строки. */
   step: boolean;
 }
-
-/** Блок предпросмотра вставляемого текста в диалоге. */
-const PASTE_PREVIEW_STYLE: React.CSSProperties = {
-  display: 'block',
-  fontFamily: 'var(--font-mono)',
-  fontSize: '12px',
-  whiteSpace: 'pre-wrap',
-  wordBreak: 'break-all',
-  maxHeight: 140,
-  overflow: 'auto'
-};
 
 /** Строки вставки; завершающий перевод строки отдельной строкой не считается. */
 function splitPasteLines(text: string): string[] {

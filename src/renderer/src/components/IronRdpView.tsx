@@ -13,6 +13,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Backend, init } from '@devolutions/iron-remote-desktop-rdp';
 import { createClipboardSync } from '../lib/clipboard';
+import { offerRemoteClipboard } from '../lib/remote-clipboard';
 import { useApp } from '../store';
 
 let initPromise: Promise<void> | null = null;
@@ -160,7 +161,11 @@ const IronRdpView: React.FC<Props> = ({ sessionId, host, port, domain: requested
         // обратно через границу WASM, ломает цикл сессии — поэтому try/catch.
         sb.remoteClipboardChangedCallback((data: RemoteClipboardData) => {
           try {
-            clip.applyRemote(firstClipboardText(data));
+            const text = firstClipboardText(data);
+            if (!text) return;
+            // Запоминаем для защиты от эха, а писать ли в буфер — решает политика.
+            clip.markRemote(text);
+            offerRemoteClipboard(text, `RDP · ${host}`);
           } catch {
             // содержимое буфера нечитаемо — пропускаем
           }

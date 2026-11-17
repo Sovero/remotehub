@@ -37,8 +37,11 @@ export interface ClipboardSync {
   pushLocal(text: string, force?: boolean): boolean;
   /** Прочитать локальный буфер и отправить его в сессию. */
   pushCurrent(force?: boolean): Promise<void>;
-  /** Пришло с сервера: запомнить (чтобы не вернуть обратно) и положить локально. */
-  applyRemote(text: string): void;
+  /**
+   * Пришло с сервера: запомнить, чтобы опрос не отправил текст обратно. В локальный
+   * буфер он не пишется — это решает политика буфера обмена (см. offerRemoteClipboard).
+   */
+  markRemote(text: string): void;
   /** Запустить опрос локального буфера. @returns остановка опроса. */
   start(): () => void;
 }
@@ -49,8 +52,8 @@ export interface ClipboardSync {
  * Сессии (RDP через cliprdr, VNC через extended clipboard) не присылают
  * событий о копировании внутри себя в локальный буфер сами и не забирают
  * локальный без запроса, поэтому: сервер → локально идёт событием сессии
- * (`applyRemote`), локально → сервер — опросом (`start`), а два последних
- * значения держатся здесь, чтобы текст не гулял по кругу бесконечно.
+ * (`markRemote` + политика буфера), локально → сервер — опросом (`start`), а два
+ * последних значения держатся здесь, чтобы текст не гулял по кругу бесконечно.
  */
 export function createClipboardSync(options: ClipboardSyncOptions): ClipboardSync {
   const { push, isReady = () => true, read = readClipboardText } = options;
@@ -77,12 +80,11 @@ export function createClipboardSync(options: ClipboardSyncOptions): ClipboardSyn
     pushLocal(await read(), force);
   };
 
-  const applyRemote = (text: string): void => {
+  const markRemote = (text: string): void => {
     if (!text) return;
     // Помечаем как полученное с сервера: иначе опрос отправил бы текст назад.
     received = text;
     sent = text;
-    copyTextToClipboard(text);
   };
 
   const start = (): (() => void) => {
@@ -96,5 +98,5 @@ export function createClipboardSync(options: ClipboardSyncOptions): ClipboardSyn
     return () => window.clearInterval(id);
   };
 
-  return { pushLocal, pushCurrent, applyRemote, start };
+  return { pushLocal, pushCurrent, markRemote, start };
 }

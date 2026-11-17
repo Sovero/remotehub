@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import { nanoid } from 'nanoid';
 import type { Group, Host, HistoryEntry, RdpEngine, Runbook, Settings, Snippet, TreeNode } from '@shared/types';
-import { createGroup, createHost, DEFAULT_OSC52_MAX_BYTES } from '@shared/types';
+import { createGroup, createHost } from '@shared/types';
+import { DEFAULT_CLIPBOARD_MAX_BYTES } from '@shared/clipboard-policy';
+import type { ClipboardAskRequest } from '@shared/clipboard-policy';
 import { DEFAULT_FONT_FAMILY } from '@shared/fonts';
 import type { PasswordSaveScope, SessionState, UpdateStatus } from '@shared/ipc-contract';
 import { shouldAutoFallbackToLegacy } from '@shared/rdp-engine';
@@ -120,6 +122,8 @@ interface AppState {
   ready: boolean;
   toasts: Toast[];
   dialog: DialogState;
+  /** Текст из сессии, ждущий подтверждения записи в буфер (политика «спрашивать»). */
+  pendingClipboard: ClipboardAskRequest | null;
   tabs: SessionTab[];
   activeTabId: string | null;
   /** Состояние автообновления (транслируется из главного процесса). */
@@ -135,6 +139,12 @@ interface AppState {
   saveTree: (tree: TreeNode[]) => Promise<void>;
   setTree: (tree: TreeNode[]) => void;
   patchSettings: (patch: Partial<Settings>) => Promise<void>;
+  /**
+   * Показать (request) или закрыть (null) подтверждение записи в буфер.
+   * Запрос один: новое событие из любой сессии заменяет предыдущее — спрашивать
+   * про устаревший текст бессмысленно, буфер всё равно перезапишется.
+   */
+  setPendingClipboard: (request: ClipboardAskRequest | null) => void;
   pushToast: (message: string) => void;
   dismissToast: (id: number) => void;
   openDialog: (d: Exclude<DialogState, null>) => void;
@@ -207,8 +217,8 @@ export const useApp = create<AppState>((set, get) => ({
     confirmOnDelete: true,
     restoreTabs: true,
     rdpAutoAcceptCert: true,
-    osc52Policy: 'ask',
-    osc52MaxBytes: DEFAULT_OSC52_MAX_BYTES,
+    clipboardPolicy: 'ask',
+    clipboardMaxBytes: DEFAULT_CLIPBOARD_MAX_BYTES,
     rdpEngine: 'iron',
     rdpAutoFallbackToLegacy: false,
     winBounds: null,
@@ -225,6 +235,7 @@ export const useApp = create<AppState>((set, get) => ({
     historyDialogSize: null,
     sidebarCollapsed: false
   },
+  pendingClipboard: null,
   appInfo: null,
   ready: false,
   toasts: [],
@@ -338,6 +349,8 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   setTree: (tree) => set({ tree }),
+
+  setPendingClipboard: (request) => set({ pendingClipboard: request }),
 
   patchSettings: async (patch) => {
     const res = await window.api.setSettings(patch);

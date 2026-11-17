@@ -3526,3 +3526,14 @@ textarea.input {
   display: none;
   }
 
+
+/* Предпросмотр текста из буфера обмена / вставки: без переносов и без роста диалога. */
+.clip-preview {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 140px;
+  overflow: auto;
+}

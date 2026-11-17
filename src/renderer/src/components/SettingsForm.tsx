@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Osc52Policy, RdpEngine } from '@shared/types';
-import { formatBytes } from '@shared/osc52';
+import type { ClipboardPolicy } from '@shared/clipboard-policy';
+import { formatBytes } from '@shared/clipboard-policy';
+import type { RdpEngine } from '@shared/types';
 import { dynamicFontOptions, fontFamilyName, fontOptions, OPTIONAL_FONTS } from '@shared/fonts';
 import { lastInstalledMonospaceFamilies, loadInstalledMonospaceFamilies } from '../system-fonts';
 import { useApp } from '../store';
@@ -234,39 +235,39 @@ export default function SettingsForm(): React.JSX.Element {
       </div>
 
       <div className="form-row">
-        <label className="form-label" htmlFor="osc52-policy">
-          Буфер обмена из SSH (OSC 52)
+        <label className="form-label" htmlFor="clipboard-policy">
+          Буфер обмена из удалённых сессий (SSH, RDP, VNC)
         </label>
         <select
-          id="osc52-policy"
+          id="clipboard-policy"
           className="input"
-          value={settings.osc52Policy}
-          onChange={(e) => void patchSettings({ osc52Policy: e.target.value as Osc52Policy })}
+          value={settings.clipboardPolicy}
+          onChange={(e) => void patchSettings({ clipboardPolicy: e.target.value as ClipboardPolicy })}
         >
           <option value="ask">Спрашивать перед записью — рекомендуется</option>
           <option value="allow">Разрешить всегда</option>
           <option value="deny">Запретить</option>
         </select>
         <div className="form-hint">
-          Так tmux, vim и mc просят скопировать текст в буфер Windows. При «разрешить» любой
-          сервер может молча заменить содержимое буфера.
+          Так tmux и vim просят скопировать текст, а RDP и VNC присылают его при копировании
+          на удалённом столе. При «разрешить» сервер может молча заменить буфер Windows.
         </div>
       </div>
 
       <div className="form-row">
-        <label className="form-label" htmlFor="osc52-limit">
-          Предел размера OSC 52:{' '}
-          {settings.osc52MaxBytes > 0 ? formatBytes(settings.osc52MaxBytes) : 'без предела'}
+        <label className="form-label" htmlFor="clipboard-limit">
+          Предел размера:{' '}
+          {settings.clipboardMaxBytes > 0 ? formatBytes(settings.clipboardMaxBytes) : 'без предела'}
         </label>
         <input
-          id="osc52-limit"
+          id="clipboard-limit"
           className="input"
           type="number"
           min={0}
           step={1024}
-          value={settings.osc52MaxBytes}
+          value={settings.clipboardMaxBytes}
           onChange={(e) =>
-            void patchSettings({ osc52MaxBytes: Math.max(0, Math.round(Number(e.target.value) || 0)) })
+            void patchSettings({ clipboardMaxBytes: Math.max(0, Math.round(Number(e.target.value) || 0)) })
           }
         />
         <div className="form-hint">

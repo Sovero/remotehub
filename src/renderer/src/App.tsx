@@ -9,6 +9,7 @@ import StatusBar from './components/StatusBar';
 import Welcome from './components/Welcome';
 import Toasts from './components/Toasts';
 import DialogRoot from './components/DialogRoot';
+import ClipboardAskDialog from './components/dialogs/ClipboardAskDialog';
 import InteractiveTour from './components/InteractiveTour';
 import TerminalPane from './components/TerminalPane';
 import SessionOverlay from './components/SessionOverlay';
@@ -263,6 +264,7 @@ export default function App(): React.JSX.Element {
       <StatusBar />
       <Toasts />
       <DialogRoot />
+      <ClipboardAskDialog />
       {onboardingOpen && <InteractiveTour />}
     </div>
   );

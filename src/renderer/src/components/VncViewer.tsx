@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import RFB from '@novnc/novnc';
 import { createClipboardSync } from '../lib/clipboard';
+import { offerRemoteClipboard } from '../lib/remote-clipboard';
 import { useApp, type SessionTab } from '../store';
 import Icon from './Icon';
 
@@ -67,7 +68,11 @@ export default function VncViewer({ tab }: { tab: SessionTab }): React.JSX.Eleme
     });
     // Буфер обмена VNC → локальный: noVNC отдаёт текст события clipboard.
     rfb.addEventListener('clipboard', (e) => {
-      clip.applyRemote((e as CustomEvent<{ text: string }>).detail.text);
+      const text = (e as CustomEvent<{ text: string }>).detail.text;
+      if (!text) return;
+      // Запоминаем для защиты от эха, а писать ли в буфер — решает политика.
+      clip.markRemote(text);
+      offerRemoteClipboard(text, `VNC · ${tab.title}`);
     });
     rfb.addEventListener('credentialsrequired', () => {
       applySessionState(tab.sessionId, {
