@@ -18,7 +18,8 @@
     "help:shots": "node scripts/capture-help.mjs",
     "smoke:rdp:iron": "node scripts/smoke-rdp-iron.mjs",
     "dist": "node scripts/bump-version.mjs && electron-builder install-app-deps && npm run build && electron-builder --win --x64 && node scripts/upload-latest-yml.mjs",
-    "dist:sign": "node scripts/bump-version.mjs && electron-builder install-app-deps && npm run build && node scripts/sign.mjs"
+    "dist:sign": "node scripts/bump-version.mjs && electron-builder install-app-deps && npm run build && node scripts/sign.mjs",
+    "dist:local": "node scripts/dist-local.mjs"
   },
   "build": {
     "appId": "com.remotehub.app",
